@@ -465,8 +465,13 @@ local function Draw_GUI()
 					end
 					ImGui.SameLine()
 					local label = aRecord and 'Stop Recording' or 'Start Recording'
-
+					if aRecord then
+						ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1.0, 0.4, 0.4, 0.4))
+					else
+						ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1.0, 0.4, 0.4))
+					end
 					if ImGui.Button(label) then	aRecord = not aRecord end
+					ImGui.PopStyleColor()
 				end
 
 				-- Navigation Controls
