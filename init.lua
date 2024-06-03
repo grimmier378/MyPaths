@@ -312,12 +312,21 @@ local function NavigatePath(name)
 					-- printf("\ay[\at%s\ax] \arIn Combat or Xtar Detected, Waiting...", script)
 					-- printf("Combat: %s xTarg: %s Sitting: %s", mq.TLO.Me.Combat(), ScanXtar(), mq.TLO.Me.Sitting())
 					while mq.TLO.Me.Combat()  do
+						if not doNav then
+							return
+						end
 						mq.delay(10)
 					end
 					while  mq.TLO.Me.Sitting() do
+						if not doNav then
+							return
+						end
 						mq.delay(10)
 					end
 					while  ScanXtar() do
+						if not doNav then
+							return
+						end
 						mq.delay(10)
 					end
 					mq.delay(500)
@@ -642,6 +651,7 @@ local function bind(...)
 			showMainGUI = not showMainGUI
 		elseif key == 'quit' or key == 'exit' then
 			-- mq.exit()
+			mq.TLO.Me.Stand()
 			doNav = false
 			RUNNING = false
 		elseif key == 'list' then
