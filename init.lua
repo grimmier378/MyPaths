@@ -28,7 +28,7 @@ local newPath = ''
 local curTime = os.time()
 local lastTime = curTime
 local aRecord, doNav, doLoop, doReverse, doPingPong = false, false, false, false, false
-local rDelay = 5
+local rDelay, stopDist = 5, 30
 local currentStep = 1
 local delWP, delWPStep = false, 0
 
@@ -52,6 +52,7 @@ defaults = {
 	locked = false,
 	AutoSize = false,
 	RecordDlay = 5,
+	StopDistance = 30,
 }
 
 -------- Helper Functions --------
@@ -147,10 +148,16 @@ local function loadSettings()
 		newSetting = true
 	end
 
+	if settings[script].StopDistance == nil then
+		settings[script].StopDistance = stopDist
+		newSetting = true
+	end
+
 	-- Load the theme
 	loadTheme()
 
 	-- Set the settings to the variables
+	stopDist = settings[script].StopDistance
 	aSize = settings[script].AutoSize
 	locked = settings[script].locked
 	scale = settings[script].Scale
@@ -288,7 +295,7 @@ local function NavigatePath(name)
 			end
 			local tmpLoc = string.format("%s:%s", tmp[i].loc, mq.TLO.Me.LocYXZ())
 			tmpLoc = tmpLoc:gsub(",", " ")
-			mq.cmdf("/squelch /nav locyxz %s | distance 30",tmpLoc)
+			mq.cmdf("/squelch /nav locyxz %s | distance %s",tmpLoc, stopDist)
 			mq.delay(10)
 			-- printf("Navigating to WP #: %s", tmp[i].step)
 			while mq.TLO.Math.Distance(tmpLoc)() > 30 and doNav do
@@ -296,10 +303,12 @@ local function NavigatePath(name)
 					return
 				end
 				if mq.TLO.Me.Combat() or ScanXtar() then
+					printf("\ay[\at%s\ax] \arIn Combat or Xtar Detected, Waiting...", script)
+					printf("Combat: %s xTarg: %s", mq.TLO.Me.Combat(), ScanXtar())
 					while mq.TLO.Me.Combat() or ScanXtar() do
 						mq.delay(1000)
 					end
-					mq.cmdf("/squelch /nav locyxz %s | distance 30",tmpLoc)
+					mq.cmdf("/squelch /nav locyxz %s | distance %s",tmpLoc, stopDist)
 				end
 				tmpLoc = string.format("%s:%s", tmp[i].loc, mq.TLO.Me.LocYXZ())
 				tmpLoc = tmpLoc:gsub(",", " ")
@@ -322,7 +331,8 @@ end
 -------- GUI Functions --------
 
 local function Draw_GUI()
-	if mq.TLO.Me.Zoning() then selectedPath = 'None' return end
+
+	-- Main Window
 	if showMainGUI then
 		local zone = mq.TLO.Zone.ShortName()
 		-- Set Window Name
@@ -380,110 +390,117 @@ local function Draw_GUI()
 			end
 
 			-- Main Window Content	
-			ImGui.SeparatorText("MyPaths")
+
 			ImGui.Text("Current Zone: %s", zone)
-			ImGui.SeparatorText("Paths")
-			if ImGui.BeginCombo("##SelectPath", selectedPath) then
-				if not Paths[zone] then Paths[zone] = {} end
-				for name, data in pairs(Paths[zone]) do
-					local isSelected = name == selectedPath
-					if ImGui.Selectable(name, isSelected) then
-						selectedPath = name
-					end
-				end
-				ImGui.EndCombo()
-			end
-			
-			newPath = ImGui.InputText("##NewPathName", newPath)
-			ImGui.SameLine()
-			if ImGui.Button('Create Path') then
-				CreatePath(newPath)
-				selectedPath = newPath
-				newPath = ''
-			end
-
-			if ImGui.Button('Delete Path') then
-				DeletePath(selectedPath)
-				selectedPath = 'None'
-			end
-			ImGui.SameLine()
-			if ImGui.Button('Save Paths') then
-				SavePaths()
-			end
-
-			if selectedPath ~= 'None' then
-				ImGui.SeparatorText("Waypoints")
-				if ImGui.Button('Add Waypoint') then
-					RecordWaypoint(selectedPath)
-				end
-				ImGui.SameLine()
-				if ImGui.Button('Clear Waypoints') then
-					ClearWaypoints(selectedPath)
-				end
-				ImGui.SameLine()
-				local label = aRecord and 'Stop Recording' or 'Start Recording'
-				if ImGui.Button(label) then
-					aRecord = not aRecord
-				end
+			if ImGui.CollapsingHeader("Paths##") then
 				
-				-- Navigation Controls
-				ImGui.SeparatorText("Navigation")
-				doReverse = ImGui.Checkbox('Reverse Order', doReverse)
-				ImGui.SameLine()
-				doLoop = ImGui.Checkbox('Loop Path', doLoop)
-				ImGui.SameLine()
-				doPingPong = ImGui.Checkbox('Ping Pong', doPingPong)
-				ImGui.Separator()
-				local tmpLabel = doNav and 'Stop Navigation' or 'Start Navigation'
-				if ImGui.Button(tmpLabel) then
-					doNav = not doNav
-					if not doNav then
-						mq.cmdf("/squelch /nav stop")
+				ImGui.SetNextItemWidth(150)
+				if ImGui.BeginCombo("##SelectPath", selectedPath) then
+					if not Paths[zone] then Paths[zone] = {} end
+					for name, data in pairs(Paths[zone]) do
+						local isSelected = name == selectedPath
+						if ImGui.Selectable(name, isSelected) then
+							selectedPath = name
+						end
 					end
+					ImGui.EndCombo()
+				end
+				ImGui.SetNextItemWidth(150)
+				newPath = ImGui.InputText("##NewPathName", newPath)
+				ImGui.SameLine()
+				if ImGui.Button('Create Path') then
+					CreatePath(newPath)
+					selectedPath = newPath
+					newPath = ''
+				end
+
+				if ImGui.Button('Delete Path') then
+					DeletePath(selectedPath)
+					selectedPath = 'None'
 				end
 				ImGui.SameLine()
+				if ImGui.Button('Save Paths') then
+					SavePaths()
+				end
+			end
+			if selectedPath ~= 'None' then
+				if ImGui.CollapsingHeader("Waypoints##") then
+						
+					if ImGui.Button('Add Waypoint') then
+						RecordWaypoint(selectedPath)
+					end
+					ImGui.SameLine()
+					if ImGui.Button('Clear Waypoints') then
+						ClearWaypoints(selectedPath)
+					end
+					ImGui.SameLine()
+					local label = aRecord and 'Stop Recording' or 'Start Recording'
+					if ImGui.Button(label) then
+						aRecord = not aRecord
+					end
+				end
 
-				ImGui.Text("Current Waypoint: %s", currentStep)
+				-- Navigation Controls
+				local tmpTable = Paths[zone][selectedPath]
+				local closestWaypoint = FindClosestWaypoint(selectedPath, tmpTable)
 
-				if ImGui.BeginTable('PathTable', 3, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), ImVec2(ImGui.GetWindowWidth() - 10, 0.0)) then
+				if ImGui.CollapsingHeader("Navigation##") then
+					doReverse = ImGui.Checkbox('Reverse Order', doReverse)
+					ImGui.SameLine()
+					doLoop = ImGui.Checkbox('Loop Path', doLoop)
+					ImGui.SameLine()
+					doPingPong = ImGui.Checkbox('Ping Pong', doPingPong)
+					ImGui.Separator()
+					if not Paths[zone] then Paths[zone] = {} end
+					-- if not Paths[zone][selectedPath] then Paths[zone][selectedPath] = {} end
+
+					ImGui.Text("Current Waypoint: %s", currentStep)
+					ImGui.SameLine()
+					ImGui.Text("Closest Waypoint: %s", closestWaypoint)
+
+					local tmpLabel = doNav and 'Stop Navigation' or 'Start Navigation'
+					if ImGui.Button(tmpLabel) then
+						doNav = not doNav
+						if not doNav then
+							mq.cmdf("/squelch /nav stop")
+						end
+					end
+					ImGui.SameLine()
+					if ImGui.Button("Start at Closest") then
+						currentStep = closestWaypoint
+						doNav = true
+					end
+				end
+				if ImGui.BeginTable('PathTable', 3, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), ImVec2(ImGui.GetContentRegionAvail() - 5, 0.0)) then
 					ImGui.TableSetupColumn('#', ImGuiTableColumnFlags.None, 30)
 					ImGui.TableSetupColumn('Loc', ImGuiTableColumnFlags.None, 106)
 					ImGui.TableSetupColumn('Actions', ImGuiTableColumnFlags.None, 60)
 					ImGui.TableSetupScrollFreeze(0, 1)
 					ImGui.TableHeadersRow()
-					if not Paths[zone] then Paths[zone] = {} end
-					-- if not Paths[zone][selectedPath] then Paths[zone][selectedPath] = {} end
-					local tmpTable = Paths[zone][selectedPath]
-					local closestWaypoint = FindClosestWaypoint(selectedPath, tmpTable)
 					
 					for i = 1, #tmpTable do
-						
-						local isClosest = i == closestWaypoint
-		
+
 						ImGui.TableNextRow()
 						ImGui.TableSetColumnIndex(0)
 						ImGui.Text("%s",tmpTable[i].step)
-				
+						if i == closestWaypoint then
+							ImGui.SameLine()
+							
+							ImGui.TextColored(ImVec4(1,1,0,1),Icon.MD_STAR)
+						end
 						ImGui.TableSetColumnIndex(1)
 						ImGui.Text(tmpTable[i].loc)
-				
 						ImGui.TableSetColumnIndex(2)
-						ImGui.BeginGroup()
-						if isClosest then
-							if ImGui.Button('Start Here##_'..i) then
-								currentStep = tmpTable[i].step
-								doNav = not doNav
-							end
-						end
-						ImGui.SameLine()
+						
 						if ImGui.Button(Icon.FA_TRASH.."##_"..i) then
 							delWP = true
 							delWPStep = tmpTable[i].step
 						end
-						ImGui.EndGroup()
+						
 					end
 					ImGui.EndTable()
 				end
+			
 			end
 			-- Reset Font Scale
 			ImGui.SetWindowFontScale(1)
@@ -495,6 +512,7 @@ local function Draw_GUI()
 		ImGui.End()
 	end
 
+	-- Config Window
 	if showConfigGUI then
 			local winName = string.format('%s Config##Config_%s',script, meName)
 			local ColCntConf, StyCntConf = LoadTheme.StartTheme(theme.Theme[themeID])
@@ -543,7 +561,7 @@ local function Draw_GUI()
 
 				-- Set RecordDley
 				rDelay = ImGui.SliderInt("Record Delay##"..script, rDelay, 1, 10)
-
+				stopDist = ImGui.SliderInt("Stop Distance##"..script, stopDist, 10, 100)
 				-- Save & Close Button --
 				if ImGui.Button("Save & Close") then
 					settings = dofile(configFile)
@@ -552,6 +570,7 @@ local function Draw_GUI()
 					settings[script].locked = locked
 					settings[script].AutoSize = aSize
 					settings[script].RecordDelay = rDelay
+					settings[script].StopDistance = stopDist
 					mq.pickle(configFile, settings)
 					showConfigGUI = false
 				end
@@ -599,6 +618,7 @@ local function Loop()
 
 		if delWP then
 			RemoveWaypoint(selectedPath, delWPStep)
+			delWPStep = 0
 			delWP = false
 		end
 		-- Process ImGui Window Flag Changes
