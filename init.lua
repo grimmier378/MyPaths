@@ -394,7 +394,7 @@ local function Draw_GUI()
 			end
 
 			if selectedPath ~= 'None' then
-			
+				ImGui.SeparatorText("Waypoints")
 				if ImGui.Button('Add Waypoint') then
 					RecordWaypoint(selectedPath)
 				end
@@ -402,13 +402,20 @@ local function Draw_GUI()
 				if ImGui.Button('Clear Waypoints') then
 					ClearWaypoints(selectedPath)
 				end
-				
+				ImGui.SameLine()
 				local label = aRecord and 'Stop Recording' or 'Start Recording'
 				if ImGui.Button(label) then
 					aRecord = not aRecord
 				end
-				ImGui.SameLine()
 				
+				-- Navigation Controls
+				ImGui.SeparatorText("Navigation")
+				doReverse = ImGui.Checkbox('Reverse Order', doReverse)
+				ImGui.SameLine()
+				doLoop = ImGui.Checkbox('Loop Path', doLoop)
+				ImGui.SameLine()
+				doPingPong = ImGui.Checkbox('Ping Pong', doPingPong)
+				ImGui.Separator()
 				local tmpLabel = doNav and 'Stop Navigation' or 'Start Navigation'
 				if ImGui.Button(tmpLabel) then
 					doNav = not doNav
@@ -417,12 +424,7 @@ local function Draw_GUI()
 					end
 				end
 				ImGui.SameLine()
-				doReverse = ImGui.Checkbox('Reverse Order', doReverse)
-				ImGui.SameLine()
-				doLoop = ImGui.Checkbox('Loop Path', doLoop)
-				ImGui.SameLine()
-				doPingPong = ImGui.Checkbox('Ping Pong Path', doPingPong)
-				ImGui.Separator()
+
 				ImGui.Text("Current Waypoint: %s", currentStep)
 
 				if ImGui.BeginTable('PathTable', 3, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), ImVec2(ImGui.GetWindowWidth() - 10, 0.0)) then
