@@ -610,10 +610,11 @@ end
 -------- Main Functions --------
 
 local function displayHelp()
-	printf("\ay[\at%s\ax] \agCommands: \ay/mypaths [go|stop|show|quit|help] [loop|rloop|start|reverse|pingpong|closest|rclosest] [path]", script)
+	printf("\ay[\at%s\ax] \agCommands: \ay/mypaths [go|stop|list|show|quit|help] [loop|rloop|start|reverse|pingpong|closest|rclosest] [path]", script)
 	printf("\ay[\at%s\ax] \agOptions: \aygo \aw= \atREQUIRES arguments and Path name see below for Arguments.", script)
 	printf("\ay[\at%s\ax] \agOptions: \aystop \aw= \atStops the current Navigation.", script)
 	printf("\ay[\at%s\ax] \agOptions: \ayshow \aw= \atToggles Main GUI.", script)
+	printf("\ay[\at%s\ax] \agOptions: \aylist \aw= \atLists all Paths in the current Zone.", script)
 	printf("\ay[\at%s\ax] \agOptions: \ayquit or exit \aw= \atExits the script.", script)
 	printf("\ay[\at%s\ax] \agOptions: \ayhelp \aw= \atPrints out this help list.", script)
 	printf("\ay[\at%s\ax] \agArguments: \ayloop \aw= \atLoops the path, \ayrloop \aw= \atLoop in reverse.", script)	
