@@ -608,10 +608,92 @@ local function Draw_GUI()
 end
 
 -------- Main Functions --------
+
+local function displayHelp()
+	printf("\ay[\at%s\ax] \agCommands: \ay/mypaths [go|stop|help] [loop|rloop|start|reverse|pingpong|closest|rclosest] [path]", script)
+	printf("\ay[\at%s\ax] \agOptions: \aygo \aw= \atREQUIRES arguments and Path name see below for Arguments.", script)
+	printf("\ay[\at%s\ax] \agOptions: \aystop \aw= \atStops the current Navigation.", script)
+	printf("\ay[\at%s\ax] \agOptions: \ayhelp \aw= \atPrints out this help list.", script)
+	printf("\ay[\at%s\ax] \agArguments: \ayloop \aw= \atLoops the path, \ayrloop \aw= \atLoop in reverse.", script)	
+	printf("\ay[\at%s\ax] \agArguments: \ayclosest \aw= \atstart at closest wp, \ayrclosest \aw= \atstart at closest wp and go in reverse.", script)	
+	printf("\ay[\at%s\ax] \agArguments: \aystart \aw= \atstarts the path normally, \ayreverse \aw= \atrun the path backwards.", script)
+	printf("\ay[\at%s\ax] \agArguments: \aypingpong \aw= \atstart in ping pong mode.", script)
+	printf("\ay[\at%s\ax] \agExample: \ay/mypaths \aogo \ayloop \am\"Loop A\"", script)
+	printf("\ay[\at%s\ax] \agExample: \ay/mypaths \aostop", script)
+end
+
+local function bind(...)
+	local args = {...}
+	local key = args[1]
+	local action = args[2]
+	local path = args[3]
+	local zone = mq.TLO.Zone.ShortName()
+
+	if #args == 1 then
+		if key == 'stop' then
+			doNav = false
+			mq.cmdf("/squelch /nav stop")
+		elseif key == 'help' then
+			displayHelp()
+		end
+	elseif #args  == 3 then
+		if Paths[zone]["'"..path.."'"] ~= nil then
+			printf("\ay[\at%s\ax] \arInvalid Path!", script)
+			return
+		end
+		if key == 'go' then
+			if action == 'loop' then
+				selectedPath = path
+				doReverse = false
+				doNav = true
+				doLoop = true
+			end
+			if action == 'rloop' then
+				selectedPath = path
+				doReverse = true
+				doNav = true
+				doLoop = true
+			end
+			if action == 'start' then
+				selectedPath = path
+				doReverse = false
+				doNav = true
+				doLoop = false
+			end
+			if action == 'reverse' then
+				selectedPath = path
+				doReverse = true
+				doNav = true
+			end
+			if action == 'pingpong' then
+				selectedPath = path
+				doPingPong = true
+				doNav = true
+			end
+			if action == 'closest' then
+				selectedPath = path
+				doNav = true
+				doReverse = false
+				currentStep = FindClosestWaypoint(Paths[zone][path])
+			end
+			if action == 'rclosest' then
+				selectedPath = path
+				doNav = true
+				doReverse = true
+				currentStep = FindClosestWaypoint(Paths[zone][path])
+			end
+		end
+	else
+		printf("\ay[\at%s\ax] \arInvalid Arguments!", script)
+	end
+end
+
+
 local function Init()
 	-- Load Settings
 	loadSettings()
 	loadPaths()
+	mq.bind('/mypaths', bind)
 	-- Get Character Name
 	meName = mq.TLO.Me.Name()
 	-- Check if ThemeZ exists
@@ -620,6 +702,7 @@ local function Init()
 	end
 	-- Initialize ImGui
 	mq.imgui.init('MyPaths', Draw_GUI)
+	displayHelp()
 end
 
 local function Loop()
