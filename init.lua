@@ -777,14 +777,25 @@ local function Init()
 	displayHelp()
 end
 
+local hidden = false
 local function Loop()
 	-- Main Loop
 	while RUNNING do
 		while mq.TLO.Me.Zoning() do
 			selectedPath = 'None'
 			doNav = false
+			hidden = true
+			showMainGUI = false
 			mq.delay(1000)
 		end
+
+		if hidden then
+			showMainGUI = true
+			hidden = false
+			status = 'Idle'
+			currentStep = 1
+		end
+
 		if aRecord then
 			status = string.format("Recording Path: %s RecordDlay: %s",selectedPath, rDelay)
 			AutoRecordPath(selectedPath)
