@@ -30,7 +30,7 @@ local lastTime = curTime
 local aRecord, doNav, doLoop, doReverse, doPingPong = false, false, false, false, false
 local rDelay = 5
 local currentStep = 1
-
+local delWP, delWPStep = false, 0
 
 -- GUI Settings
 local winFlags = bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.MenuBar)
@@ -457,7 +457,8 @@ local function Draw_GUI()
 						end
 						ImGui.SameLine()
 						if ImGui.Button(Icon.FA_TRASH.."##_"..i) then
-							RemoveWaypoint(selectedPath, tmpTable[i].step)
+							delWP = true
+							delWPStep = tmpTable[i].step
 						end
 						ImGui.EndGroup()
 					end
@@ -576,6 +577,10 @@ local function Loop()
 			currentStep = 1
 		end
 
+		if delWP then
+			RemoveWaypoint(selectedPath, delWPStep)
+			delWP = false
+		end
 		-- Process ImGui Window Flag Changes
 		winFlags = locked and bit32.bor(ImGuiWindowFlags.NoMove, ImGuiWindowFlags.MenuBar) or bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.MenuBar)
 		winFlags = aSize and bit32.bor(winFlags, ImGuiWindowFlags.AlwaysAutoResize, ImGuiWindowFlags.MenuBar) or winFlags
