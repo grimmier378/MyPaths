@@ -452,6 +452,7 @@ local function Draw_GUI()
 					SavePaths()
 				end
 			end
+
 			if selectedPath ~= 'None' then
 				if ImGui.CollapsingHeader("Waypoints##") then
 						
@@ -464,9 +465,8 @@ local function Draw_GUI()
 					end
 					ImGui.SameLine()
 					local label = aRecord and 'Stop Recording' or 'Start Recording'
-					if ImGui.Button(label) then
-						aRecord = not aRecord
-					end
+
+					if ImGui.Button(label) then	aRecord = not aRecord end
 				end
 
 				-- Navigation Controls
@@ -491,12 +491,18 @@ local function Draw_GUI()
 					ImGui.Text("Closest Waypoint: %s", closestWaypoint)
 
 					local tmpLabel = doNav and 'Stop Navigation' or 'Start Navigation'
+					if doNav then
+						ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1.0, 0.4, 0.4, 0.4))
+					else
+						ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1.0, 0.4, 0.4))
+					end
 					if ImGui.Button(tmpLabel) then
 						doNav = not doNav
 						if not doNav then
 							mq.cmdf("/squelch /nav stop")
 						end
 					end
+					ImGui.PopStyleColor()
 					ImGui.SameLine()
 					if ImGui.Button("Start at Closest") then
 						currentStep = closestWaypoint
