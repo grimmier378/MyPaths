@@ -263,6 +263,7 @@ local function FindClosestWaypoint(path, table)
 	local tmp = table
 	local closest = 999999
 	local closestLoc = 1
+	if tmp == nil then return closestLoc end
 	for i = 1,  #tmp do
 		local tmpLoc = string.format("%s:%s", tmp[i].loc, mq.TLO.Me.LocYXZ())
 		tmpLoc = tmpLoc:gsub(",", " ")
@@ -308,9 +309,16 @@ local function NavigatePath(name)
 					return
 				end
 				if mq.TLO.Me.Combat() or ScanXtar() or mq.TLO.Me.Sitting() then
-					printf("\ay[\at%s\ax] \arIn Combat or Xtar Detected, Waiting...", script)
-					printf("Combat: %s xTarg: %s Sitting: %s", mq.TLO.Me.Combat(), ScanXtar(), mq.TLO.Me.Sitting())
-					while mq.TLO.Me.Combat() or ScanXtar() or mq.TLO.Me.Sitting() do
+					mq.cmdf("/squelch /nav stop")
+					-- printf("\ay[\at%s\ax] \arIn Combat or Xtar Detected, Waiting...", script)
+					-- printf("Combat: %s xTarg: %s Sitting: %s", mq.TLO.Me.Combat(), ScanXtar(), mq.TLO.Me.Sitting())
+					while mq.TLO.Me.Combat()  do
+						mq.delay(10)
+					end
+					while  mq.TLO.Me.Sitting() do
+						mq.delay(10)
+					end
+					while  ScanXtar() do
 						mq.delay(10)
 					end
 					mq.delay(500)
@@ -323,7 +331,7 @@ local function NavigatePath(name)
 			if wpPause > 0 then
 				-- printf("Pausing at WP #: %s for %s seconds", tmp[i].step, wpPause)
 				local pauseTime = wpPause * 1000
-				print("Pausing for: "..pauseTime.."ms")
+				-- print("Pausing for: "..pauseTime.."ms")
 				mq.delay(pauseTime)
 			end
 			-- mq.delay(wpPause..'s')
@@ -463,6 +471,9 @@ local function Draw_GUI()
 					doLoop = ImGui.Checkbox('Loop Path', doLoop)
 					ImGui.SameLine()
 					doPingPong = ImGui.Checkbox('Ping Pong', doPingPong)
+					if doPingPong then
+						doLoop = true
+					end
 					ImGui.Separator()
 					if not Paths[zone] then Paths[zone] = {} end
 					-- if not Paths[zone][selectedPath] then Paths[zone][selectedPath] = {} end
