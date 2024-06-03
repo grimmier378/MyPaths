@@ -226,6 +226,24 @@ local function AutoRecordPath(name)
 	SavePaths()
 end
 
+local function ScanXtar()
+	if mq.TLO.Me.XTarget() > 0 then
+		for i = 1, mq.TLO.Me.XTargetSlots() do
+			local xTarg = mq.TLO.Me.XTarget(i)
+			if not (xTarg.ID() > 0 and xTarg.Type() ~= 'Corpse' and xTarg.Type() ~= 'Chest') then
+				local xCount = mq.TLO.Me.XTarget() or 0
+				local xName, xType = xTarg.Name(), xTarg.Type()
+				if (xCount > 0) then
+					if ((xTarg.Name() ~= 'NULL' and xTarg.ID() ~= 0) and (xType ~= 'Corpse') and (xType ~= 'Chest') and (xTarg.Master.Type() ~= 'PC')) then
+						return true
+					end
+				end
+			end
+		end
+	end
+	return false
+end
+
 --------- Navigation Functions --------
 
 local function FindClosestWaypoint(path, table)
@@ -277,8 +295,8 @@ local function NavigatePath(name)
 				if not doNav then
 					return
 				end
-				if mq.TLO.Me.Combat() then
-					while mq.TLO.Me.Combat() do
+				if mq.TLO.Me.Combat() or ScanXtar() then
+					while mq.TLO.Me.Combat() or ScanXtar() do
 						mq.delay(1000)
 					end
 					mq.cmdf("/squelch /nav locyxz %s | distance 30",tmpLoc)
