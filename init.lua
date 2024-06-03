@@ -640,7 +640,20 @@ local function bind(...)
 		elseif key == 'show' then
 			showMainGUI = not showMainGUI
 		elseif key == 'quit' or key == 'exit' then
-			mq.exit()
+			-- mq.exit()
+			doNav = false
+			RUNNING = false
+		elseif key == 'list' then
+			if Paths[zone] == nil then 
+				printf("\ay[\at%s\ax] \arNo Paths Found!", script)
+				return
+			end
+			printf("\ay[\at%s\ax] \agZone: \at%s \agPaths: ", script, zone)
+			for name, data in pairs(Paths[zone]) do
+				printf("\ay[\at%s\ax] \ay%s", script, name)
+			end
+		else
+			printf("\ay[\at%s\ax] \arInvalid Command!", script)
 		end
 	elseif #args  == 3 then
 		if Paths[zone]["'"..path.."'"] ~= nil then
