@@ -610,9 +610,11 @@ end
 -------- Main Functions --------
 
 local function displayHelp()
-	printf("\ay[\at%s\ax] \agCommands: \ay/mypaths [go|stop|help] [loop|rloop|start|reverse|pingpong|closest|rclosest] [path]", script)
+	printf("\ay[\at%s\ax] \agCommands: \ay/mypaths [go|stop|show|quit|help] [loop|rloop|start|reverse|pingpong|closest|rclosest] [path]", script)
 	printf("\ay[\at%s\ax] \agOptions: \aygo \aw= \atREQUIRES arguments and Path name see below for Arguments.", script)
 	printf("\ay[\at%s\ax] \agOptions: \aystop \aw= \atStops the current Navigation.", script)
+	printf("\ay[\at%s\ax] \agOptions: \ayshow \aw= \atToggles Main GUI.", script)
+	printf("\ay[\at%s\ax] \agOptions: \ayquit or exit \aw= \atExits the script.", script)
 	printf("\ay[\at%s\ax] \agOptions: \ayhelp \aw= \atPrints out this help list.", script)
 	printf("\ay[\at%s\ax] \agArguments: \ayloop \aw= \atLoops the path, \ayrloop \aw= \atLoop in reverse.", script)	
 	printf("\ay[\at%s\ax] \agArguments: \ayclosest \aw= \atstart at closest wp, \ayrclosest \aw= \atstart at closest wp and go in reverse.", script)	
@@ -635,6 +637,10 @@ local function bind(...)
 			mq.cmdf("/squelch /nav stop")
 		elseif key == 'help' then
 			displayHelp()
+		elseif key == 'show' then
+			showMainGUI = not showMainGUI
+		elseif key == 'quit' or key == 'exit' then
+			mq.exit()
 		end
 	elseif #args  == 3 then
 		if Paths[zone]["'"..path.."'"] ~= nil then
