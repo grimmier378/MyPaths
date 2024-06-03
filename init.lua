@@ -31,6 +31,7 @@ local aRecord, doNav, doLoop, doReverse, doPingPong = false, false, false, false
 local rDelay, stopDist, wpPause = 5, 30, 1
 local currentStep = 1
 local delWP, delWPStep = false, 0
+local status = 'Idle'
 
 -- GUI Settings
 local winFlags = bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.MenuBar)
@@ -246,11 +247,11 @@ local function ScanXtar()
 			local xTarg = mq.TLO.Me.XTarget(i)
 			local xCount = mq.TLO.Me.XTarget() or 0
 			local xName, xType = xTarg.Name(), xTarg.Type()
-				if (xCount > 0) then
-					if ((xTarg.Name() ~= 'NULL' and xTarg.ID() ~= 0) and (xType ~= 'Corpse') and (xType ~= 'Chest') and (xTarg.Master.Type() ~= 'PC')) then
-						return true
-					end
+			if (xCount > 0) then
+				if ((xTarg.Name() ~= 'NULL' and xTarg.ID() ~= 0) and (xType ~= 'Corpse') and (xType ~= 'Chest') and (xTarg.Master.Type() ~= 'PC')) then
+					return true
 				end
+			end
 		end
 	end
 	return false
@@ -301,6 +302,7 @@ local function NavigatePath(name)
 			local tmpLoc = string.format("%s:%s", tmp[i].loc, mq.TLO.Me.LocYXZ())
 			tmpLoc = tmpLoc:gsub(",", " ")
 			mq.cmdf("/squelch /nav locyxz %s | distance %s",tmpLoc, stopDist)
+			status = "Nav to WP #: "..tmp[i].step.." Distance: "..mq.TLO.Math.Distance(tmpLoc)()
 			mq.delay(10)
 			-- printf("Navigating to WP #: %s", tmp[i].step)
 			while mq.TLO.Math.Distance(tmpLoc)() > 30 and doNav do
@@ -309,21 +311,25 @@ local function NavigatePath(name)
 				end
 				if mq.TLO.Me.Combat() or ScanXtar() or mq.TLO.Me.Sitting() then
 					mq.cmdf("/squelch /nav stop")
+					status = "Paused Interrupt detected."
 					-- printf("\ay[\at%s\ax] \arIn Combat or Xtar Detected, Waiting...", script)
 					-- printf("Combat: %s xTarg: %s Sitting: %s", mq.TLO.Me.Combat(), ScanXtar(), mq.TLO.Me.Sitting())
 					while mq.TLO.Me.Combat()  do
+						status = 'Paused for Combat.'
 						if not doNav then
 							return
 						end
 						mq.delay(10)
 					end
 					while  mq.TLO.Me.Sitting() do
+						status = 'Paused for Sitting.'
 						if not doNav then
 							return
 						end
 						mq.delay(10)
 					end
 					while  ScanXtar() do
+						status = 'Paused for XTarget.'
 						if not doNav then
 							return
 						end
@@ -331,12 +337,15 @@ local function NavigatePath(name)
 					end
 					mq.delay(500)
 					mq.cmdf("/squelch /nav locyxz %s | distance %s",tmpLoc, stopDist)
+					status = "Nav to WP #: "..tmp[i].step.." Distance: "..string.format("%02f",mq.TLO.Math.Distance(tmpLoc)())
 				end
 				tmpLoc = string.format("%s:%s", tmp[i].loc, mq.TLO.Me.LocYXZ())
 				tmpLoc = tmpLoc:gsub(",", " ")
 				mq.delay(1)
 			end
+			status = "Arrived at WP #: "..tmp[i].step
 			if wpPause > 0 then
+				status = string.format("Paused %s seconds at WP #: %s",wpPause,tmp[i].step)
 				-- printf("Pausing at WP #: %s for %s seconds", tmp[i].step, wpPause)
 				local pauseTime = wpPause * 1000
 				-- print("Pausing for: "..pauseTime.."ms")
@@ -349,6 +358,7 @@ local function NavigatePath(name)
 	currentStep = 1
 	if not doLoop then
 		doNav = false
+		status = 'Idle'
 	else
 		if doPingPong then
 			doReverse = not doReverse
@@ -514,6 +524,20 @@ local function Draw_GUI()
 						doNav = true
 					end
 				end
+				ImGui.Text("Status: ")
+				ImGui.SameLine()
+				if status:find("Idle") then
+					ImGui.TextColored(ImVec4(0, 1, 1, 1), status)
+				elseif status:find("Paused") then
+					ImGui.TextColored(ImVec4(0.9, 0.4, 0.4, 1), status)
+				elseif status:find("Arrived") then
+					ImGui.TextColored(ImVec4(0, 1, 0, 1), status)
+				else
+					ImGui.TextColored(ImVec4(1,1,0,1), status)
+				end
+				ImGui.Separator()
+
+				-- Waypoint Table
 				if ImGui.BeginTable('PathTable', 3, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), ImVec2(ImGui.GetContentRegionAvail() - 5, 0.0)) then
 					ImGui.TableSetupColumn('#', ImGuiTableColumnFlags.None, 30)
 					ImGui.TableSetupColumn('Loc', ImGuiTableColumnFlags.None, 106)
@@ -662,7 +686,9 @@ local function bind(...)
 			showMainGUI = not showMainGUI
 		elseif key == 'quit' or key == 'exit' then
 			-- mq.exit()
+			mq.cmd("/squelch /nav stop")
 			mq.TLO.Me.Stand()
+			mq.delay(1)
 			doNav = false
 			RUNNING = false
 		elseif key == 'list' then
@@ -755,6 +781,7 @@ local function Loop()
 			mq.delay(1000)
 		end
 		if aRecord then
+			status = string.format("Recording Path: %s RecordDlay: %s",selectedPath, rDelay)
 			AutoRecordPath(selectedPath)
 		end
 		-- Make sure we are still in game or exit the script.
@@ -764,6 +791,7 @@ local function Loop()
 			NavigatePath(selectedPath)
 		else
 			currentStep = 1
+			status = 'Idle'
 		end
 
 		if delWP then
