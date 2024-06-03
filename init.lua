@@ -32,6 +32,7 @@ local rDelay, stopDist, wpPause = 5, 30, 1
 local currentStep = 1
 local delWP, delWPStep = false, 0
 local status = 'Idle'
+local wpLoc = ''
 
 -- GUI Settings
 local winFlags = bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.MenuBar)
@@ -300,12 +301,13 @@ local function NavigatePath(name)
 				return
 			end
 			local tmpLoc = string.format("%s:%s", tmp[i].loc, mq.TLO.Me.LocYXZ())
+			wpLoc = tmp[i].loc
 			tmpLoc = tmpLoc:gsub(",", " ")
 			mq.cmdf("/squelch /nav locyxz %s | distance %s",tmpLoc, stopDist)
-			status = "Nav to WP #: "..tmp[i].step.." Distance: "..mq.TLO.Math.Distance(tmpLoc)()
+			status = "Nav to WP #: "..tmp[i].step.." Distance: "
 			mq.delay(10)
 			-- printf("Navigating to WP #: %s", tmp[i].step)
-			while mq.TLO.Math.Distance(tmpLoc)() > 30 and doNav do
+			while mq.TLO.Math.Distance(tmpLoc)() > stopDist and doNav do
 				if not doNav then
 					return
 				end
@@ -337,7 +339,7 @@ local function NavigatePath(name)
 					end
 					mq.delay(500)
 					mq.cmdf("/squelch /nav locyxz %s | distance %s",tmpLoc, stopDist)
-					status = "Nav to WP #: "..tmp[i].step.." Distance: "..string.format("%02f",mq.TLO.Math.Distance(tmpLoc)())
+					status = "Nav to WP #: "..tmp[i].step.." Distance: "
 				end
 				tmpLoc = string.format("%s:%s", tmp[i].loc, mq.TLO.Me.LocYXZ())
 				tmpLoc = tmpLoc:gsub(",", " ")
@@ -532,8 +534,11 @@ local function Draw_GUI()
 					ImGui.TextColored(ImVec4(0.9, 0.4, 0.4, 1), status)
 				elseif status:find("Arrived") then
 					ImGui.TextColored(ImVec4(0, 1, 0, 1), status)
-				else
-					ImGui.TextColored(ImVec4(1,1,0,1), status)
+				elseif status:find("Nav to WP") then
+					local tmpDist = string.format("%s:%s", wpLoc, mq.TLO.Me.LocYXZ())
+					local dist = string.format("%.2f",tonumber(mq.TLO.Math.Distance(tmpDist)()))
+					local tmpStatus = string.format("%s%s",status,dist)
+					ImGui.TextColored(ImVec4(1,1,0,1), tmpStatus)
 				end
 				ImGui.Separator()
 
