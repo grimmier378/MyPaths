@@ -184,7 +184,7 @@ local function RecordWaypoint(name)
 	if not Paths[zone][name] then Paths[zone][name] = {} end
 	local tmp = Paths[zone][name]
 	local loc = mq.TLO.Me.LocYXZ()
-
+	if tmp[#tmp].loc == loc then return end
 	table.insert(tmp, {step = #tmp + 1, loc = loc})
 	Paths[zone][name] = tmp
 	SavePaths()
@@ -258,8 +258,7 @@ end
 
 --------- Navigation Functions --------
 
-local function FindClosestWaypoint(path, table)
-	local zone = mq.TLO.Zone.ShortName()
+local function FindClosestWaypoint(table)
 	local tmp = table
 	local closest = 999999
 	local closestLoc = 1
@@ -462,8 +461,8 @@ local function Draw_GUI()
 				end
 
 				-- Navigation Controls
-				local tmpTable = Paths[zone][selectedPath]
-				local closestWaypoint = FindClosestWaypoint(selectedPath, tmpTable)
+				local tmpTable = Paths[zone][selectedPath] or {}
+				local closestWaypoint = FindClosestWaypoint(tmpTable)
 
 				if ImGui.CollapsingHeader("Navigation##") then
 					doReverse = ImGui.Checkbox('Reverse Order', doReverse)
