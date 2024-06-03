@@ -28,7 +28,7 @@ local newPath = ''
 local curTime = os.time()
 local lastTime = curTime
 local aRecord, doNav, doLoop, doReverse, doPingPong = false, false, false, false, false
-local rDelay, stopDist = 5, 30
+local rDelay, stopDist, wpPause = 5, 30, 1
 local currentStep = 1
 local delWP, delWPStep = false, 0
 
@@ -53,6 +53,7 @@ defaults = {
 	AutoSize = false,
 	RecordDlay = 5,
 	StopDistance = 30,
+	PauseStops = 1,
 }
 
 -------- Helper Functions --------
@@ -148,6 +149,11 @@ local function loadSettings()
 		newSetting = true
 	end
 
+	if settings[script].PauseStops == nil then
+		settings[script].PauseStops = wpPause
+		newSetting = true
+	end
+
 	if settings[script].StopDistance == nil then
 		settings[script].StopDistance = stopDist
 		newSetting = true
@@ -158,6 +164,7 @@ local function loadSettings()
 
 	-- Set the settings to the variables
 	stopDist = settings[script].StopDistance
+	wpPause = settings[script].PauseStops
 	aSize = settings[script].AutoSize
 	locked = settings[script].locked
 	scale = settings[script].Scale
@@ -237,15 +244,13 @@ local function ScanXtar()
 	if mq.TLO.Me.XTarget() > 0 then
 		for i = 1, mq.TLO.Me.XTargetSlots() do
 			local xTarg = mq.TLO.Me.XTarget(i)
-			if not (xTarg.ID() > 0 and xTarg.Type() ~= 'Corpse' and xTarg.Type() ~= 'Chest') then
-				local xCount = mq.TLO.Me.XTarget() or 0
-				local xName, xType = xTarg.Name(), xTarg.Type()
+			local xCount = mq.TLO.Me.XTarget() or 0
+			local xName, xType = xTarg.Name(), xTarg.Type()
 				if (xCount > 0) then
 					if ((xTarg.Name() ~= 'NULL' and xTarg.ID() ~= 0) and (xType ~= 'Corpse') and (xType ~= 'Chest') and (xTarg.Master.Type() ~= 'PC')) then
 						return true
 					end
 				end
-			end
 		end
 	end
 	return false
@@ -302,18 +307,26 @@ local function NavigatePath(name)
 				if not doNav then
 					return
 				end
-				if mq.TLO.Me.Combat() or ScanXtar() then
+				if mq.TLO.Me.Combat() or ScanXtar() or mq.TLO.Me.Sitting() then
 					printf("\ay[\at%s\ax] \arIn Combat or Xtar Detected, Waiting...", script)
-					printf("Combat: %s xTarg: %s", mq.TLO.Me.Combat(), ScanXtar())
-					while mq.TLO.Me.Combat() or ScanXtar() do
-						mq.delay(1000)
+					printf("Combat: %s xTarg: %s Sitting: %s", mq.TLO.Me.Combat(), ScanXtar(), mq.TLO.Me.Sitting())
+					while mq.TLO.Me.Combat() or ScanXtar() or mq.TLO.Me.Sitting() do
+						mq.delay(10)
 					end
+					mq.delay(500)
 					mq.cmdf("/squelch /nav locyxz %s | distance %s",tmpLoc, stopDist)
 				end
 				tmpLoc = string.format("%s:%s", tmp[i].loc, mq.TLO.Me.LocYXZ())
 				tmpLoc = tmpLoc:gsub(",", " ")
-				mq.delay(5)
+				mq.delay(1)
 			end
+			if wpPause > 0 then
+				-- printf("Pausing at WP #: %s for %s seconds", tmp[i].step, wpPause)
+				local pauseTime = wpPause * 1000
+				print("Pausing for: "..pauseTime.."ms")
+				mq.delay(pauseTime)
+			end
+			-- mq.delay(wpPause..'s')
 		end
 		break
 	end
@@ -562,6 +575,8 @@ local function Draw_GUI()
 				-- Set RecordDley
 				rDelay = ImGui.SliderInt("Record Delay##"..script, rDelay, 1, 10)
 				stopDist = ImGui.SliderInt("Stop Distance##"..script, stopDist, 10, 100)
+				wpPause = ImGui.SliderInt("Waypoint Pause##"..script, wpPause, 0, 60)
+
 				-- Save & Close Button --
 				if ImGui.Button("Save & Close") then
 					settings = dofile(configFile)
@@ -571,6 +586,7 @@ local function Draw_GUI()
 					settings[script].AutoSize = aSize
 					settings[script].RecordDelay = rDelay
 					settings[script].StopDistance = stopDist
+					settings[script].PauseStops = wpPause
 					mq.pickle(configFile, settings)
 					showConfigGUI = false
 				end
