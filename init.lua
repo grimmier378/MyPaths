@@ -258,6 +258,14 @@ local function ScanXtar()
 	return false
 end
 
+local function CheckInterrupts()
+	if mq.TLO.Window('LootWnd').Open() or mq.TLO.Window('AdvancedLootWnd').Open() then return true end
+	if mq.TLO.Me.Combat() or ScanXtar() or mq.TLO.Me.Sitting() then
+		return true
+	end
+	return false
+end
+
 --------- Navigation Functions --------
 
 local function FindClosestWaypoint(table)
@@ -286,7 +294,7 @@ local function NavigatePath(name)
 	if not Paths[zone] then return end
 	if not Paths[zone][name] then return end
 	local tmp = Paths[zone][name]
-		table.sort(tmp, function(a, b) return a.step < b.step end)
+	table.sort(tmp, function(a, b) return a.step < b.step end)
 	if doReverse then
 		table.sort(tmp, function(a, b) return a.step > b.step end)
 	end
@@ -303,57 +311,74 @@ local function NavigatePath(name)
 			local tmpLoc = string.format("%s:%s", tmp[i].loc, mq.TLO.Me.LocYXZ())
 			wpLoc = tmp[i].loc
 			tmpLoc = tmpLoc:gsub(",", " ")
-			mq.cmdf("/squelch /nav locyxz %s | distance %s",tmpLoc, stopDist)
+			mq.cmdf("/squelch /nav locyxz %s | distance %s", tmpLoc, stopDist)
 			status = "Nav to WP #: "..tmp[i].step.." Distance: "
-			mq.delay(10)
-			-- printf("Navigating to WP #: %s", tmp[i].step)
-			while mq.TLO.Math.Distance(tmpLoc)() > stopDist and doNav do
+			coroutine.yield()  -- Yield here to allow updates
+			while mq.TLO.Math.Distance(tmpLoc)() > stopDist do
 				if not doNav then
 					return
 				end
-				if mq.TLO.Me.Combat() or ScanXtar() or mq.TLO.Me.Sitting() then
+
+				if CheckInterrupts() then
 					mq.cmdf("/squelch /nav stop")
 					status = "Paused Interrupt detected."
-					-- printf("\ay[\at%s\ax] \arIn Combat or Xtar Detected, Waiting...", script)
-					-- printf("Combat: %s xTarg: %s Sitting: %s", mq.TLO.Me.Combat(), ScanXtar(), mq.TLO.Me.Sitting())
-					while mq.TLO.Me.Combat()  do
+					mq.delay(100)
+					coroutine.yield()  -- Yield here to allow updates
+					while (mq.TLO.Window('LootWnd').Open() or mq.TLO.Window('AdvancedLootWnd').Open()) do
+						status = 'Paused for Looting.'
+						if not doNav then
+							return
+						end
+						mq.delay(10)
+						coroutine.yield()  -- Yield here to allow updates
+					end
+					while mq.TLO.Me.Combat() do
 						status = 'Paused for Combat.'
 						if not doNav then
 							return
 						end
 						mq.delay(10)
+						coroutine.yield()  -- Yield here to allow updates
 					end
-					while  mq.TLO.Me.Sitting() do
+					while mq.TLO.Me.Sitting() do
 						status = 'Paused for Sitting.'
 						if not doNav then
 							return
 						end
 						mq.delay(10)
+						coroutine.yield()  -- Yield here to allow updates
 					end
-					while  ScanXtar() do
+					while ScanXtar() do
 						status = 'Paused for XTarget.'
 						if not doNav then
 							return
 						end
 						mq.delay(10)
+						coroutine.yield()  -- Yield here to allow updates
 					end
 					mq.delay(500)
-					mq.cmdf("/squelch /nav locyxz %s | distance %s",tmpLoc, stopDist)
+					mq.cmdf("/squelch /nav locyxz %s | distance %s", tmpLoc, stopDist)
+					status = "Nav to WP #: "..tmp[i].step.." Distance: "
+				end
+				if mq.TLO.Me.Speed() == 0 then
+					status = "Paused for Stopped."
+					coroutine.yield()
+					mq.delay(5000,  function () return mq.TLO.Me.Speed() > 0 end)
+					mq.cmdf("/squelch /nav locyxz %s | distance %s", tmpLoc, stopDist)
 					status = "Nav to WP #: "..tmp[i].step.." Distance: "
 				end
 				tmpLoc = string.format("%s:%s", tmp[i].loc, mq.TLO.Me.LocYXZ())
 				tmpLoc = tmpLoc:gsub(",", " ")
 				mq.delay(1)
+				coroutine.yield()  -- Yield here to allow updates
 			end
 			status = "Arrived at WP #: "..tmp[i].step
 			if wpPause > 0 then
-				status = string.format("Paused %s seconds at WP #: %s",wpPause,tmp[i].step)
-				-- printf("Pausing at WP #: %s for %s seconds", tmp[i].step, wpPause)
+				status = string.format("Paused %s seconds at WP #: %s", wpPause, tmp[i].step)
 				local pauseTime = wpPause * 1000
-				-- print("Pausing for: "..pauseTime.."ms")
 				mq.delay(pauseTime)
+				coroutine.yield()  -- Yield here to allow updates
 			end
-			-- mq.delay(wpPause..'s')
 		end
 		break
 	end
@@ -774,11 +799,15 @@ local function Init()
 	end
 	-- Initialize ImGui
 	mq.imgui.init('MyPaths', Draw_GUI)
+
 	displayHelp()
 end
 
 local hidden = false
 local function Loop()
+	-- Create the coroutine for NavigatePath
+	local co = coroutine.create(NavigatePath)
+
 	-- Main Loop
 	while RUNNING do
 		while mq.TLO.Me.Zoning() do
@@ -797,14 +826,28 @@ local function Loop()
 		end
 
 		if aRecord then
-			status = string.format("Recording Path: %s RecordDlay: %s",selectedPath, rDelay)
+			status = string.format("Recording Path: %s RecordDlay: %s", selectedPath, rDelay)
 			AutoRecordPath(selectedPath)
 		end
+
 		-- Make sure we are still in game or exit the script.
-		if mq.TLO.EverQuest.GameState() ~= "INGAME" then printf("\aw[\at%s\ax] \arNot in game, \ayTry again later...", script) mq.exit() end
+		if mq.TLO.EverQuest.GameState() ~= "INGAME" then
+			printf("\aw[\at%s\ax] \arNot in game, \ayTry again later...", script)
+			mq.exit()
+		end
 
 		if doNav then
-			NavigatePath(selectedPath)
+			-- If the coroutine is not dead, resume it
+			if coroutine.status(co) ~= "dead" then
+				local success, message = coroutine.resume(co, selectedPath)
+				if not success then
+					print("Error: " .. message)
+					break
+				end
+			else
+				-- If the coroutine is dead, create a new one
+				co = coroutine.create(NavigatePath)
+			end
 		else
 			currentStep = 1
 			status = 'Idle'
@@ -815,14 +858,15 @@ local function Loop()
 			delWPStep = 0
 			delWP = false
 		end
+
 		-- Process ImGui Window Flag Changes
 		winFlags = locked and bit32.bor(ImGuiWindowFlags.NoMove, ImGuiWindowFlags.MenuBar) or bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.MenuBar)
 		winFlags = aSize and bit32.bor(winFlags, ImGuiWindowFlags.AlwaysAutoResize, ImGuiWindowFlags.MenuBar) or winFlags
 
 		mq.delay(10)
-
 	end
 end
+
 -- Make sure we are in game before running the script
 if mq.TLO.EverQuest.GameState() ~= "INGAME" then printf("\aw[\at%s\ax] \arNot in game, \ayTry again later...", script) mq.exit() end
 Init()
