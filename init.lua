@@ -27,10 +27,10 @@ local selectedPath = 'None'
 local newPath = ''
 local curTime = os.time()
 local lastTime = curTime
-local aRecord, doNav, doLoop, doReverse, doPingPong = false, false, false, false, false
-local rDelay, stopDist, wpPause = 5, 30, 1
+local autoRecord, doNav, doSingle, doLoop, doReverse, doPingPong = false, false, false, false, false, false
+local recordDelay, stopDist, wpPause = 5, 30, 1
 local currentStep = 1
-local delWP, delWPStep = false, 0
+local deleteWP, deleteWPStep = false, 0
 local status = 'Idle'
 local wpLoc = ''
 
@@ -132,7 +132,7 @@ local function loadSettings()
 	end
 
 	if settings[script].RecordDelay == nil then
-		settings[script].RecordDelay = rDelay
+		settings[script].RecordDelay = recordDelay
 		newSetting = true
 	end
 
@@ -171,7 +171,7 @@ local function loadSettings()
 	locked = settings[script].locked
 	scale = settings[script].Scale
 	themeName = settings[script].LoadTheme
-	rDelay = settings[script].RecordDelay
+	recordDelay = settings[script].RecordDelay
 
 	-- Save the settings if new settings were added
 	if newSetting then mq.pickle(configFile, settings) end
@@ -235,7 +235,7 @@ end
 
 local function AutoRecordPath(name)
 	curTime = os.time()
-	if curTime - lastTime > rDelay then
+	if curTime - lastTime > recordDelay then
 		RecordWaypoint(name)
 		lastTime = curTime
 	end
@@ -285,25 +285,36 @@ local function FindClosestWaypoint(table)
 	return closestLoc
 end
 
-local function NavigatePath(name)
-	if not doNav then
-		return
-	end
-
-	local zone = mq.TLO.Zone.ShortName()
+local function sortPathsTable(zone, path)
 	if not Paths[zone] then return end
-	if not Paths[zone][name] then return end
-	local tmp = Paths[zone][name]
+	if not Paths[zone][path] then return end
+	local tmp = Paths[zone][path]
 	table.sort(tmp, function(a, b) return a.step < b.step end)
 	if doReverse then
 		table.sort(tmp, function(a, b) return a.step > b.step end)
 	end
+	return tmp
+end
+
+local function NavigatePath(name)
+	if not doNav then
+		return
+	end
+	local zone = mq.TLO.Zone.ShortName()
 	local startNum = 1
 	if currentStep ~= 1 then
 		startNum = currentStep
 	end
+	if doSingle then doNav = true end
 	while doNav do
+		local tmp = sortPathsTable(zone, name)
+		if tmp == nil then
+			doNav = false
+			status = 'Idle'
+			return
+		end
 		for i = startNum , #tmp do
+			if doSingle then i = currentStep end
 			currentStep = i
 			if not doNav then
 				return
@@ -329,7 +340,7 @@ local function NavigatePath(name)
 						if not doNav then
 							return
 						end
-						mq.delay(10)
+						mq.delay(100)
 						coroutine.yield()  -- Yield here to allow updates
 					end
 					while mq.TLO.Me.Combat() do
@@ -337,7 +348,7 @@ local function NavigatePath(name)
 						if not doNav then
 							return
 						end
-						mq.delay(10)
+						mq.delay(100)
 						coroutine.yield()  -- Yield here to allow updates
 					end
 					while mq.TLO.Me.Sitting() do
@@ -345,7 +356,7 @@ local function NavigatePath(name)
 						if not doNav then
 							return
 						end
-						mq.delay(10)
+						mq.delay(100)
 						coroutine.yield()  -- Yield here to allow updates
 					end
 					while ScanXtar() do
@@ -353,7 +364,7 @@ local function NavigatePath(name)
 						if not doNav then
 							return
 						end
-						mq.delay(10)
+						mq.delay(100)
 						coroutine.yield()  -- Yield here to allow updates
 					end
 					mq.delay(500)
@@ -362,10 +373,10 @@ local function NavigatePath(name)
 				end
 				if mq.TLO.Me.Speed() == 0 then
 					status = "Paused for Stopped."
-					coroutine.yield()
 					mq.delay(5000,  function () return mq.TLO.Me.Speed() > 0 end)
 					mq.cmdf("/squelch /nav locyxz %s | distance %s", tmpLoc, stopDist)
 					status = "Nav to WP #: "..tmp[i].step.." Distance: "
+					coroutine.yield()
 				end
 				tmpLoc = string.format("%s:%s", tmp[i].loc, mq.TLO.Me.LocYXZ())
 				tmpLoc = tmpLoc:gsub(",", " ")
@@ -373,6 +384,12 @@ local function NavigatePath(name)
 				coroutine.yield()  -- Yield here to allow updates
 			end
 			status = "Arrived at WP #: "..tmp[i].step
+			if doSingle then
+				doNav = false
+				doSingle = false
+				status = 'Idle'
+				return
+			end
 			if wpPause > 0 then
 				status = string.format("Paused %s seconds at WP #: %s", wpPause, tmp[i].step)
 				local pauseTime = wpPause * 1000
@@ -380,17 +397,19 @@ local function NavigatePath(name)
 				coroutine.yield()  -- Yield here to allow updates
 			end
 		end
-		break
-	end
-	currentStep = 1
-	if not doLoop then
-		doNav = false
-		status = 'Idle'
-	else
-		if doPingPong then
-			doReverse = not doReverse
+		-- Check if we need to loop
+		if not doLoop then
+			doNav = false
+			status = 'Idle'
+			break
+		else
+			currentStep = 1
+			startNum = 1
+			if doPingPong then
+				doReverse = not doReverse
+				NavigatePath(name)
+			end
 		end
-		NavigatePath(name)
 	end
 end
 
@@ -501,13 +520,13 @@ local function Draw_GUI()
 						ClearWaypoints(selectedPath)
 					end
 					ImGui.SameLine()
-					local label = aRecord and 'Stop Recording' or 'Start Recording'
-					if aRecord then
+					local label = autoRecord and 'Stop Recording' or 'Start Recording'
+					if autoRecord then
 						ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1.0, 0.4, 0.4, 0.4))
 					else
 						ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1.0, 0.4, 0.4))
 					end
-					if ImGui.Button(label) then	aRecord = not aRecord end
+					if ImGui.Button(label) then	autoRecord = not autoRecord end
 					ImGui.PopStyleColor()
 				end
 
@@ -576,7 +595,7 @@ local function Draw_GUI()
 					ImGui.TableHeadersRow()
 					
 					for i = 1, #tmpTable do
-
+						
 						ImGui.TableNextRow()
 						ImGui.TableSetColumnIndex(0)
 						ImGui.Text("%s",tmpTable[i].step)
@@ -587,13 +606,21 @@ local function Draw_GUI()
 						end
 						ImGui.TableSetColumnIndex(1)
 						ImGui.Text(tmpTable[i].loc)
+						if ImGui.BeginPopupContextItem("WP_"..tmpTable[i].step) then
+							if ImGui.MenuItem('Nav to WP'..tmpTable[i].step) then
+								currentStep = tmpTable[i].step
+								doNav = true
+								doSingle = true
+							end
+							ImGui.EndPopup()
+						end
 						ImGui.TableSetColumnIndex(2)
 						
 						if ImGui.Button(Icon.FA_TRASH.."##_"..i) then
-							delWP = true
-							delWPStep = tmpTable[i].step
+							deleteWP = true
+							deleteWPStep = tmpTable[i].step
 						end
-						
+
 					end
 					ImGui.EndTable()
 				end
@@ -657,8 +684,10 @@ local function Draw_GUI()
 				end
 
 				-- Set RecordDley
-				rDelay = ImGui.SliderInt("Record Delay##"..script, rDelay, 1, 10)
+				recordDelay = ImGui.SliderInt("Record Delay##"..script, recordDelay, 1, 10)
+				-- Set Stop Distance
 				stopDist = ImGui.SliderInt("Stop Distance##"..script, stopDist, 10, 100)
+				-- Set Waypoint Pause time
 				wpPause = ImGui.SliderInt("Waypoint Pause##"..script, wpPause, 0, 60)
 
 				-- Save & Close Button --
@@ -668,7 +697,7 @@ local function Draw_GUI()
 					settings[script].LoadTheme = themeName
 					settings[script].locked = locked
 					settings[script].AutoSize = aSize
-					settings[script].RecordDelay = rDelay
+					settings[script].RecordDelay = recordDelay
 					settings[script].StopDistance = stopDist
 					settings[script].PauseStops = wpPause
 					mq.pickle(configFile, settings)
@@ -785,7 +814,6 @@ local function bind(...)
 	end
 end
 
-
 local function Init()
 	-- Load Settings
 	loadSettings()
@@ -803,7 +831,7 @@ local function Init()
 	displayHelp()
 end
 
-local hidden = false
+local zoningHideGUI = false
 local function Loop()
 	-- Create the coroutine for NavigatePath
 	local co = coroutine.create(NavigatePath)
@@ -813,20 +841,20 @@ local function Loop()
 		while mq.TLO.Me.Zoning() do
 			selectedPath = 'None'
 			doNav = false
-			hidden = true
+			zoningHideGUI = true
 			showMainGUI = false
 			mq.delay(1000)
 		end
 
-		if hidden then
+		if zoningHideGUI then
 			showMainGUI = true
-			hidden = false
+			zoningHideGUI = false
 			status = 'Idle'
 			currentStep = 1
 		end
 
-		if aRecord then
-			status = string.format("Recording Path: %s RecordDlay: %s", selectedPath, rDelay)
+		if autoRecord then
+			status = string.format("Recording Path: %s RecordDlay: %s", selectedPath, recordDelay)
 			AutoRecordPath(selectedPath)
 		end
 
@@ -853,10 +881,10 @@ local function Loop()
 			status = 'Idle'
 		end
 
-		if delWP then
-			RemoveWaypoint(selectedPath, delWPStep)
-			delWPStep = 0
-			delWP = false
+		if deleteWP then
+			RemoveWaypoint(selectedPath, deleteWPStep)
+			deleteWPStep = 0
+			deleteWP = false
 		end
 
 		-- Process ImGui Window Flag Changes
