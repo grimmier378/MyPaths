@@ -288,11 +288,14 @@ end
 local function sortPathsTable(zone, path)
 	if not Paths[zone] then return end
 	if not Paths[zone][path] then return end
-	local tmp = Paths[zone][path]
-	table.sort(tmp, function(a, b) return a.step < b.step end)
+	local tmp = {}
+	for i, data in pairs(Paths[zone][path]) do
+		table.insert(tmp, data)
+	end
+	
 	if doReverse then
 		table.sort(tmp, function(a, b) return a.step > b.step end)
-	end
+	else table.sort(tmp, function(a, b) return a.step < b.step end) end
 	return tmp
 end
 
@@ -370,13 +373,14 @@ local function NavigatePath(name)
 					mq.delay(500)
 					mq.cmdf("/squelch /nav locyxz %s | distance %s", tmpLoc, stopDist)
 					status = "Nav to WP #: "..tmp[i].step.." Distance: "
-				end
-				if mq.TLO.Me.Speed() == 0 then
-					status = "Paused for Stopped."
-					mq.delay(5000,  function () return mq.TLO.Me.Speed() > 0 end)
-					mq.cmdf("/squelch /nav locyxz %s | distance %s", tmpLoc, stopDist)
-					status = "Nav to WP #: "..tmp[i].step.." Distance: "
-					coroutine.yield()
+				else
+					if mq.TLO.Me.Speed() == 0 then
+						status = "Paused for Stopped."
+						mq.delay(5000,  function () return mq.TLO.Me.Speed() > 0 end)
+						mq.cmdf("/squelch /nav locyxz %s | distance %s", tmpLoc, stopDist)
+						status = "Nav to WP #: "..tmp[i].step.." Distance: "
+						coroutine.yield()
+					end
 				end
 				tmpLoc = string.format("%s:%s", tmp[i].loc, mq.TLO.Me.LocYXZ())
 				tmpLoc = tmpLoc:gsub(",", " ")
@@ -396,18 +400,17 @@ local function NavigatePath(name)
 				mq.delay(pauseTime)
 				coroutine.yield()  -- Yield here to allow updates
 			end
-		end
 		-- Check if we need to loop
-		if not doLoop then
-			doNav = false
-			status = 'Idle'
-			break
-		else
-			currentStep = 1
-			startNum = 1
-			if doPingPong then
-				doReverse = not doReverse
-				NavigatePath(name)
+			if not doLoop then
+				doNav = false
+				status = 'Idle'
+				break
+			else
+				currentStep = 1
+				startNum = 1
+				if doPingPong then
+					doReverse = not doReverse
+				end
 			end
 		end
 	end
@@ -509,6 +512,9 @@ local function Draw_GUI()
 				end
 			end
 
+			local tmpTable = sortPathsTable(zone, selectedPath) or {}
+			local closestWaypoint = FindClosestWaypoint(tmpTable)
+
 			if selectedPath ~= 'None' then
 				if ImGui.CollapsingHeader("Waypoints##") then
 						
@@ -531,11 +537,9 @@ local function Draw_GUI()
 				end
 
 				-- Navigation Controls
-				local tmpTable = Paths[zone][selectedPath] or {}
-				local closestWaypoint = FindClosestWaypoint(tmpTable)
 
 				if ImGui.CollapsingHeader("Navigation##") then
-					doReverse = ImGui.Checkbox('Reverse Order', doReverse)
+					if not doNav then doReverse = ImGui.Checkbox('Reverse Order', doReverse) end
 					ImGui.SameLine()
 					doLoop = ImGui.Checkbox('Loop Path', doLoop)
 					ImGui.SameLine()
@@ -547,9 +551,9 @@ local function Draw_GUI()
 					if not Paths[zone] then Paths[zone] = {} end
 					-- if not Paths[zone][selectedPath] then Paths[zone][selectedPath] = {} end
 
-					ImGui.Text("Current Waypoint: %s", currentStep)
+					ImGui.Text("Current Waypoint: %s", tmpTable[currentStep].step)
 					ImGui.SameLine()
-					ImGui.Text("Closest Waypoint: %s", closestWaypoint)
+					ImGui.Text("Closest Waypoint: %s", tmpTable[closestWaypoint].step)
 
 					local tmpLabel = doNav and 'Stop Navigation' or 'Start Navigation'
 					if doNav then
