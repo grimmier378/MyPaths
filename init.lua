@@ -21,7 +21,7 @@ local lIcon -- lock icon variable holder
 local upIcon = Icon.FA_CHEVRON_UP -- Up Arrow Icon
 local downIcon = Icon.FA_CHEVRON_DOWN -- Down Arrow Icon
 local themeID = 1
-local theme, defaults, settings = {}, {}, {}
+local theme, defaults, settings, debugMessages = {}, {}, {}, {}
 local Paths = {}
 local selectedPath = 'None'
 local newPath = ''
@@ -31,13 +31,13 @@ local autoRecord, doNav, doSingle, doLoop, doReverse, doPingPong = false, false,
 local recordDelay, stopDist, wpPause = 5, 30, 1
 local currentStep = 1
 local deleteWP, deleteWPStep = false, 0
-local status = 'Idle'
+local status, lastStatus = 'Idle', ''
 local wpLoc = ''
 
 -- GUI Settings
 local winFlags = bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.MenuBar)
-local RUNNING = true
-local showMainGUI, showConfigGUI = true, false
+local RUNNING, DEBUG = true, false
+local showMainGUI, showConfigGUI, showDebugGUI = true, false, false
 local scale = 1
 local aSize, locked, hasThemeZ = false, false, false
 
@@ -186,8 +186,13 @@ local function RecordWaypoint(name)
 	if not Paths[zone][name] then Paths[zone][name] = {} end
 	local tmp = Paths[zone][name]
 	local loc = mq.TLO.Me.LocYXZ()
-	if tmp[#tmp].loc == loc then return end
-	table.insert(tmp, {step = #tmp + 1, loc = loc})
+	local index = #tmp or 1
+	if tmp[index] ~= nil then
+		if tmp[index].loc == loc then return end
+		table.insert(tmp, {step = index + 1, loc = loc})
+	else
+		table.insert(tmp, {step = 1, loc = loc})
+	end
 	Paths[zone][name] = tmp
 	SavePaths()
 end
@@ -260,7 +265,7 @@ end
 
 local function CheckInterrupts()
 	if mq.TLO.Window('LootWnd').Open() or mq.TLO.Window('AdvancedLootWnd').Open() then return true end
-	if mq.TLO.Me.Combat() or ScanXtar() or mq.TLO.Me.Sitting() then
+	if mq.TLO.Me.Combat() or ScanXtar() or mq.TLO.Me.Sitting() or mq.TLO.Me.Rooted() or mq.TLO.Me.Feared() or mq.TLO.Me.Mezzed() or mq.TLO.Me.Charmed() then
 		return true
 	end
 	return false
@@ -325,8 +330,11 @@ local function NavigatePath(name)
 			local tmpLoc = string.format("%s:%s", tmp[i].loc, mq.TLO.Me.LocYXZ())
 			wpLoc = tmp[i].loc
 			tmpLoc = tmpLoc:gsub(",", " ")
+			local tmpDist = mq.TLO.Math.Distance(tmpLoc)() or 0
 			mq.cmdf("/squelch /nav locyxz %s | distance %s", tmpLoc, stopDist)
-			status = "Nav to WP #: "..tmp[i].step.." Distance: "
+			status = "Nav to WP #: "..tmp[i].step.." Distance: "..string.format("%.2f",tmpDist)
+			
+			mq.delay(10)
 			coroutine.yield()  -- Yield here to allow updates
 			while mq.TLO.Math.Distance(tmpLoc)() > stopDist do
 				if not doNav then
@@ -355,7 +363,39 @@ local function NavigatePath(name)
 						coroutine.yield()  -- Yield here to allow updates
 					end
 					while mq.TLO.Me.Sitting() do
-						status = 'Paused for Sitting.'
+						status = string.format('Paused for Sitting. HP %s MP %s', mq.TLO.Me.PctHPs(), mq.TLO.Me.PctMana())
+						if not doNav then
+							return
+						end
+						mq.delay(100)
+						coroutine.yield()  -- Yield here to allow updates
+					end
+					while mq.TLO.Me.Rooted() do
+						status = 'Paused for Rooted.'
+						if not doNav then
+							return
+						end
+						mq.delay(100)
+						coroutine.yield()  -- Yield here to allow updates
+					end
+					while mq.TLO.Me.Feared() do
+						status = 'Paused for Feared.'
+						if not doNav then
+							return
+						end
+						mq.delay(100)
+						coroutine.yield()  -- Yield here to allow updates
+					end
+					while mq.TLO.Me.Mezzed() do
+						status = 'Paused for Mezzed.'
+						if not doNav then
+							return
+						end
+						mq.delay(100)
+						coroutine.yield()  -- Yield here to allow updates
+					end
+					while mq.TLO.Me.Charmed() do
+						status = 'Paused for Charmed.'
 						if not doNav then
 							return
 						end
@@ -363,7 +403,7 @@ local function NavigatePath(name)
 						coroutine.yield()  -- Yield here to allow updates
 					end
 					while ScanXtar() do
-						status = 'Paused for XTarget.'
+						status = string.format('Paused for XTarget. XTarg Count %s', mq.TLO.Me.XTarget())
 						if not doNav then
 							return
 						end
@@ -372,13 +412,19 @@ local function NavigatePath(name)
 					end
 					mq.delay(500)
 					mq.cmdf("/squelch /nav locyxz %s | distance %s", tmpLoc, stopDist)
-					status = "Nav to WP #: "..tmp[i].step.." Distance: "
+					tmpLoc = string.format("%s:%s", tmp[i].loc, mq.TLO.Me.LocYXZ())
+					tmpLoc = tmpLoc:gsub(",", " ")
+					tmpDist = mq.TLO.Math.Distance(tmpLoc)() or 0
+					status = "Nav to WP #: "..tmp[i].step.." Distance: "..string.format("%.2f",tmpDist)
 				else
 					if mq.TLO.Me.Speed() == 0 then
-						status = "Paused for Stopped."
+						status = "Paused because we have Stopped!"
 						mq.delay(5000,  function () return mq.TLO.Me.Speed() > 0 end)
 						mq.cmdf("/squelch /nav locyxz %s | distance %s", tmpLoc, stopDist)
-						status = "Nav to WP #: "..tmp[i].step.." Distance: "
+						tmpLoc = string.format("%s:%s", tmp[i].loc, mq.TLO.Me.LocYXZ())
+						tmpLoc = tmpLoc:gsub(",", " ")
+						tmpDist = mq.TLO.Math.Distance(tmpLoc)() or 0
+						status = "Nav to WP #: "..tmp[i].step.." Distance: "..string.format("%.2f",tmpDist)
 						coroutine.yield()
 					end
 				end
@@ -400,17 +446,18 @@ local function NavigatePath(name)
 				mq.delay(pauseTime)
 				coroutine.yield()  -- Yield here to allow updates
 			end
+
+		end
 		-- Check if we need to loop
-			if not doLoop then
-				doNav = false
-				status = 'Idle'
-				break
-			else
-				currentStep = 1
-				startNum = 1
-				if doPingPong then
-					doReverse = not doReverse
-				end
+		if not doLoop then
+			doNav = false
+			status = 'Idle'
+			break
+		else
+			currentStep = 1
+			startNum = 1
+			if doPingPong then
+				doReverse = not doReverse
 			end
 		end
 	end
@@ -473,7 +520,16 @@ local function Draw_GUI()
 						locked = not locked
 					end
 				end
-
+				if DEBUG then
+					ImGui.SameLine()
+					ImGui.Text(Icon.FA_BUG)
+					if ImGui.IsItemHovered() then
+						ImGui.SetTooltip("Debug")
+						if ImGui.IsMouseReleased(0) then
+							showDebugGUI = not showDebugGUI
+						end
+					end
+				end
 				ImGui.EndMenuBar()
 			end
 
@@ -539,8 +595,8 @@ local function Draw_GUI()
 				-- Navigation Controls
 
 				if ImGui.CollapsingHeader("Navigation##") then
-					if not doNav then doReverse = ImGui.Checkbox('Reverse Order', doReverse) end
-					ImGui.SameLine()
+					if not doNav then doReverse = ImGui.Checkbox('Reverse Order', doReverse) ImGui.SameLine() end
+					
 					doLoop = ImGui.Checkbox('Loop Path', doLoop)
 					ImGui.SameLine()
 					doPingPong = ImGui.Checkbox('Ping Pong', doPingPong)
@@ -583,10 +639,17 @@ local function Draw_GUI()
 				elseif status:find("Arrived") then
 					ImGui.TextColored(ImVec4(0, 1, 0, 1), status)
 				elseif status:find("Nav to WP") then
-					local tmpDist = string.format("%s:%s", wpLoc, mq.TLO.Me.LocYXZ())
-					local dist = string.format("%.2f",tonumber(mq.TLO.Math.Distance(tmpDist)()))
-					local tmpStatus = string.format("%s%s",status,dist)
-					ImGui.TextColored(ImVec4(1,1,0,1), tmpStatus)
+					local tmpDist = mq.TLO.Math.Distance(string.format("%s:%s", wpLoc, mq.TLO.Me.LocYXZ()))() or 0
+					local dist = string.format("%.2f",tmpDist)
+					local tmpStatus = status
+					if tmpStatus:find("Distance") then
+						tmpStatus = tmpStatus:sub(1, tmpStatus:find("Distance") - 1)
+						tmpStatus = string.format("%s Distance: %s",status,dist)
+						ImGui.TextColored(ImVec4(1,1,0,1), tmpStatus)
+					end
+					-- tmpStatus = tmpStatus:sub(1, tmpStatus:find("Distance") - 1)
+					-- tmpStatus = string.format("%s Distance: %s",status,dist)
+					-- ImGui.TextColored(ImVec4(1,1,0,1), tmpStatus)
 				end
 				ImGui.Separator()
 
@@ -712,6 +775,36 @@ local function Draw_GUI()
 			ImGui.End()
 	end
 
+	if showDebugGUI then
+		local ColorCount, StyleCount = LoadTheme.StartTheme(theme.Theme[themeID])
+		ImGui.Text("Debug Messages")
+		ImGui.Separator()
+		if ImGui.BeginTable('DebugTable', 5, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), ImVec2(0.0, 0.0)) then
+			ImGui.TableSetupColumn('Time##', ImGuiTableColumnFlags.WidthFixed, 100)
+			ImGui.TableSetupColumn('Zone##', ImGuiTableColumnFlags.WidthFixed, 100)
+			ImGui.TableSetupColumn('Path##', ImGuiTableColumnFlags.WidthFixed, 100)
+			ImGui.TableSetupColumn('WP##', ImGuiTableColumnFlags.WidthFixed, 100)
+			ImGui.TableSetupColumn('Status##', ImGuiTableColumnFlags.WidthFixed, 100)
+			ImGui.TableSetupScrollFreeze(0, 1)
+			ImGui.TableHeadersRow()
+			for i = 1, #debugMessages do
+				ImGui.TableNextRow()
+				ImGui.TableSetColumnIndex(0)
+				ImGui.Text(debugMessages[i].Time)
+				ImGui.TableSetColumnIndex(1)
+				ImGui.Text(debugMessages[i].Zone)
+				ImGui.TableSetColumnIndex(2)
+				ImGui.Text(debugMessages[i].Path)
+				ImGui.TableSetColumnIndex(3)
+				ImGui.Text(debugMessages[i].WP)
+				ImGui.TableSetColumnIndex(4)
+				ImGui.Text(debugMessages[i].Status)
+			end
+			LoadTheme.EndTheme(ColorCount, StyleCount)
+			ImGui.EndTable()
+		end
+
+	end
 end
 
 -------- Main Functions --------
@@ -745,6 +838,8 @@ local function bind(...)
 			mq.cmdf("/squelch /nav stop")
 		elseif key == 'help' then
 			displayHelp()
+		elseif key == 'debug' then
+			DEBUG = not DEBUG
 		elseif key == 'show' then
 			showMainGUI = not showMainGUI
 		elseif key == 'quit' or key == 'exit' then
@@ -835,11 +930,10 @@ local function Init()
 	displayHelp()
 end
 
-local zoningHideGUI = false
 local function Loop()
 	-- Create the coroutine for NavigatePath
 	local co = coroutine.create(NavigatePath)
-
+	local zoningHideGUI = false
 	-- Main Loop
 	while RUNNING do
 		while mq.TLO.Me.Zoning() do
@@ -855,11 +949,6 @@ local function Loop()
 			zoningHideGUI = false
 			status = 'Idle'
 			currentStep = 1
-		end
-
-		if autoRecord then
-			status = string.format("Recording Path: %s RecordDlay: %s", selectedPath, recordDelay)
-			AutoRecordPath(selectedPath)
 		end
 
 		-- Make sure we are still in game or exit the script.
@@ -885,12 +974,28 @@ local function Loop()
 			status = 'Idle'
 		end
 
+		if autoRecord then
+			status = string.format("Recording Path: %s RecordDlay: %s", selectedPath, recordDelay)
+			AutoRecordPath(selectedPath)
+		end
+
 		if deleteWP then
 			RemoveWaypoint(selectedPath, deleteWPStep)
+			status = 'Deleting Waypoint # '..deleteWPStep
 			deleteWPStep = 0
 			deleteWP = false
 		end
 
+		if DEBUG then
+			if lastStatus ~= status then
+				status = status:gsub("Distance:", "Dist:")
+				table.insert(debugMessages, {Time = os.date("%H:%M:%S"), WP = currentStep, Status = status, Path = selectedPath, Zone = mq.TLO.Zone.ShortName()})
+				lastStatus = status
+			end
+			while #debugMessages > 50 do
+				table.remove(debugMessages, 1)
+			end
+		end
 		-- Process ImGui Window Flag Changes
 		winFlags = locked and bit32.bor(ImGuiWindowFlags.NoMove, ImGuiWindowFlags.MenuBar) or bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.MenuBar)
 		winFlags = aSize and bit32.bor(winFlags, ImGuiWindowFlags.AlwaysAutoResize, ImGuiWindowFlags.MenuBar) or winFlags
