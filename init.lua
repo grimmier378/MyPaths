@@ -29,10 +29,11 @@ local curTime = os.time()
 local lastTime = curTime
 local autoRecord, doNav, doSingle, doLoop, doReverse, doPingPong = false, false, false, false, false, false
 local recordDelay, stopDist, wpPause = 5, 30, 1
-local currentStep = 1
+local currentStepIndex = 1
 local deleteWP, deleteWPStep = false, 0
 local status, lastStatus = 'Idle', ''
 local wpLoc = ''
+local currZone, lastZone = '', ''
 
 -- GUI Settings
 local winFlags = bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.MenuBar)
@@ -190,10 +191,13 @@ local function RecordWaypoint(name)
 	if tmp[index] ~= nil then
 		if tmp[index].loc == loc then return end
 		table.insert(tmp, {step = index + 1, loc = loc})
+		index = index + 1
 	else
 		table.insert(tmp, {step = 1, loc = loc})
+		index = 1
 	end
 	Paths[zone][name] = tmp
+	if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = zone, Path = name, WP = "Add WP#"..index, Status = 'Waypoint #'..index..' Added Successfully!'}) end
 	SavePaths()
 end
 
@@ -220,6 +224,7 @@ local function ClearWaypoints(name)
 	if not Paths[zone] then return end
 	if not Paths[zone][name] then return end
 	Paths[zone][name] = {}
+	if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = zone, Path = name, WP = 'All Waypoints', Status = 'All Waypoints Cleared Successfully!'}) end
 	SavePaths()
 end
 
@@ -228,6 +233,7 @@ local function DeletePath(name)
 	if not Paths[zone] then return end
 	if not Paths[zone][name] then return end
 	Paths[zone][name] = nil
+	if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = zone, Path = name, WP = 'Path Deleted', Status = 'Path ['..name..'] Deleted Successfully!'}) end
 	SavePaths()
 end
 
@@ -235,6 +241,7 @@ local function CreatePath(name)
 	local zone = mq.TLO.Zone.ShortName()
 	if not Paths[zone] then Paths[zone] = {} end
 	if not Paths[zone][name] then Paths[zone][name] = {} end
+	if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = zone, Path = name, WP = 'Path Created', Status = 'Path ['..name..'] Created Successfully!'}) end
 	SavePaths()
 end
 
@@ -273,7 +280,7 @@ end
 
 --------- Navigation Functions --------
 
-local function FindClosestWaypoint(table)
+local function FindIndexClosestWaypoint(table)
 	local tmp = table
 	local closest = 999999
 	local closestLoc = 1
@@ -310,8 +317,8 @@ local function NavigatePath(name)
 	end
 	local zone = mq.TLO.Zone.ShortName()
 	local startNum = 1
-	if currentStep ~= 1 then
-		startNum = currentStep
+	if currentStepIndex ~= 1 then
+		startNum = currentStepIndex
 	end
 	if doSingle then doNav = true end
 	while doNav do
@@ -322,8 +329,8 @@ local function NavigatePath(name)
 			return
 		end
 		for i = startNum , #tmp do
-			if doSingle then i = currentStep end
-			currentStep = i
+			if doSingle then i = currentStepIndex end
+			currentStepIndex = i
 			if not doNav then
 				return
 			end
@@ -333,20 +340,25 @@ local function NavigatePath(name)
 			local tmpDist = mq.TLO.Math.Distance(tmpLoc)() or 0
 			mq.cmdf("/squelch /nav locyxz %s | distance %s", tmpLoc, stopDist)
 			status = "Nav to WP #: "..tmp[i].step.." Distance: "..string.format("%.2f",tmpDist)
-			
 			mq.delay(10)
-			coroutine.yield()  -- Yield here to allow updates
+			-- mq.delay(3000, function () return mq.TLO.Me.Speed() > 0 end)
+			-- coroutine.yield()  -- Yield here to allow updates
 			while mq.TLO.Math.Distance(tmpLoc)() > stopDist do
 				if not doNav then
 					return
 				end
 
-				if CheckInterrupts() then
-					mq.cmdf("/squelch /nav stop")
-					status = "Paused Interrupt detected."
-					mq.delay(100)
-					coroutine.yield()  -- Yield here to allow updates
-					while (mq.TLO.Window('LootWnd').Open() or mq.TLO.Window('AdvancedLootWnd').Open()) do
+				local function processDelay()
+					-- coroutine.yield()  -- Yield here to allow updates
+					while mq.TLO.Window('LootWnd').Open() do
+						status = 'Paused for Looting.'
+						if not doNav then
+							return
+						end
+						mq.delay(100)
+						coroutine.yield()  -- Yield here to allow updates
+					end
+					while mq.TLO.Window('AdvancedLootWnd').Open() do
 						status = 'Paused for Looting.'
 						if not doNav then
 							return
@@ -362,7 +374,7 @@ local function NavigatePath(name)
 						mq.delay(100)
 						coroutine.yield()  -- Yield here to allow updates
 					end
-					while mq.TLO.Me.Sitting() do
+					while mq.TLO.Me.Sitting() == true do
 						status = string.format('Paused for Sitting. HP %s MP %s', mq.TLO.Me.PctHPs(), mq.TLO.Me.PctMana())
 						if not doNav then
 							return
@@ -402,7 +414,7 @@ local function NavigatePath(name)
 						mq.delay(100)
 						coroutine.yield()  -- Yield here to allow updates
 					end
-					while ScanXtar() do
+					if ScanXtar() then
 						status = string.format('Paused for XTarget. XTarg Count %s', mq.TLO.Me.XTarget())
 						if not doNav then
 							return
@@ -410,16 +422,33 @@ local function NavigatePath(name)
 						mq.delay(100)
 						coroutine.yield()  -- Yield here to allow updates
 					end
+				end
+
+
+				if CheckInterrupts() then
+					-- mq.cmdf("/squelch /nav stop")
+					status = "Paused Interrupt detected."
+					mq.delay(10)
+
+					while CheckInterrupts() do
+						processDelay()
+					end
+
 					mq.delay(500)
 					mq.cmdf("/squelch /nav locyxz %s | distance %s", tmpLoc, stopDist)
 					tmpLoc = string.format("%s:%s", tmp[i].loc, mq.TLO.Me.LocYXZ())
 					tmpLoc = tmpLoc:gsub(",", " ")
 					tmpDist = mq.TLO.Math.Distance(tmpLoc)() or 0
 					status = "Nav to WP #: "..tmp[i].step.." Distance: "..string.format("%.2f",tmpDist)
-				else
-					if mq.TLO.Me.Speed() == 0 then
+					coroutine.yield()
+				end
+				if mq.TLO.Me.Speed() == 0 then
+					mq.delay(1000)
+					coroutine.yield()
+					if CheckInterrupts() then processDelay()
+					elseif mq.TLO.Me.Speed() == 0 then
 						status = "Paused because we have Stopped!"
-						mq.delay(5000,  function () return mq.TLO.Me.Speed() > 0 end)
+						mq.delay(100,  function () return mq.TLO.Me.Speed() > 0 end)
 						mq.cmdf("/squelch /nav locyxz %s | distance %s", tmpLoc, stopDist)
 						tmpLoc = string.format("%s:%s", tmp[i].loc, mq.TLO.Me.LocYXZ())
 						tmpLoc = tmpLoc:gsub(",", " ")
@@ -428,11 +457,13 @@ local function NavigatePath(name)
 						coroutine.yield()
 					end
 				end
-				tmpLoc = string.format("%s:%s", tmp[i].loc, mq.TLO.Me.LocYXZ())
-				tmpLoc = tmpLoc:gsub(",", " ")
 				mq.delay(1)
-				coroutine.yield()  -- Yield here to allow updates
+				tmpLoc = string.format("%s:%s", wpLoc, mq.TLO.Me.LocYXZ())
+				tmpLoc = tmpLoc:gsub(",", " ")
+				-- coroutine.yield()  -- Yield here to allow updates
 			end
+			coroutine.yield()
+			mq.cmdf("/squelch /nav stop")
 			status = "Arrived at WP #: "..tmp[i].step
 			if doSingle then
 				doNav = false
@@ -444,7 +475,7 @@ local function NavigatePath(name)
 				status = string.format("Paused %s seconds at WP #: %s", wpPause, tmp[i].step)
 				local pauseTime = wpPause * 1000
 				mq.delay(pauseTime)
-				coroutine.yield()  -- Yield here to allow updates
+				-- coroutine.yield()  -- Yield here to allow updates
 			end
 
 		end
@@ -454,7 +485,7 @@ local function NavigatePath(name)
 			status = 'Idle'
 			break
 		else
-			currentStep = 1
+			currentStepIndex = 1
 			startNum = 1
 			if doPingPong then
 				doReverse = not doReverse
@@ -469,6 +500,7 @@ local function Draw_GUI()
 
 	-- Main Window
 	if showMainGUI then
+		if mq.TLO.Me.Zoning() then return end
 		local zone = mq.TLO.Zone.ShortName()
 		-- Set Window Name
 		local winName = string.format('%s##Main_%s', script, meName)
@@ -537,7 +569,10 @@ local function Draw_GUI()
 
 			ImGui.Text("Current Zone: %s", zone)
 			if ImGui.CollapsingHeader("Paths##") then
-				
+				if currZone ~= lastZone then
+					selectedPath = 'None'
+					lastZone = currZone
+				end
 				ImGui.SetNextItemWidth(150)
 				if ImGui.BeginCombo("##SelectPath", selectedPath) then
 					if not Paths[zone] then Paths[zone] = {} end
@@ -569,8 +604,8 @@ local function Draw_GUI()
 			end
 
 			local tmpTable = sortPathsTable(zone, selectedPath) or {}
-			local closestWaypoint = FindClosestWaypoint(tmpTable)
-
+			local closestWaypointIndex = FindIndexClosestWaypoint(tmpTable)
+			
 			if selectedPath ~= 'None' then
 				if ImGui.CollapsingHeader("Waypoints##") then
 						
@@ -588,7 +623,14 @@ local function Draw_GUI()
 					else
 						ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1.0, 0.4, 0.4))
 					end
-					if ImGui.Button(label) then	autoRecord = not autoRecord end
+					if ImGui.Button(label) then
+						autoRecord = not autoRecord
+						if autoRecord then 
+							if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = mq.TLO.Zone.ShortName(), Path = selectedPath, WP = 'Start Recording', Status = 'Start Recording Waypoints!'}) end
+						else
+							if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = mq.TLO.Zone.ShortName(), Path = selectedPath, WP = 'Stop Recording', Status = 'Stop Recording Waypoints!'}) end
+						end
+					end
 					ImGui.PopStyleColor()
 				end
 
@@ -605,11 +647,6 @@ local function Draw_GUI()
 					end
 					ImGui.Separator()
 					if not Paths[zone] then Paths[zone] = {} end
-					-- if not Paths[zone][selectedPath] then Paths[zone][selectedPath] = {} end
-
-					ImGui.Text("Current Waypoint: %s", tmpTable[currentStep].step)
-					ImGui.SameLine()
-					ImGui.Text("Closest Waypoint: %s", tmpTable[closestWaypoint].step)
 
 					local tmpLabel = doNav and 'Stop Navigation' or 'Start Navigation'
 					if doNav then
@@ -626,10 +663,11 @@ local function Draw_GUI()
 					ImGui.PopStyleColor()
 					ImGui.SameLine()
 					if ImGui.Button("Start at Closest") then
-						currentStep = closestWaypoint
+						currentStepIndex = closestWaypointIndex
 						doNav = true
 					end
 				end
+				ImGui.Separator()
 				ImGui.Text("Status: ")
 				ImGui.SameLine()
 				if status:find("Idle") then
@@ -639,12 +677,12 @@ local function Draw_GUI()
 				elseif status:find("Arrived") then
 					ImGui.TextColored(ImVec4(0, 1, 0, 1), status)
 				elseif status:find("Nav to WP") then
-					local tmpDist = mq.TLO.Math.Distance(string.format("%s:%s", wpLoc, mq.TLO.Me.LocYXZ()))() or 0
+					local tmpDist = mq.TLO.Math.Distance(string.format("%s:%s", wpLoc:gsub(",", " "), mq.TLO.Me.LocYXZ()))() or 0
 					local dist = string.format("%.2f",tmpDist)
 					local tmpStatus = status
 					if tmpStatus:find("Distance") then
-						tmpStatus = tmpStatus:sub(1, tmpStatus:find("Distance") - 1)
-						tmpStatus = string.format("%s Distance: %s",status,dist)
+						tmpStatus = tmpStatus:sub(1, tmpStatus:find("Distance:") - 1)
+						tmpStatus = string.format("%s Distance: %s",tmpStatus,dist)
 						ImGui.TextColored(ImVec4(1,1,0,1), tmpStatus)
 					end
 					-- tmpStatus = tmpStatus:sub(1, tmpStatus:find("Distance") - 1)
@@ -655,18 +693,18 @@ local function Draw_GUI()
 
 				-- Waypoint Table
 				if ImGui.BeginTable('PathTable', 3, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), ImVec2(ImGui.GetContentRegionAvail() - 5, 0.0)) then
-					ImGui.TableSetupColumn('#', ImGuiTableColumnFlags.None, 30)
+					ImGui.TableSetupColumn('WP#', ImGuiTableColumnFlags.None, 30)
 					ImGui.TableSetupColumn('Loc', ImGuiTableColumnFlags.None, 106)
 					ImGui.TableSetupColumn('Actions', ImGuiTableColumnFlags.None, 60)
 					ImGui.TableSetupScrollFreeze(0, 1)
 					ImGui.TableHeadersRow()
 					
 					for i = 1, #tmpTable do
-						
+
 						ImGui.TableNextRow()
 						ImGui.TableSetColumnIndex(0)
 						ImGui.Text("%s",tmpTable[i].step)
-						if i == closestWaypoint then
+						if i == closestWaypointIndex then
 							ImGui.SameLine()
 							
 							ImGui.TextColored(ImVec4(1,1,0,1),Icon.MD_STAR)
@@ -675,14 +713,14 @@ local function Draw_GUI()
 						ImGui.Text(tmpTable[i].loc)
 						if ImGui.BeginPopupContextItem("WP_"..tmpTable[i].step) then
 							if ImGui.MenuItem('Nav to WP'..tmpTable[i].step) then
-								currentStep = tmpTable[i].step
+								currentStepIndex = i
 								doNav = true
 								doSingle = true
 							end
 							ImGui.EndPopup()
 						end
 						ImGui.TableSetColumnIndex(2)
-						
+
 						if ImGui.Button(Icon.FA_TRASH.."##_"..i) then
 							deleteWP = true
 							deleteWPStep = tmpTable[i].step
@@ -691,13 +729,10 @@ local function Draw_GUI()
 					end
 					ImGui.EndTable()
 				end
-			
 			end
+		end
 			-- Reset Font Scale
 			ImGui.SetWindowFontScale(1)
-
-		end
-
 		-- Unload Theme
 		LoadTheme.EndTheme(ColorCount, StyleCount)
 		ImGui.End()
@@ -705,6 +740,7 @@ local function Draw_GUI()
 
 	-- Config Window
 	if showConfigGUI then
+		if mq.TLO.Me.Zoning() then return end
 			local winName = string.format('%s Config##Config_%s',script, meName)
 			local ColCntConf, StyCntConf = LoadTheme.StartTheme(theme.Theme[themeID])
 			local openConfig, showConfig = ImGui.Begin(winName,true,bit32.bor(ImGuiWindowFlags.NoCollapse, ImGuiWindowFlags.AlwaysAutoResize))
@@ -776,34 +812,41 @@ local function Draw_GUI()
 	end
 
 	if showDebugGUI then
+		if mq.TLO.Me.Zoning() then return end
 		local ColorCount, StyleCount = LoadTheme.StartTheme(theme.Theme[themeID])
-		ImGui.Text("Debug Messages")
-		ImGui.Separator()
-		if ImGui.BeginTable('DebugTable', 5, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), ImVec2(0.0, 0.0)) then
-			ImGui.TableSetupColumn('Time##', ImGuiTableColumnFlags.WidthFixed, 100)
-			ImGui.TableSetupColumn('Zone##', ImGuiTableColumnFlags.WidthFixed, 100)
-			ImGui.TableSetupColumn('Path##', ImGuiTableColumnFlags.WidthFixed, 100)
-			ImGui.TableSetupColumn('WP##', ImGuiTableColumnFlags.WidthFixed, 100)
-			ImGui.TableSetupColumn('Status##', ImGuiTableColumnFlags.WidthFixed, 100)
-			ImGui.TableSetupScrollFreeze(0, 1)
-			ImGui.TableHeadersRow()
-			for i = 1, #debugMessages do
-				ImGui.TableNextRow()
-				ImGui.TableSetColumnIndex(0)
-				ImGui.Text(debugMessages[i].Time)
-				ImGui.TableSetColumnIndex(1)
-				ImGui.Text(debugMessages[i].Zone)
-				ImGui.TableSetColumnIndex(2)
-				ImGui.Text(debugMessages[i].Path)
-				ImGui.TableSetColumnIndex(3)
-				ImGui.Text(debugMessages[i].WP)
-				ImGui.TableSetColumnIndex(4)
-				ImGui.Text(debugMessages[i].Status)
-			end
-			LoadTheme.EndTheme(ColorCount, StyleCount)
-			ImGui.EndTable()
+		local openDebug, showDebug = ImGui.Begin("Debug Messages", true, bit32.bor(ImGuiWindowFlags.NoCollapse, ImGuiWindowFlags.NoFocusOnAppearing))
+		if not openDebug then
+			showDebugGUI = false
 		end
-
+		if showDebug then
+			ImGui.Text("Debug Messages")
+			ImGui.Separator()
+			if ImGui.BeginTable('DebugTable', 5, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), ImVec2(0.0, 0.0)) then
+				ImGui.TableSetupColumn('Time##', ImGuiTableColumnFlags.WidthFixed, 100)
+				ImGui.TableSetupColumn('Zone##', ImGuiTableColumnFlags.WidthFixed, 100)
+				ImGui.TableSetupColumn('Path##', ImGuiTableColumnFlags.WidthFixed, 100)
+				ImGui.TableSetupColumn('Action / Step##', ImGuiTableColumnFlags.WidthFixed, 100)
+				ImGui.TableSetupColumn('Status##', ImGuiTableColumnFlags.WidthFixed, 100)
+				ImGui.TableSetupScrollFreeze(0, 1)
+				ImGui.TableHeadersRow()
+				for i = 1, #debugMessages do
+					ImGui.TableNextRow()
+					ImGui.TableSetColumnIndex(0)
+					ImGui.Text(debugMessages[i].Time)
+					ImGui.TableSetColumnIndex(1)
+					ImGui.Text(debugMessages[i].Zone)
+					ImGui.TableSetColumnIndex(2)
+					ImGui.Text(debugMessages[i].Path)
+					ImGui.TableSetColumnIndex(3)
+					ImGui.Text(debugMessages[i].WP)
+					ImGui.TableSetColumnIndex(4)
+					ImGui.Text(debugMessages[i].Status)
+				end
+				ImGui.EndTable()
+			end
+		end
+		LoadTheme.EndTheme(ColorCount, StyleCount)
+		ImGui.End()
 	end
 end
 
@@ -899,13 +942,13 @@ local function bind(...)
 				selectedPath = path
 				doNav = true
 				doReverse = false
-				currentStep = FindClosestWaypoint(Paths[zone][path])
+				currentStepIndex = FindIndexClosestWaypoint(Paths[zone][path])
 			end
 			if action == 'rclosest' then
 				selectedPath = path
 				doNav = true
 				doReverse = true
-				currentStep = FindClosestWaypoint(Paths[zone][path])
+				currentStepIndex = FindIndexClosestWaypoint(Paths[zone][path])
 			end
 		end
 	else
@@ -924,20 +967,25 @@ local function Init()
 	if File_Exists(themezDir) then
 		hasThemeZ = true
 	end
+	currZone = mq.TLO.Zone.ShortName()
 	-- Initialize ImGui
 	mq.imgui.init('MyPaths', Draw_GUI)
 
 	displayHelp()
 end
 
+local zoningHideGUI = false
+-- Create the coroutine for NavigatePath
+local co = coroutine.create(NavigatePath)
 local function Loop()
-	-- Create the coroutine for NavigatePath
-	local co = coroutine.create(NavigatePath)
-	local zoningHideGUI = false
+		
 	-- Main Loop
 	while RUNNING do
+		currZone = mq.TLO.Zone.ShortName()
 		while mq.TLO.Me.Zoning() do
+			coroutine.close(co)
 			selectedPath = 'None'
+			currentStepIndex = 1
 			doNav = false
 			zoningHideGUI = true
 			showMainGUI = false
@@ -945,10 +993,13 @@ local function Loop()
 		end
 
 		if zoningHideGUI then
+			mq.delay(1000)
 			showMainGUI = true
 			zoningHideGUI = false
 			status = 'Idle'
-			currentStep = 1
+			currentStepIndex = 1
+			selectedPath = 'None'
+			doNav = false
 		end
 
 		-- Make sure we are still in game or exit the script.
@@ -970,31 +1021,35 @@ local function Loop()
 				co = coroutine.create(NavigatePath)
 			end
 		else
-			currentStep = 1
+			currentStepIndex = 1
 			status = 'Idle'
 		end
 
 		if autoRecord then
-			status = string.format("Recording Path: %s RecordDlay: %s", selectedPath, recordDelay)
 			AutoRecordPath(selectedPath)
 		end
 
 		if deleteWP then
 			RemoveWaypoint(selectedPath, deleteWPStep)
-			status = 'Deleting Waypoint # '..deleteWPStep
+			if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = mq.TLO.Zone.ShortName(), Path = selectedPath, WP = 'Delete  #'..deleteWPStep, Status = 'Waypoint #'..deleteWPStep..' Removed Successfully!'}) end
 			deleteWPStep = 0
 			deleteWP = false
 		end
 
 		if DEBUG then
 			if lastStatus ~= status then
-				status = status:gsub("Distance:", "Dist:")
-				table.insert(debugMessages, {Time = os.date("%H:%M:%S"), WP = currentStep, Status = status, Path = selectedPath, Zone = mq.TLO.Zone.ShortName()})
+				local statTxt = status
+				if status:find("Distance") then
+					statTxt = statTxt:gsub("Distance:", "Dist:")
+				end
+				table.insert(debugMessages, {Time = os.date("%H:%M:%S"), WP = currentStepIndex, Status = statTxt, Path = selectedPath, Zone = mq.TLO.Zone.ShortName()})
 				lastStatus = status
 			end
-			while #debugMessages > 50 do
+			while #debugMessages > 100 do
 				table.remove(debugMessages, 1)
 			end
+		else
+			debugMessages = {}
 		end
 		-- Process ImGui Window Flag Changes
 		winFlags = locked and bit32.bor(ImGuiWindowFlags.NoMove, ImGuiWindowFlags.MenuBar) or bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.MenuBar)
