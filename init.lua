@@ -1053,7 +1053,7 @@ local function Init()
 
 	displayHelp()
 end
-
+local previousDoNav = false
 local zoningHideGUI = false
 -- Create the coroutine for NavigatePath
 local co = coroutine.create(NavigatePath)
@@ -1076,7 +1076,6 @@ local function Loop()
 			end
 			selectedPath = 'None'
 			currentStepIndex = 1
-			
 			zoningHideGUI = true
 			showMainGUI = false
 			mq.delay(1000)
@@ -1103,21 +1102,31 @@ local function Loop()
 		end
 
 		if doNav then
+			if previousDoNav ~= doNav then
+				-- Reset the coroutine since doNav changed from false to true
+				co = coroutine.create(NavigatePath)
+			end
+
 			-- If the coroutine is not dead, resume it
 			if coroutine.status(co) ~= "dead" then
 				local success, message = coroutine.resume(co, selectedPath)
 				if not success then
 					print("Error: " .. message)
-					break
+					-- Reset coroutine on error
+					co = coroutine.create(NavigatePath)
 				end
 			else
 				-- If the coroutine is dead, create a new one
 				co = coroutine.create(NavigatePath)
 			end
 		else
+			-- Reset state when doNav is false
 			currentStepIndex = 1
 			status = 'Idle'
 		end
+
+		-- Update previousDoNav to the current state
+		previousDoNav = doNav
 
 		if autoRecord then
 			AutoRecordPath(selectedPath)
