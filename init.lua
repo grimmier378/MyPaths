@@ -744,50 +744,51 @@ local function Draw_GUI()
 							end
 						end
 						ImGui.TableSetColumnIndex(2)
-	
-						if ImGui.Button(Icon.FA_TRASH .. "##_" .. i) then
-							deleteWP = true
-							deleteWPStep = tmpTable[i].step
-						end
-						ImGui.SameLine(0,0)
-						if i > 1 and ImGui.Button(upIcon .. "##up_" .. i) then
-							-- Swap items in tmpTable
-							local tmp = tmpTable[i]
-							tmpTable[i] = tmpTable[i - 1]
-							tmpTable[i - 1] = tmp
-				
-							-- Update step values
-							tmpTable[i].step, tmpTable[i - 1].step = tmpTable[i - 1].step, tmpTable[i].step
-	
-							-- Update Paths table
-							for k, v in pairs(Paths[currZone][selectedPath]) do
-								if v.step == tmpTable[i].step then
-									Paths[currZone][selectedPath][k] = tmpTable[i]
-								elseif v.step == tmpTable[i - 1].step then
-									Paths[currZone][selectedPath][k] = tmpTable[i - 1]
-								end
+						if not doNav then
+							if ImGui.Button(Icon.FA_TRASH .. "##_" .. i) then
+								deleteWP = true
+								deleteWPStep = tmpTable[i].step
 							end
-							SavePaths()
-						end
-						ImGui.SameLine(0,0)
-						if i < #tmpTable and ImGui.Button(downIcon .. "##down_" .. i) then
-							-- Swap items in tmpTable
-							local tmp = tmpTable[i]
-							tmpTable[i] = tmpTable[i + 1]
-							tmpTable[i + 1] = tmp
-				
-							-- Update step values
-							tmpTable[i].step, tmpTable[i + 1].step = tmpTable[i + 1].step, tmpTable[i].step
-	
-							-- Update Paths table
-							for k, v in pairs(Paths[currZone][selectedPath]) do
-								if v.step == tmpTable[i].step then
-									Paths[currZone][selectedPath][k] = tmpTable[i]
-								elseif v.step == tmpTable[i + 1].step then
-									Paths[currZone][selectedPath][k] = tmpTable[i + 1]
+							ImGui.SameLine(0,0)
+							if i > 1 and ImGui.Button(upIcon .. "##up_" .. i) then
+								-- Swap items in tmpTable
+								local tmp = tmpTable[i]
+								tmpTable[i] = tmpTable[i - 1]
+								tmpTable[i - 1] = tmp
+					
+								-- Update step values
+								tmpTable[i].step, tmpTable[i - 1].step = tmpTable[i - 1].step, tmpTable[i].step
+		
+								-- Update Paths table
+								for k, v in pairs(Paths[currZone][selectedPath]) do
+									if v.step == tmpTable[i].step then
+										Paths[currZone][selectedPath][k] = tmpTable[i]
+									elseif v.step == tmpTable[i - 1].step then
+										Paths[currZone][selectedPath][k] = tmpTable[i - 1]
+									end
 								end
+								SavePaths()
 							end
-							SavePaths()
+							ImGui.SameLine(0,0)
+							if i < #tmpTable and ImGui.Button(downIcon .. "##down_" .. i) then
+								-- Swap items in tmpTable
+								local tmp = tmpTable[i]
+								tmpTable[i] = tmpTable[i + 1]
+								tmpTable[i + 1] = tmp
+					
+								-- Update step values
+								tmpTable[i].step, tmpTable[i + 1].step = tmpTable[i + 1].step, tmpTable[i].step
+		
+								-- Update Paths table
+								for k, v in pairs(Paths[currZone][selectedPath]) do
+									if v.step == tmpTable[i].step then
+										Paths[currZone][selectedPath][k] = tmpTable[i]
+									elseif v.step == tmpTable[i + 1].step then
+										Paths[currZone][selectedPath][k] = tmpTable[i + 1]
+									end
+								end
+								SavePaths()
+							end
 						end
 					end
 					ImGui.EndTable()
