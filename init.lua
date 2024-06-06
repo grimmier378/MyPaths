@@ -676,8 +676,14 @@ local function Draw_GUI()
 						doNav = true
 					end
 				end
+				local curWPTxt = 1
+				if tmpTable[currentStepIndex] ~= nil then
+					curWPTxt = tmpTable[currentStepIndex].step or 0
+				end
+				if doNav then ImGui.Text("Current Destination Waypoint: %s", curWPTxt) end
 				ImGui.Separator()
 				ImGui.Text("Status: ")
+				
 				ImGui.SameLine()
 				if status:find("Idle") then
 					ImGui.TextColored(ImVec4(0, 1, 1, 1), status)
