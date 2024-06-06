@@ -34,6 +34,7 @@ local deleteWP, deleteWPStep = false, 0
 local status, lastStatus = 'Idle', ''
 local wpLoc = ''
 local currZone, lastZone = '', ''
+local lastHP, lastMP = 0, 0
 
 -- GUI Settings
 local winFlags = bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.MenuBar)
@@ -311,6 +312,7 @@ local function sortPathsTable(zone, path)
 	return tmp
 end
 
+
 local function NavigatePath(name)
 	if not doNav then
 		return
@@ -375,7 +377,12 @@ local function NavigatePath(name)
 						coroutine.yield()  -- Yield here to allow updates
 					end
 					while mq.TLO.Me.Sitting() == true do
-						status = string.format('Paused for Sitting. HP %s MP %s', mq.TLO.Me.PctHPs(), mq.TLO.Me.PctMana())
+						local curHP, curMP = mq.TLO.Me.PctHPs(), mq.TLO.Me.PctMana()
+						if curHP - lastHP > 10 or curMP - lastMP > 10 then
+							lastHP, lastMP = curHP, curMP
+							status = string.format('Paused for Sitting. HP %s MP %s', curHP, curMP)
+						end
+						-- status = string.format('Paused for Sitting. HP %s MP %s', curHP, curMP)
 						if not doNav then
 							return
 						end
@@ -442,6 +449,7 @@ local function NavigatePath(name)
 					status = "Nav to WP #: "..tmp[i].step.." Distance: "..string.format("%.2f",tmpDist)
 					coroutine.yield()
 				end
+
 				if mq.TLO.Me.Speed() == 0 then
 					mq.delay(1000)
 					coroutine.yield()
@@ -462,13 +470,14 @@ local function NavigatePath(name)
 				tmpLoc = tmpLoc:gsub(",", " ")
 				-- coroutine.yield()  -- Yield here to allow updates
 			end
+
 			coroutine.yield()
 			mq.cmdf("/squelch /nav stop")
 			status = "Arrived at WP #: "..tmp[i].step
 			if doSingle then
 				doNav = false
 				doSingle = false
-				status = 'Idle'
+				status = 'Idle - Arrived at Destination!'
 				return
 			end
 			if wpPause > 0 then
@@ -477,12 +486,11 @@ local function NavigatePath(name)
 				mq.delay(pauseTime)
 				-- coroutine.yield()  -- Yield here to allow updates
 			end
-
 		end
 		-- Check if we need to loop
 		if not doLoop then
 			doNav = false
-			status = 'Idle'
+			status = 'Idle - Arrived at Destination!'
 			break
 		else
 			currentStepIndex = 1
@@ -698,34 +706,84 @@ local function Draw_GUI()
 					ImGui.TableSetupColumn('Actions', ImGuiTableColumnFlags.None, 60)
 					ImGui.TableSetupScrollFreeze(0, 1)
 					ImGui.TableHeadersRow()
-					
+		
 					for i = 1, #tmpTable do
-
 						ImGui.TableNextRow()
 						ImGui.TableSetColumnIndex(0)
-						ImGui.Text("%s",tmpTable[i].step)
+						ImGui.Text("%s", tmpTable[i].step)
 						if i == closestWaypointIndex then
 							ImGui.SameLine()
-							
-							ImGui.TextColored(ImVec4(1,1,0,1),Icon.MD_STAR)
+							ImGui.TextColored(ImVec4(1, 1, 0, 1), Icon.MD_STAR)
 						end
 						ImGui.TableSetColumnIndex(1)
 						ImGui.Text(tmpTable[i].loc)
-						if ImGui.BeginPopupContextItem("WP_"..tmpTable[i].step) then
-							if ImGui.MenuItem('Nav to WP'..tmpTable[i].step) then
+						if ImGui.BeginPopupContextItem("WP_" .. tmpTable[i].step) then
+							if ImGui.MenuItem('Nav to WP ' .. tmpTable[i].step) then
 								currentStepIndex = i
 								doNav = true
+								doLoop = false
 								doSingle = true
+							end
+							if ImGui.MenuItem('Start Path Here: WP ' .. tmpTable[i].step) then
+								currentStepIndex = i
+								doNav = true
+								doLoop = false
+								doSingle = false
+							end
+							if ImGui.MenuItem('Start Loop Here: WP ' .. tmpTable[i].step) then
+								currentStepIndex = i
+								doNav = true
+								doLoop = true
+								doSingle = false
 							end
 							ImGui.EndPopup()
 						end
 						ImGui.TableSetColumnIndex(2)
-
-						if ImGui.Button(Icon.FA_TRASH.."##_"..i) then
+	
+						if ImGui.Button(Icon.FA_TRASH .. "##_" .. i) then
 							deleteWP = true
 							deleteWPStep = tmpTable[i].step
 						end
-
+						ImGui.SameLine()
+						if i > 1 and ImGui.Button(upIcon .. "##up_" .. i) then
+							-- Swap items in tmpTable
+							local tmp = tmpTable[i]
+							tmpTable[i] = tmpTable[i - 1]
+							tmpTable[i - 1] = tmp
+				
+							-- Update step values
+							tmpTable[i].step, tmpTable[i - 1].step = tmpTable[i - 1].step, tmpTable[i].step
+	
+							-- Update Paths table
+							for k, v in pairs(Paths[currZone][selectedPath]) do
+								if v.step == tmpTable[i].step then
+									Paths[currZone][selectedPath][k] = tmpTable[i]
+								elseif v.step == tmpTable[i - 1].step then
+									Paths[currZone][selectedPath][k] = tmpTable[i - 1]
+								end
+							end
+							SavePaths()
+						end
+						ImGui.SameLine()
+						if i < #tmpTable and ImGui.Button(downIcon .. "##down_" .. i) then
+							-- Swap items in tmpTable
+							local tmp = tmpTable[i]
+							tmpTable[i] = tmpTable[i + 1]
+							tmpTable[i + 1] = tmp
+				
+							-- Update step values
+							tmpTable[i].step, tmpTable[i + 1].step = tmpTable[i + 1].step, tmpTable[i].step
+	
+							-- Update Paths table
+							for k, v in pairs(Paths[currZone][selectedPath]) do
+								if v.step == tmpTable[i].step then
+									Paths[currZone][selectedPath][k] = tmpTable[i]
+								elseif v.step == tmpTable[i + 1].step then
+									Paths[currZone][selectedPath][k] = tmpTable[i + 1]
+								end
+							end
+							SavePaths()
+						end
 					end
 					ImGui.EndTable()
 				end
@@ -789,7 +847,7 @@ local function Draw_GUI()
 				-- Set RecordDley
 				recordDelay = ImGui.SliderInt("Record Delay##"..script, recordDelay, 1, 10)
 				-- Set Stop Distance
-				stopDist = ImGui.SliderInt("Stop Distance##"..script, stopDist, 10, 100)
+				stopDist = ImGui.SliderInt("Stop Distance##"..script, stopDist, 0, 100)
 				-- Set Waypoint Pause time
 				wpPause = ImGui.SliderInt("Waypoint Pause##"..script, wpPause, 0, 60)
 
@@ -1000,6 +1058,10 @@ local function Loop()
 			currentStepIndex = 1
 			selectedPath = 'None'
 			doNav = false
+		end
+
+		if not mq.TLO.Me.Sitting() then 
+			lastHP, lastMP = 0,0
 		end
 
 		-- Make sure we are still in game or exit the script.
