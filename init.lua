@@ -717,26 +717,31 @@ local function Draw_GUI()
 						end
 						ImGui.TableSetColumnIndex(1)
 						ImGui.Text(tmpTable[i].loc)
-						if ImGui.BeginPopupContextItem("WP_" .. tmpTable[i].step) then
-							if ImGui.MenuItem('Nav to WP ' .. tmpTable[i].step) then
-								currentStepIndex = i
-								doNav = true
-								doLoop = false
-								doSingle = true
+						if not doNav then
+							if ImGui.BeginPopupContextItem("WP_" .. tmpTable[i].step) then
+								
+								if ImGui.MenuItem('Nav to WP ' .. tmpTable[i].step) then
+									currentStepIndex = i
+									doNav = true
+									doLoop = false
+									doSingle = true
+								end
+								
+								if ImGui.MenuItem('Start Path Here: WP ' .. tmpTable[i].step) then
+									currentStepIndex = i
+									doNav = true
+									doLoop = false
+									doSingle = false
+								end
+								if ImGui.MenuItem('Start Loop Here: WP ' .. tmpTable[i].step) then
+									currentStepIndex = i
+									doNav = true
+									doLoop = true
+									doSingle = false
+								end
+							
+								ImGui.EndPopup()
 							end
-							if ImGui.MenuItem('Start Path Here: WP ' .. tmpTable[i].step) then
-								currentStepIndex = i
-								doNav = true
-								doLoop = false
-								doSingle = false
-							end
-							if ImGui.MenuItem('Start Loop Here: WP ' .. tmpTable[i].step) then
-								currentStepIndex = i
-								doNav = true
-								doLoop = true
-								doSingle = false
-							end
-							ImGui.EndPopup()
 						end
 						ImGui.TableSetColumnIndex(2)
 	
@@ -877,7 +882,9 @@ local function Draw_GUI()
 			showDebugGUI = false
 		end
 		if showDebug then
-			ImGui.Text("Debug Messages")
+			if ImGui.Button('Clear Debug Messages') then
+				debugMessages = {}
+			end
 			ImGui.Separator()
 			if ImGui.BeginTable('DebugTable', 5, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), ImVec2(0.0, 0.0)) then
 				ImGui.TableSetupColumn('Time##', ImGuiTableColumnFlags.WidthFixed, 100)
