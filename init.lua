@@ -509,7 +509,7 @@ local function Draw_GUI()
 	-- Main Window
 	if showMainGUI then
 		if mq.TLO.Me.Zoning() then return end
-		local zone = mq.TLO.Zone.ShortName()
+		-- local currZone = mq.TLO.Zone.ShortName()
 		-- Set Window Name
 		local winName = string.format('%s##Main_%s', script, meName)
 		-- Load Theme
@@ -575,16 +575,17 @@ local function Draw_GUI()
 
 			-- Main Window Content	
 
-			ImGui.Text("Current Zone: %s", zone)
+			ImGui.Text("Current Zone: %s", currZone)
 			if ImGui.CollapsingHeader("Paths##") then
 				if currZone ~= lastZone then
 					selectedPath = 'None'
+					doNav = false
 					lastZone = currZone
 				end
 				ImGui.SetNextItemWidth(150)
 				if ImGui.BeginCombo("##SelectPath", selectedPath) then
-					if not Paths[zone] then Paths[zone] = {} end
-					for name, data in pairs(Paths[zone]) do
+					if not Paths[currZone] then Paths[currZone] = {} end
+					for name, data in pairs(Paths[currZone]) do
 						local isSelected = name == selectedPath
 						if ImGui.Selectable(name, isSelected) then
 							selectedPath = name
@@ -611,7 +612,7 @@ local function Draw_GUI()
 				end
 			end
 
-			local tmpTable = sortPathsTable(zone, selectedPath) or {}
+			local tmpTable = sortPathsTable(currZone, selectedPath) or {}
 			local closestWaypointIndex = FindIndexClosestWaypoint(tmpTable)
 			
 			if selectedPath ~= 'None' then
@@ -654,7 +655,7 @@ local function Draw_GUI()
 						doLoop = true
 					end
 					ImGui.Separator()
-					if not Paths[zone] then Paths[zone] = {} end
+					if not Paths[currZone] then Paths[currZone] = {} end
 
 					local tmpLabel = doNav and 'Stop Navigation' or 'Start Navigation'
 					if doNav then
@@ -1022,7 +1023,20 @@ local function bind(...)
 	end
 end
 
+local args = {...}
+local function processArgs()
+	if #args == 0 then
+		displayHelp()
+		return
+	end
+	if args[1] == 'debug' then
+		DEBUG = not DEBUG
+		return
+	end
+end
+
 local function Init()
+	processArgs()
 	-- Load Settings
 	loadSettings()
 	loadPaths()
@@ -1048,11 +1062,21 @@ local function Loop()
 	-- Main Loop
 	while RUNNING do
 		currZone = mq.TLO.Zone.ShortName()
-		while mq.TLO.Me.Zoning() do
-			coroutine.close(co)
+		while mq.TLO.Me.Zoning() == true do
+			doNav = false
+			if coroutine.status(co) ~= "dead" then
+				local success, message = coroutine.resume(co, selectedPath)
+				if not success then
+					print("Error: " .. message)
+					break
+				end
+			else
+				-- If the coroutine is dead, create a new one
+				co = coroutine.create(NavigatePath)
+			end
 			selectedPath = 'None'
 			currentStepIndex = 1
-			doNav = false
+			
 			zoningHideGUI = true
 			showMainGUI = false
 			mq.delay(1000)
