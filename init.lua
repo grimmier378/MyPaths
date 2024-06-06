@@ -744,7 +744,7 @@ local function Draw_GUI()
 							deleteWP = true
 							deleteWPStep = tmpTable[i].step
 						end
-						ImGui.SameLine()
+						ImGui.SameLine(0,0)
 						if i > 1 and ImGui.Button(upIcon .. "##up_" .. i) then
 							-- Swap items in tmpTable
 							local tmp = tmpTable[i]
@@ -764,7 +764,7 @@ local function Draw_GUI()
 							end
 							SavePaths()
 						end
-						ImGui.SameLine()
+						ImGui.SameLine(0,0)
 						if i < #tmpTable and ImGui.Button(downIcon .. "##down_" .. i) then
 							-- Swap items in tmpTable
 							local tmp = tmpTable[i]
