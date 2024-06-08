@@ -1,8 +1,9 @@
 --[[
-	Title: Generic Script Template
+	Title: My Paths
 	Author: Grimmier
 	Includes: 
-	Description: Generic Script Template with ThemeZ Suppport
+	Description: This script is a simple pathing script that allows you to record and navigate paths in the game. 
+				You can create, save, and edit paths in a zone and load them for navigation.
 ]]
 
 -- Load Libraries
