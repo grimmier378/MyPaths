@@ -1078,6 +1078,12 @@ local function Draw_GUI()
 			showHUD = false
 		end
 		if showHUDWin then
+			if ImGui.IsWindowHovered() then
+				if ImGui.IsMouseDoubleClicked(0) then
+					showMainGUI = not showMainGUI
+				end
+				ImGui.SetTooltip("Double Click to Toggle Main GUI")
+			end
 			ImGui.Text("Current Zone: ")
 			ImGui.SameLine()
 			ImGui.TextColored(0,1,0,1,"%s", currZone)
