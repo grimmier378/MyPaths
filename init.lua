@@ -1088,22 +1088,14 @@ local function Draw_GUI()
 			ImGui.Text("Current Loc: ")
 			ImGui.SameLine()
 			ImGui.TextColored(1,1,0,1,"%s", mq.TLO.Me.LocYXZ())
-			ImGui.Text("Status: ")
-			ImGui.SameLine()
-			if status:find("Idle") then
-				ImGui.TextColored(ImVec4(0, 1, 1, 1), status)
-			elseif status:find("Paused") then
-				ImGui.TextColored(ImVec4(0.9, 0.4, 0.4, 1), status)
-			elseif status:find("Arrived") then
-				ImGui.TextColored(ImVec4(0, 1, 0, 1), status)
-			end
 			if doNav then
-				ImGui.Text("Current Destination Waypoint: ")
+				ImGui.Text("Distance to Waypoint: ")
 				ImGui.SameLine()
 	
 				local tmpTable = sortPathsTable(currZone, selectedPath) or {}
 				ImGui.TextColored(0,1,1,1,"%.2f", mq.TLO.Math.Distance(string.format("%s:%s", tmpTable[currentStepIndex].loc:gsub(",", " "), mq.TLO.Me.LocYXZ()))())
 			end
+
 			ImGui.Text("Nav Type: ")
 			ImGui.SameLine()
 			if not doNav then
@@ -1127,6 +1119,19 @@ local function Draw_GUI()
 				else
 					ImGui.TextColored(ImVec4(0, 1, 0, 1), "No")
 				end
+			end
+			if status:find("Idle") then
+				ImGui.Text("Status: ")
+				ImGui.SameLine()
+				ImGui.TextColored(ImVec4(0, 1, 1, 1), status)
+			elseif status:find("Paused") then
+				ImGui.Text("Status: ")
+				ImGui.SameLine()
+				ImGui.TextColored(ImVec4(0.9, 0.4, 0.4, 1), status)
+			elseif status:find("Arrived") then
+				ImGui.Text("Status: ")
+				ImGui.SameLine()
+				ImGui.TextColored(ImVec4(0, 1, 0, 1), status)
 			end
 		end
 		ImGui.PopStyleColor()
