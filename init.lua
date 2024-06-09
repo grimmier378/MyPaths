@@ -788,8 +788,12 @@ local function Draw_GUI()
 						ImGui.SetNextItemWidth(90)
 						tmpTable[i].delay, changed = ImGui.InputInt("##delay_" .. i, tmpTable[i].delay, 1, 1)
 						if changed then
-							Paths[currZone][selectedPath][i].delay = tmpTable[i].delay
-							SavePaths()
+							for k, v in pairs(Paths[currZone][selectedPath]) do
+								if v.step == tmpTable[i].step then
+									Paths[currZone][selectedPath][k].delay = tmpTable[i].delay
+									SavePaths()
+								end
+							end
 						end
 
 						ImGui.TableSetColumnIndex(3)
