@@ -100,7 +100,18 @@ local function loadPaths()
 		Paths = require('paths') -- your local paths file incase the user doesn't have one in config folder
 		mq.pickle(pathsFile, Paths)
 	end
-
+	local needsUpdate = false
+	for zone, data in pairs(Paths) do
+		for path, wp in pairs(data) do
+			for i, wData in pairs(wp) do
+				if wData.delay == nil then
+					wData.delay = 0
+					needsUpdate = true
+				end
+			end
+		end
+	end
+	if needsUpdate then mq.pickle(pathsFile, Paths) end
 end
 
 local function SavePaths()
@@ -192,10 +203,10 @@ local function RecordWaypoint(name)
 	local index = #tmp or 1
 	if tmp[index] ~= nil then
 		if tmp[index].loc == loc then return end
-		table.insert(tmp, {step = index + 1, loc = loc})
+		table.insert(tmp, {step = index + 1, loc = loc, delay = 0})
 		index = index + 1
 	else
-		table.insert(tmp, {step = 1, loc = loc})
+		table.insert(tmp, {step = 1, loc = loc, delay = 0})
 		index = 1
 	end
 	Paths[zone][name] = tmp
@@ -487,6 +498,12 @@ local function NavigatePath(name)
 				mq.delay(pauseTime)
 				-- coroutine.yield()  -- Yield here to allow updates
 			end
+			if tmp[i].delay > 0 then
+				status = string.format("Paused %s seconds at WP #: %s", tmp[i].delay, tmp[i].step)
+				local pauseTime = tmp[i].delay * 1000
+				mq.delay(pauseTime)
+				-- coroutine.yield()  -- Yield here to allow updates
+			end
 		end
 		-- Check if we need to loop
 		if not doLoop then
@@ -708,9 +725,10 @@ local function Draw_GUI()
 				ImGui.Separator()
 
 				-- Waypoint Table
-				if ImGui.BeginTable('PathTable', 3, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), ImVec2(ImGui.GetContentRegionAvail() - 5, 0.0)) then
+				if ImGui.BeginTable('PathTable', 4, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), ImVec2(ImGui.GetContentRegionAvail() - 5, 0.0)) then
 					ImGui.TableSetupColumn('WP#', ImGuiTableColumnFlags.None, 30)
 					ImGui.TableSetupColumn('Loc', ImGuiTableColumnFlags.None, 106)
+					ImGui.TableSetupColumn('Delay', ImGuiTableColumnFlags.None, 60)
 					ImGui.TableSetupColumn('Actions', ImGuiTableColumnFlags.None, 60)
 					ImGui.TableSetupScrollFreeze(0, 1)
 					ImGui.TableHeadersRow()
@@ -752,6 +770,13 @@ local function Draw_GUI()
 							end
 						end
 						ImGui.TableSetColumnIndex(2)
+						tmpTable[i].delay, changed = ImGui.InputInt("##delay_" .. i, tmpTable[i].delay, 1, 1)
+						if changed then
+							Paths[currZone][selectedPath][i].delay = tmpTable[i].delay
+							SavePaths()
+						end
+
+						ImGui.TableSetColumnIndex(3)
 						if not doNav then
 							if ImGui.Button(Icon.FA_TRASH .. "##_" .. i) then
 								deleteWP = true
