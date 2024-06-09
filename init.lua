@@ -37,6 +37,9 @@ local wpLoc = ''
 local currZone, lastZone = '', ''
 local lastHP, lastMP, pauseTime = 0, 0, 0
 local pauseStart = 0
+local previousDoNav = false
+local zoningHideGUI = false
+local ZoningPause
 
 -- GUI Settings
 local winFlags = bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.MenuBar)
@@ -298,6 +301,8 @@ end
 
 --------- Navigation Functions --------
 
+
+
 local function FindIndexClosestWaypoint(table)
 	local tmp = table
 	local closest = 999999
@@ -485,7 +490,7 @@ local function NavigatePath(name)
 				mq.delay(1)
 				tmpLoc = string.format("%s:%s", wpLoc, mq.TLO.Me.LocYXZ())
 				tmpLoc = tmpLoc:gsub(",", " ")
-				-- coroutine.yield()  -- Yield here to allow updates
+				coroutine.yield()  -- Yield here to allow updates
 			end
 
 			coroutine.yield()
@@ -535,6 +540,33 @@ local function NavigatePath(name)
 	end
 end
 
+local co = coroutine.create(NavigatePath)
+
+function ZoningPause()
+	status = 'Zoning'
+	table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = 'Zoning', Path = "Zoning", WP = 'Zoning', Status = 'Zoning'})
+	mq.delay(1)
+	while mq.TLO.Me.Zoning() == true do
+		doNav = false
+		if coroutine.status(co) ~= "dead" then
+			local success, message = coroutine.close(co)
+			if not success then
+				print("Error: " .. message)
+				break
+			end
+		else
+			-- If the coroutine is dead, create a new one
+			co = coroutine.create(NavigatePath)
+		end
+		selectedPath = 'None'
+		currentStepIndex = 1
+		pauseStart = 0
+		pauseTime = 0
+		zoningHideGUI = true
+		showMainGUI = false
+		mq.delay(1000)
+	end
+end
 -------- GUI Functions --------
 local tmpCmd = ''
 local function Draw_GUI()
@@ -682,6 +714,8 @@ local function Draw_GUI()
 						end
 					end
 					ImGui.PopStyleColor()
+					ImGui.SetNextItemWidth(100)
+					recordDelay = ImGui.InputInt("Auto Record Delay##"..script, recordDelay, 1, 10)
 				end
 
 				-- Navigation Controls
@@ -716,6 +750,10 @@ local function Draw_GUI()
 						currentStepIndex = closestWaypointIndex
 						doNav = true
 					end
+					ImGui.SetNextItemWidth(100)
+					stopDist = ImGui.InputInt("Stop Distance##"..script, stopDist, 1, 50)
+					ImGui.SetNextItemWidth(100)
+					wpPause = ImGui.InputInt("Global Pause##"..script, wpPause, 1,5 )
 				end
 				local curWPTxt = 1
 				if tmpTable[currentStepIndex] ~= nil then
@@ -805,7 +843,7 @@ local function Draw_GUI()
 							end
 						end
 						ImGui.TableSetColumnIndex(3)
-						ImGui.SetNextItemWidth(90)
+						ImGui.SetNextItemWidth(-1)
 						tmpTable[i].cmd, changedCmd = ImGui.InputText("##cmd_" .. i, tmpTable[i].cmd)
 						if changedCmd then
 							for k, v in pairs(Paths[currZone][selectedPath]) do
@@ -923,11 +961,11 @@ local function Draw_GUI()
 				end
 
 				-- Set RecordDley
-				recordDelay = ImGui.SliderInt("Record Delay##"..script, recordDelay, 1, 10)
+				recordDelay = ImGui.InputInt("Record Delay##"..script, recordDelay, 1, 5)
 				-- Set Stop Distance
-				stopDist = ImGui.SliderInt("Stop Distance##"..script, stopDist, 0, 100)
+				stopDist = ImGui.InputInt("Stop Distance##"..script, stopDist, 1, 50)
 				-- Set Waypoint Pause time
-				wpPause = ImGui.SliderInt("Waypoint Pause##"..script, wpPause, 0, 60)
+				wpPause = ImGui.InputInt("Waypoint Pause##"..script, wpPause, 1, 5)
 
 				-- Save & Close Button --
 				if ImGui.Button("Save & Close") then
@@ -1124,42 +1162,26 @@ local function Init()
 
 	displayHelp()
 end
-local previousDoNav = false
-local zoningHideGUI = false
--- Create the coroutine for NavigatePath
-local co = coroutine.create(NavigatePath)
+
 local function Loop()
-		
+	-- Create the coroutine for NavigatePath
+	
 	-- Main Loop
 	while RUNNING do
 		currZone = mq.TLO.Zone.ShortName()
-		while mq.TLO.Me.Zoning() == true do
-			doNav = false
-			if coroutine.status(co) ~= "dead" then
-				local success, message = coroutine.resume(co, selectedPath)
-				if not success then
-					print("Error: " .. message)
-					break
-				end
-			else
-				-- If the coroutine is dead, create a new one
-				co = coroutine.create(NavigatePath)
-			end
-			selectedPath = 'None'
-			currentStepIndex = 1
-			zoningHideGUI = true
-			showMainGUI = false
-			mq.delay(1000)
+		if mq.TLO.Me.Zoning() == true then
+			ZoningPause()
 		end
-
 		if zoningHideGUI then
-			mq.delay(1000)
+			mq.delay(100)
 			showMainGUI = true
 			zoningHideGUI = false
-			status = 'Idle'
 			currentStepIndex = 1
 			selectedPath = 'None'
 			doNav = false
+			table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = mq.TLO.Zone.ShortName(), Path = selectedPath, WP = 1, Status = 'Finished Zoning'})
+			mq.delay(1)
+			status = 'Idle'
 		end
 
 		if not mq.TLO.Me.Sitting() then 
