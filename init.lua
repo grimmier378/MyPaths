@@ -492,15 +492,15 @@ local function NavigatePath(name)
 				status = 'Idle - Arrived at Destination!'
 				return
 			end
-			if wpPause > 0 then
-				status = string.format("Paused %s seconds at WP #: %s", wpPause, tmp[i].step)
-				local pauseTime = wpPause * 1000
-				mq.delay(pauseTime)
-				-- coroutine.yield()  -- Yield here to allow updates
-			end
+
 			if tmp[i].delay > 0 then
 				status = string.format("Paused %s seconds at WP #: %s", tmp[i].delay, tmp[i].step)
 				local pauseTime = tmp[i].delay * 1000
+				mq.delay(pauseTime)
+				-- coroutine.yield()  -- Yield here to allow updates
+			elseif wpPause > 0 then
+				status = string.format("Global Paused %s seconds at WP #: %s", wpPause, tmp[i].step)
+				local pauseTime = wpPause * 1000
 				mq.delay(pauseTime)
 				-- coroutine.yield()  -- Yield here to allow updates
 			end
