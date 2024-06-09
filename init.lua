@@ -109,6 +109,10 @@ local function loadPaths()
 					wData.delay = 0
 					needsUpdate = true
 				end
+				if wData.cmd == nil then
+					wData.cmd = ''
+					needsUpdate = true
+				end
 			end
 		end
 	end
@@ -204,10 +208,10 @@ local function RecordWaypoint(name)
 	local index = #tmp or 1
 	if tmp[index] ~= nil then
 		if tmp[index].loc == loc then return end
-		table.insert(tmp, {step = index + 1, loc = loc, delay = 0})
+		table.insert(tmp, {step = index + 1, loc = loc, delay = 0, cmd = ''})
 		index = index + 1
 	else
-		table.insert(tmp, {step = 1, loc = loc, delay = 0})
+		table.insert(tmp, {step = 1, loc = loc, delay = 0, cmd = ''})
 		index = 1
 	end
 	Paths[zone][name] = tmp
@@ -493,7 +497,12 @@ local function NavigatePath(name)
 				status = 'Idle - Arrived at Destination!'
 				return
 			end
-
+			-- Check for Commands to execute at Waypoint
+			if tmp[i].cmd ~= '' then
+				mq.cmdf(tmp[i].cmd)
+				mq.delay(10)
+			end
+			-- Check for Delay at Waypoint
 			if tmp[i].delay > 0 then
 				status = string.format("Paused %s seconds at WP #: %s", tmp[i].delay, tmp[i].step)
 				pauseTime = tmp[i].delay
@@ -505,7 +514,6 @@ local function NavigatePath(name)
 				pauseTime = wpPause
 				pauseStart = os.time()
 				coroutine.yield()
-				
 				-- coroutine.yield()  -- Yield here to allow updates
 			else
 				pauseTime = 0
@@ -528,7 +536,7 @@ local function NavigatePath(name)
 end
 
 -------- GUI Functions --------
-
+local tmpCmd = ''
 local function Draw_GUI()
 
 	-- Main Window
@@ -740,11 +748,12 @@ local function Draw_GUI()
 				ImGui.Separator()
 
 				-- Waypoint Table
-				if ImGui.BeginTable('PathTable', 4, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), -1, -1) then
+				if ImGui.BeginTable('PathTable', 5, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), -1, -1) then
 					ImGui.TableSetupColumn('WP#', ImGuiTableColumnFlags.None, -1)
 					ImGui.TableSetupColumn('Loc', ImGuiTableColumnFlags.None, -1)
 					ImGui.TableSetupColumn('Delay', ImGuiTableColumnFlags.None, -1)
 					ImGui.TableSetupColumn('Actions', ImGuiTableColumnFlags.None, -1)
+					ImGui.TableSetupColumn('Move', ImGuiTableColumnFlags.None, -1)
 					ImGui.TableSetupScrollFreeze(0, 1)
 					ImGui.TableHeadersRow()
 		
@@ -795,8 +804,18 @@ local function Draw_GUI()
 								end
 							end
 						end
-
 						ImGui.TableSetColumnIndex(3)
+						ImGui.SetNextItemWidth(90)
+						tmpTable[i].cmd, changedCmd = ImGui.InputText("##cmd_" .. i, tmpTable[i].cmd)
+						if changedCmd then
+							for k, v in pairs(Paths[currZone][selectedPath]) do
+								if v.step == tmpTable[i].step then
+									Paths[currZone][selectedPath][k].cmd = tmpTable[i].cmd
+									SavePaths()
+								end
+							end
+						end
+						ImGui.TableSetColumnIndex(4)
 						if not doNav then
 							if ImGui.Button(Icon.FA_TRASH .. "##_" .. i) then
 								deleteWP = true
