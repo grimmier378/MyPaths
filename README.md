@@ -24,6 +24,7 @@ Paths are the series of waypoints you want to string to gether. You can create, 
 * Start from Nearest waypoint. (Marked with a Star on the GUI Table)
 * Right click to start from a specific waypoint from the GUI Table. (will follow Navigation mode set)
 * Right Click Nav to a specific waypoint and stop there.
+* You can now set custom delays per waypoint. These will override the global delay if set.
 
 ## Navigation Modes
 

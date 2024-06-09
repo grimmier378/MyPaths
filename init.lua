@@ -35,7 +35,8 @@ local deleteWP, deleteWPStep = false, 0
 local status, lastStatus = 'Idle', ''
 local wpLoc = ''
 local currZone, lastZone = '', ''
-local lastHP, lastMP = 0, 0
+local lastHP, lastMP, pauseTime = 0, 0, 0
+local pauseStart = 0
 
 -- GUI Settings
 local winFlags = bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.MenuBar)
@@ -495,14 +496,20 @@ local function NavigatePath(name)
 
 			if tmp[i].delay > 0 then
 				status = string.format("Paused %s seconds at WP #: %s", tmp[i].delay, tmp[i].step)
-				local pauseTime = tmp[i].delay * 1000
-				mq.delay(pauseTime)
+				pauseTime = tmp[i].delay
+				pauseStart = os.time()
+				coroutine.yield()
 				-- coroutine.yield()  -- Yield here to allow updates
 			elseif wpPause > 0 then
 				status = string.format("Global Paused %s seconds at WP #: %s", wpPause, tmp[i].step)
-				local pauseTime = wpPause * 1000
-				mq.delay(pauseTime)
+				pauseTime = wpPause
+				pauseStart = os.time()
+				coroutine.yield()
+				
 				-- coroutine.yield()  -- Yield here to allow updates
+			else
+				pauseTime = 0
+				pauseStart = 0
 			end
 		end
 		-- Check if we need to loop
@@ -586,6 +593,14 @@ local function Draw_GUI()
 						if ImGui.IsMouseReleased(0) then
 							showDebugGUI = not showDebugGUI
 						end
+					end
+				end
+				ImGui.SameLine(ImGui.GetWindowWidth() - 30)
+				ImGui.Text(Icon.FA_WINDOW_CLOSE)
+				if ImGui.IsItemHovered() then
+					ImGui.SetTooltip("Exit\nThe Window Close button will only close the window.\nThis will exit the script completely.\nThe same as typing '/mypaths quit'.")
+					if ImGui.IsMouseReleased(0) then
+						RUNNING = false
 					end
 				end
 				ImGui.EndMenuBar()
@@ -725,11 +740,11 @@ local function Draw_GUI()
 				ImGui.Separator()
 
 				-- Waypoint Table
-				if ImGui.BeginTable('PathTable', 4, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), ImVec2(ImGui.GetContentRegionAvail() - 5, 0.0)) then
-					ImGui.TableSetupColumn('WP#', ImGuiTableColumnFlags.None, 30)
-					ImGui.TableSetupColumn('Loc', ImGuiTableColumnFlags.None, 106)
-					ImGui.TableSetupColumn('Delay', ImGuiTableColumnFlags.None, 60)
-					ImGui.TableSetupColumn('Actions', ImGuiTableColumnFlags.None, 60)
+				if ImGui.BeginTable('PathTable', 4, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), -1, -1) then
+					ImGui.TableSetupColumn('WP#', ImGuiTableColumnFlags.None, -1)
+					ImGui.TableSetupColumn('Loc', ImGuiTableColumnFlags.None, -1)
+					ImGui.TableSetupColumn('Delay', ImGuiTableColumnFlags.None, -1)
+					ImGui.TableSetupColumn('Actions', ImGuiTableColumnFlags.None, -1)
 					ImGui.TableSetupScrollFreeze(0, 1)
 					ImGui.TableHeadersRow()
 		
@@ -770,6 +785,7 @@ local function Draw_GUI()
 							end
 						end
 						ImGui.TableSetColumnIndex(2)
+						ImGui.SetNextItemWidth(90)
 						tmpTable[i].delay, changed = ImGui.InputInt("##delay_" .. i, tmpTable[i].delay, 1, 1)
 						if changed then
 							Paths[currZone][selectedPath][i].delay = tmpTable[i].delay
@@ -1134,18 +1150,37 @@ local function Loop()
 		end
 
 		if doNav then
+
 			if previousDoNav ~= doNav then
 				-- Reset the coroutine since doNav changed from false to true
 				co = coroutine.create(NavigatePath)
 			end
 
+			local curTime = os.time()
+				
 			-- If the coroutine is not dead, resume it
 			if coroutine.status(co) ~= "dead" then
-				local success, message = coroutine.resume(co, selectedPath)
-				if not success then
-					print("Error: " .. message)
-					-- Reset coroutine on error
-					co = coroutine.create(NavigatePath)
+				-- Check if we need to pause
+				if pauseStart > 0 then
+					if curTime - pauseStart >= pauseTime then
+						-- Time is up, resume the coroutine and reset the timer values
+						pauseTime = 0
+						pauseStart = 0
+						local success, message = coroutine.resume(co, selectedPath)
+						if not success then
+							print("Error: " .. message)
+							-- Reset coroutine on error
+							co = coroutine.create(NavigatePath)
+						end
+					end
+				else
+					-- Resume the coroutine we are do not need to pause
+					local success, message = coroutine.resume(co, selectedPath)
+					if not success then
+						print("Error: " .. message)
+						-- Reset coroutine on error
+						co = coroutine.create(NavigatePath)
+					end
 				end
 			else
 				-- If the coroutine is dead, create a new one
