@@ -364,7 +364,7 @@ local function NavigatePath(name)
 			local tmpDist = mq.TLO.Math.Distance(tmpLoc)() or 0
 			mq.cmdf("/squelch /nav locyxz %s | distance %s", tmpLoc, stopDist)
 			status = "Nav to WP #: "..tmp[i].step.." Distance: "..string.format("%.2f",tmpDist)
-			mq.delay(10)
+			mq.delay(1)
 			-- mq.delay(3000, function () return mq.TLO.Me.Speed() > 0 end)
 			-- coroutine.yield()  -- Yield here to allow updates
 			while mq.TLO.Math.Distance(tmpLoc)() > stopDist do
@@ -374,6 +374,9 @@ local function NavigatePath(name)
 				if currZone ~= lastZone then
 					selectedPath = 'None'
 					doNav = false
+					pauseTime = 0
+					pauseStart = 0
+
 					return
 				end
 				local function processDelay()
@@ -383,7 +386,7 @@ local function NavigatePath(name)
 						if not doNav then
 							return
 						end
-						mq.delay(100)
+						mq.delay(1)
 						coroutine.yield()  -- Yield here to allow updates
 					end
 					while mq.TLO.Window('AdvancedLootWnd').Open() do
@@ -391,7 +394,7 @@ local function NavigatePath(name)
 						if not doNav then
 							return
 						end
-						mq.delay(100)
+						mq.delay(1)
 						coroutine.yield()  -- Yield here to allow updates
 					end
 					while mq.TLO.Me.Combat() do
@@ -399,7 +402,7 @@ local function NavigatePath(name)
 						if not doNav then
 							return
 						end
-						mq.delay(100)
+						mq.delay(1)
 						coroutine.yield()  -- Yield here to allow updates
 					end
 					while mq.TLO.Me.Sitting() == true do
@@ -412,7 +415,7 @@ local function NavigatePath(name)
 						if not doNav then
 							return
 						end
-						mq.delay(100)
+						mq.delay(1)
 						coroutine.yield()  -- Yield here to allow updates
 					end
 					while mq.TLO.Me.Rooted() do
@@ -420,7 +423,7 @@ local function NavigatePath(name)
 						if not doNav then
 							return
 						end
-						mq.delay(100)
+						mq.delay(1)
 						coroutine.yield()  -- Yield here to allow updates
 					end
 					while mq.TLO.Me.Feared() do
@@ -428,7 +431,7 @@ local function NavigatePath(name)
 						if not doNav then
 							return
 						end
-						mq.delay(100)
+						mq.delay(1)
 						coroutine.yield()  -- Yield here to allow updates
 					end
 					while mq.TLO.Me.Mezzed() do
@@ -436,7 +439,7 @@ local function NavigatePath(name)
 						if not doNav then
 							return
 						end
-						mq.delay(100)
+						mq.delay(1)
 						coroutine.yield()  -- Yield here to allow updates
 					end
 					while mq.TLO.Me.Charmed() do
@@ -444,7 +447,7 @@ local function NavigatePath(name)
 						if not doNav then
 							return
 						end
-						mq.delay(100)
+						mq.delay(1)
 						coroutine.yield()  -- Yield here to allow updates
 					end
 					if ScanXtar() then
@@ -452,7 +455,7 @@ local function NavigatePath(name)
 						if not doNav then
 							return
 						end
-						mq.delay(100)
+						mq.delay(1)
 						coroutine.yield()  -- Yield here to allow updates
 					end
 				end
@@ -467,7 +470,7 @@ local function NavigatePath(name)
 						processDelay()
 					end
 
-					mq.delay(50)
+					mq.delay(1)
 					mq.cmdf("/squelch /nav locyxz %s | distance %s", tmpLoc, stopDist)
 					tmpLoc = string.format("%s:%s", tmp[i].loc, mq.TLO.Me.LocYXZ())
 					tmpLoc = tmpLoc:gsub(",", " ")
@@ -477,7 +480,7 @@ local function NavigatePath(name)
 				end
 
 				if mq.TLO.Me.Speed() == 0 then
-					mq.delay(10)
+					mq.delay(1)
 					coroutine.yield()
 					if CheckInterrupts() then processDelay()
 					elseif mq.TLO.Me.Speed() == 0 then
@@ -509,7 +512,7 @@ local function NavigatePath(name)
 			-- Check for Commands to execute at Waypoint
 			if tmp[i].cmd ~= '' then
 				mq.cmdf(tmp[i].cmd)
-				mq.delay(10)
+				mq.delay(1)
 			end
 			-- Check for Delay at Waypoint
 			if tmp[i].delay > 0 then
@@ -548,6 +551,7 @@ local co = coroutine.create(NavigatePath)
 
 function ZoningPause()
 	status = 'Zoning'
+	print("Zoning")
 	table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = 'Zoning', Path = "Zoning", WP = 'Zoning', Status = 'Zoning'})
 	mq.delay(1)
 	while mq.TLO.Me.Zoning() == true do
@@ -1171,10 +1175,22 @@ local function Loop()
 	while RUNNING do
 		currZone = mq.TLO.Zone.ShortName()
 		if mq.TLO.Me.Zoning() == true then
+			printf("\ay[\at%s\ax] \agZoning, \ayPausing Navigation...", script)
 			ZoningPause()
 		end
+		if currZone ~= lastZone then
+			selectedPath = 'None'
+			doNav = false
+			lastZone = currZone
+			currentStepIndex = 1
+			pauseTime = 0
+			status = 'Idle'
+			pauseStart = 0
+			printf("\ay[\at%s\ax] \agZone Changed Last: \at%s Current: \ay%s", script, lastZone, currZone)
+		end
 		if zoningHideGUI then
-			mq.delay(100)
+			printf("\ay[\at%s\ax] \agZoning, \ayHiding GUI...", script)
+			mq.delay(1)
 			showMainGUI = true
 			zoningHideGUI = false
 			currentStepIndex = 1
@@ -1187,6 +1203,8 @@ local function Loop()
 				selectedPath = 'None'
 				doNav = false
 				lastZone = currZone
+				pauseTime = 0
+				pauseStart = 0
 				printf("\ay[\at%s\ax] \agZone Changed Last: \at%s Current: \ay%s", script, lastZone, currZone)
 			end
 		end
@@ -1277,7 +1295,7 @@ local function Loop()
 		winFlags = locked and bit32.bor(ImGuiWindowFlags.NoMove, ImGuiWindowFlags.MenuBar) or bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.MenuBar)
 		winFlags = aSize and bit32.bor(winFlags, ImGuiWindowFlags.AlwaysAutoResize, ImGuiWindowFlags.MenuBar) or winFlags
 
-		mq.delay(10)
+		mq.delay(1)
 	end
 end
 
