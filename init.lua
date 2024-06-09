@@ -467,7 +467,7 @@ local function NavigatePath(name)
 						processDelay()
 					end
 
-					mq.delay(500)
+					mq.delay(50)
 					mq.cmdf("/squelch /nav locyxz %s | distance %s", tmpLoc, stopDist)
 					tmpLoc = string.format("%s:%s", tmp[i].loc, mq.TLO.Me.LocYXZ())
 					tmpLoc = tmpLoc:gsub(",", " ")
@@ -477,7 +477,7 @@ local function NavigatePath(name)
 				end
 
 				if mq.TLO.Me.Speed() == 0 then
-					mq.delay(1000)
+					mq.delay(10)
 					coroutine.yield()
 					if CheckInterrupts() then processDelay()
 					elseif mq.TLO.Me.Speed() == 0 then
@@ -568,7 +568,7 @@ function ZoningPause()
 		pauseTime = 0
 		zoningHideGUI = true
 		showMainGUI = false
-		mq.delay(1000)
+		mq.delay(1000, function () return mq.TLO.Me.Zoning() == false end)
 	end
 end
 -------- GUI Functions --------
@@ -1157,6 +1157,7 @@ local function Init()
 		hasThemeZ = true
 	end
 	currZone = mq.TLO.Zone.ShortName()
+	lastZone = currZone
 	-- Initialize ImGui
 	mq.imgui.init('MyPaths', Draw_GUI)
 
