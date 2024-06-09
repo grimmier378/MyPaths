@@ -371,7 +371,11 @@ local function NavigatePath(name)
 				if not doNav then
 					return
 				end
-
+				if currZone ~= lastZone then
+					selectedPath = 'None'
+					doNav = false
+					return
+				end
 				local function processDelay()
 					-- coroutine.yield()  -- Yield here to allow updates
 					while mq.TLO.Window('LootWnd').Open() do
@@ -650,11 +654,7 @@ local function Draw_GUI()
 
 			ImGui.Text("Current Zone: %s", currZone)
 			if ImGui.CollapsingHeader("Paths##") then
-				if currZone ~= lastZone then
-					selectedPath = 'None'
-					doNav = false
-					lastZone = currZone
-				end
+
 				ImGui.SetNextItemWidth(150)
 				if ImGui.BeginCombo("##SelectPath", selectedPath) then
 					if not Paths[currZone] then Paths[currZone] = {} end
@@ -1182,6 +1182,12 @@ local function Loop()
 			table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = mq.TLO.Zone.ShortName(), Path = selectedPath, WP = 1, Status = 'Finished Zoning'})
 			mq.delay(1)
 			status = 'Idle'
+			if currZone ~= lastZone then
+				selectedPath = 'None'
+				doNav = false
+				lastZone = currZone
+				printf("\ay[\at%s\ax] \agZone Changed Last: \at%s Current: \ay%s", script, lastZone, currZone)
+			end
 		end
 
 		if not mq.TLO.Me.Sitting() then 
