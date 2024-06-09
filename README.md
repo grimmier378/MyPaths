@@ -10,6 +10,8 @@ I love the idea of setting loops or circuits to run around to and hunt.  I wante
 
 Thus MyPaths was born. MyPaths allows you to record /save and load Custom Waypoint paths in a zone. 
 
+You can Toggle a HUD from the menu bar to display your status updates, and set the transparency from inside the config window.
+
 ## Paths
 
 Paths are the series of waypoints you want to string to gether. You can create, edit, and delete custom paths per zone. 

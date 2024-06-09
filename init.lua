@@ -44,9 +44,10 @@ local ZoningPause
 -- GUI Settings
 local winFlags = bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.MenuBar)
 local RUNNING, DEBUG = true, false
-local showMainGUI, showConfigGUI, showDebugGUI = true, false, false
+local showMainGUI, showConfigGUI, showDebugGUI, showHUD = true, false, false, false
 local scale = 1
 local aSize, locked, hasThemeZ = false, false, false
+local hudTransparency = 0.5
 
 -- File Paths
 local themeFile = string.format('%s/MyUI/MyThemeZ.lua', mq.configDir)
@@ -61,6 +62,7 @@ defaults = {
 	locked = false,
 	AutoSize = false,
 	RecordDlay = 5,
+	HeadsUpTransparency = 0.5,
 	StopDistance = 30,
 	PauseStops = 1,
 }
@@ -178,6 +180,11 @@ local function loadSettings()
 		newSetting = true
 	end
 
+	if settings[script].HeadsUpTransparency == nil then
+		settings[script].HeadsUpTransparency = hudTransparency
+		newSetting = true
+	end
+
 	if settings[script].StopDistance == nil then
 		settings[script].StopDistance = stopDist
 		newSetting = true
@@ -187,6 +194,7 @@ local function loadSettings()
 	loadTheme()
 
 	-- Set the settings to the variables
+	hudTransparency = settings[script].HeadsUpTransparency
 	stopDist = settings[script].StopDistance
 	wpPause = settings[script].PauseStops
 	aSize = settings[script].AutoSize
@@ -643,6 +651,14 @@ local function Draw_GUI()
 						end
 					end
 				end
+				ImGui.SameLine()
+				ImGui.Text(Icon.MD_TV)
+				if ImGui.IsItemHovered() then
+					ImGui.SetTooltip("HUD")
+					if ImGui.IsMouseReleased(0) then
+						showHUD = not showHUD
+					end
+				end
 				ImGui.SameLine(ImGui.GetWindowWidth() - 30)
 				ImGui.Text(Icon.FA_WINDOW_CLOSE)
 				if ImGui.IsItemHovered() then
@@ -656,7 +672,19 @@ local function Draw_GUI()
 
 			-- Main Window Content	
 
-			ImGui.Text("Current Zone: %s", currZone)
+			ImGui.Text("Current Zone: ")
+			ImGui.SameLine()
+			ImGui.TextColored(0,1,0,1,"%s", currZone)
+			ImGui.SameLine()
+			ImGui.Text("Selected Path: ")
+			ImGui.SameLine()
+			ImGui.TextColored(0,1,1,1,"%s", selectedPath)
+			
+			ImGui.Text("Current Loc: ")
+			ImGui.SameLine()
+			ImGui.TextColored(1,1,0,1,"%s", mq.TLO.Me.LocYXZ())
+
+
 			if ImGui.CollapsingHeader("Paths##") then
 
 				ImGui.SetNextItemWidth(150)
@@ -763,7 +791,14 @@ local function Draw_GUI()
 				if tmpTable[currentStepIndex] ~= nil then
 					curWPTxt = tmpTable[currentStepIndex].step or 0
 				end
-				if doNav then ImGui.Text("Current Destination Waypoint: %s", curWPTxt) end
+				if doNav then
+					ImGui.Text("Current Destination Waypoint: ")
+					ImGui.SameLine()
+					ImGui.TextColored(0,1,0,1,"%s", curWPTxt)
+					ImGui.Text("Distance to Waypoint: ")
+					ImGui.SameLine()
+					ImGui.TextColored(0,1,1,1,"%.2f", mq.TLO.Math.Distance(string.format("%s:%s", tmpTable[currentStepIndex].loc:gsub(",", " "), mq.TLO.Me.LocYXZ()))())
+				end
 				ImGui.Separator()
 				ImGui.Text("Status: ")
 				
@@ -964,6 +999,10 @@ local function Draw_GUI()
 					loadTheme()
 				end
 
+				ImGui.SeparatorText("MyPaths Settings##"..script)
+				-- HUD Transparency --
+				hudTransparency = ImGui.SliderFloat("HUD Transparency##"..script, hudTransparency, 0.0, 1)
+
 				-- Set RecordDley
 				recordDelay = ImGui.InputInt("Record Delay##"..script, recordDelay, 1, 5)
 				-- Set Stop Distance
@@ -974,6 +1013,7 @@ local function Draw_GUI()
 				-- Save & Close Button --
 				if ImGui.Button("Save & Close") then
 					settings = dofile(configFile)
+					settings[script].HeadsUpTransparency = hudTransparency
 					settings[script].Scale = scale
 					settings[script].LoadTheme = themeName
 					settings[script].locked = locked
@@ -1028,6 +1068,71 @@ local function Draw_GUI()
 		LoadTheme.EndTheme(ColorCount, StyleCount)
 		ImGui.End()
 	end
+
+	if showHUD then
+		if mq.TLO.Me.Zoning() then return end
+		ImGui.PushStyleColor(ImGuiCol.WindowBg, ImVec4(0.0, 0.0, 0.0, hudTransparency))
+		local openHUDWin, showHUDWin = ImGui.Begin("MyPaths HUD##HUD", true, bit32.bor(ImGuiWindowFlags.NoCollapse, ImGuiWindowFlags.AlwaysAutoResize, ImGuiWindowFlags.NoTitleBar))
+		if not openHUDWin then
+			ImGui.PopStyleColor()
+			showHUD = false
+		end
+		if showHUDWin then
+			ImGui.Text("Current Zone: ")
+			ImGui.SameLine()
+			ImGui.TextColored(0,1,0,1,"%s", currZone)
+			ImGui.SameLine()
+			ImGui.Text("Selected Path: ")
+			ImGui.SameLine()
+			ImGui.TextColored(0,1,1,1,"%s", selectedPath)
+			ImGui.Text("Current Loc: ")
+			ImGui.SameLine()
+			ImGui.TextColored(1,1,0,1,"%s", mq.TLO.Me.LocYXZ())
+			ImGui.Text("Status: ")
+			ImGui.SameLine()
+			if status:find("Idle") then
+				ImGui.TextColored(ImVec4(0, 1, 1, 1), status)
+			elseif status:find("Paused") then
+				ImGui.TextColored(ImVec4(0.9, 0.4, 0.4, 1), status)
+			elseif status:find("Arrived") then
+				ImGui.TextColored(ImVec4(0, 1, 0, 1), status)
+			end
+			if doNav then
+				ImGui.Text("Current Destination Waypoint: ")
+				ImGui.SameLine()
+	
+				local tmpTable = sortPathsTable(currZone, selectedPath) or {}
+				ImGui.TextColored(0,1,1,1,"%.2f", mq.TLO.Math.Distance(string.format("%s:%s", tmpTable[currentStepIndex].loc:gsub(",", " "), mq.TLO.Me.LocYXZ()))())
+			end
+			ImGui.Text("Nav Type: ")
+			ImGui.SameLine()
+			if not doNav then
+				ImGui.TextColored(ImVec4(0, 1, 0, 1), "Idle")
+			else
+				
+				if doPingPong then
+					ImGui.TextColored(ImVec4(0, 1, 0, 1), "Ping Pong")
+				elseif doLoop then
+					ImGui.TextColored(ImVec4(0, 1, 0, 1), "Loop")
+				elseif doSingle then
+					ImGui.TextColored(ImVec4(0, 1, 0, 1), "Single")
+				else 
+					ImGui.TextColored(ImVec4(0, 1, 0, 1), "Normal")
+				end
+				ImGui.SameLine()
+				ImGui.Text("Reverse: ")
+				ImGui.SameLine()
+				if doReverse then
+					ImGui.TextColored(ImVec4(0, 1, 0, 1), "Yes")
+				else
+					ImGui.TextColored(ImVec4(0, 1, 0, 1), "No")
+				end
+			end
+		end
+		ImGui.PopStyleColor()
+		ImGui.End()
+	end
+
 end
 
 -------- Main Functions --------
