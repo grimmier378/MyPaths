@@ -30,7 +30,7 @@ local curTime = os.time()
 local lastTime = curTime
 local autoRecord, doNav, doSingle, doLoop, doReverse, doPingPong = false, false, false, false, false, false
 local recordDelay, stopDist, wpPause = 5, 30, 1
-local currentStepIndex = 1
+local currentStepIndex, loopCount = 1, 0
 local deleteWP, deleteWPStep = false, 0
 local status, lastStatus = 'Idle', ''
 local wpLoc = ''
@@ -493,6 +493,7 @@ local function NavigatePath(name)
 				doNav = false
 				doSingle = false
 				status = 'Idle - Arrived at Destination!'
+				loopCount = 0
 				return
 			end
 			-- Check for Commands to execute at Waypoint
@@ -524,8 +525,10 @@ local function NavigatePath(name)
 		if not doLoop then
 			doNav = false
 			status = 'Idle - Arrived at Destination!'
+			loopCount = 0
 			break
 		else
+			loopCount = loopCount + 1
 			currentStepIndex = 1
 			startNum = 1
 			if doPingPong then
@@ -1133,7 +1136,9 @@ local function Draw_GUI()
 				if doPingPong then
 					ImGui.TextColored(ImVec4(0, 1, 0, 1), "Ping Pong")
 				elseif doLoop then
-					ImGui.TextColored(ImVec4(0, 1, 0, 1), "Loop")
+					ImGui.TextColored(ImVec4(0, 1, 0, 1), "Loop ")
+					ImGui.SameLine()
+					ImGui.TextColored(ImVec4(0, 1, 1, 1), "(%s)", loopCount)
 				elseif doSingle then
 					ImGui.TextColored(ImVec4(0, 1, 0, 1), "Single")
 				else 
