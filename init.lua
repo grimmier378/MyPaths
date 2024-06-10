@@ -45,7 +45,7 @@ local interruptDelay = 2
 local lastRecordedWP = ''
 local recordMinDist = 25
 local reported = false
-local stopForGM = true
+local interrupts = {stopForAll = true, stopForGM = true, stopForSitting = true, stopForCombat = true, stopForXtar = true, stopForFear = true, stopForCharm = true, stopForMez = true, stopForRoot = true, stopForLoot = true}
 
 -- GUI Settings
 local winFlags = bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.MenuBar)
@@ -170,7 +170,7 @@ local function loadSettings()
 	end
 
 	if settings[script].stopForGM == nil then
-		settings[script].stopForGM = stopForGM
+		settings[script].stopForGM = interrupts.stopForGM
 		newSetting = true
 	end
 
@@ -223,7 +223,7 @@ local function loadSettings()
 	wpPause = settings[script].PauseStops
 	aSize = settings[script].AutoSize
 	recordMinDist = settings[script].RecordMinDist
-	stopForGM = settings[script].stopForGM
+	interrupts.stopForGM = settings[script].stopForGM
 	locked = settings[script].locked
 	scale = settings[script].Scale
 	themeName = settings[script].LoadTheme
@@ -335,19 +335,19 @@ local function CheckInterrupts()
 	if not doNav then return false end
 	local xCount = mq.TLO.Me.XTarget() or 0
 	local flag = false
-	if mq.TLO.Window('LootWnd').Open() then
+	if mq.TLO.Window('LootWnd').Open() and interrupts.stopForLoot then
 		if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
 		status = 'Paused for Looting.'
 		flag = true
-	elseif mq.TLO.Window('AdvancedLootWnd').Open() then
+	elseif mq.TLO.Window('AdvancedLootWnd').Open() and interrupts.stopForLoot then
 		if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
 		status = 'Paused for Looting.'
 		flag = true
-	elseif mq.TLO.Me.Combat() then
+	elseif mq.TLO.Me.Combat() and interrupts.stopForCombat then
 		if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
 		status = 'Paused for Combat.'
 		flag = true
-	elseif xCount > 0 then
+	elseif xCount > 0 and interrupts.stopForXtar then
 		for i = 1, mq.TLO.Me.XTargetSlots() do
 			if mq.TLO.Me.XTarget(i) ~= nil then
 				if (mq.TLO.Me.XTarget(i).ID() ~= 0 and mq.TLO.Me.XTarget(i).Type() ~= 'PC' and mq.TLO.Me.XTarget(i).Master.Type() ~= "PC") then
@@ -357,7 +357,7 @@ local function CheckInterrupts()
 				end
 			end
 		end
-	elseif mq.TLO.Me.Sitting() == true then
+	elseif mq.TLO.Me.Sitting() == true and interrupts.stopForSitting then
 		if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
 		mq.delay(30)
 		local curHP, curMP = mq.TLO.Me.PctHPs(), mq.TLO.Me.PctMana() or 0
@@ -366,19 +366,19 @@ local function CheckInterrupts()
 			status = string.format('Paused for Sitting. HP %s MP %s', curHP, curMP)
 		end
 		flag = true
-	elseif mq.TLO.Me.Rooted() then
+	elseif mq.TLO.Me.Rooted() and interrupts.stopForRoot then
 		if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
 		status = 'Paused for Rooted.'
 		flag = true
-	elseif mq.TLO.Me.Feared() then
+	elseif mq.TLO.Me.Feared() and interrupts.stopForFear then
 		if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
 		status = 'Paused for Feared.'
 		flag = true
-	elseif mq.TLO.Me.Mezzed() then
+	elseif mq.TLO.Me.Mezzed() and interrupts.stopForMez then
 		if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
 		status = 'Paused for Mezzed.'
 		flag = true
-	elseif mq.TLO.Me.Charmed() then
+	elseif mq.TLO.Me.Charmed() and interrupts.stopForCharm then
 		if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
 		status = 'Paused for Charmed.'
 		flag = true
@@ -1067,12 +1067,43 @@ local function Draw_GUI()
 				-- HUD Transparency --
 				ImGui.SetNextItemWidth(100)
 				hudTransparency = ImGui.SliderFloat("HUD Transparency##"..script, hudTransparency, 0.0, 1)
+				
+				if ImGui.CollapsingHeader("Interrupt Settings##"..script) then
+				-- Set Interrupts we will stop for
+					interrupts.stopForAll = ImGui.Checkbox("Stop for All##"..script, interrupts.stopForAll)
+					if interrupts.stopForAll then
+						interrupts.stopForAggro = true
+						interrupts.stopForCharm = true
+						interrupts.stopForCombat = true
+						interrupts.stopForFear = true
+						interrupts.stopForGM = true
+						interrupts.stopForLoot = true
+						interrupts.stopForMez = true
+						interrupts.stopForRoot = true
+						interrupts.stopForSitting = true
+						interrupts.stopForXtar = true
+					end
+					interrupts.stopForCharm = ImGui.Checkbox("Stop for Charmed##"..script, interrupts.stopForCharm)
+					if not interrupts.stopForCharm then interrupts.stopForAll = false end
+					interrupts.stopForCombat = ImGui.Checkbox("Stop for Combat##"..script, interrupts.stopForCombat)
+					if not interrupts.stopForCombat then interrupts.stopForAll = false end
+					interrupts.stopForFear = ImGui.Checkbox("Stop for Follow##"..script, interrupts.stopForFear)
+					if not interrupts.stopForFear then interrupts.stopForAll = false end
+					interrupts.stopForGM = ImGui.Checkbox("Stop for GM##"..script, interrupts.stopForGM)
+					if not interrupts.stopForGM then interrupts.stopForAll = false end
+					interrupts.stopForLoot = ImGui.Checkbox("Stop for Loot##"..script, interrupts.stopForLoot)
+					if not interrupts.stopForLoot then interrupts.stopForAll = false end
+					interrupts.stopForMez = ImGui.Checkbox("Stop for Mez##"..script, interrupts.stopForMez)
+					if not interrupts.stopForMez then interrupts.stopForAll = false end
+					interrupts.stopForRoot = ImGui.Checkbox("Stop for Root##"..script, interrupts.stopForRoot)
+					if not interrupts.stopForRoot then interrupts.stopForAll = false end
+					interrupts.stopForSitting = ImGui.Checkbox("Stop for Sitting##"..script, interrupts.stopForSitting)
+					if not interrupts.stopForSitting then interrupts.stopForAll = false end
+					interrupts.stopForXtar = ImGui.Checkbox("Stop for Xtarget##"..script, interrupts.stopForXtar)
+					if not interrupts.stopForXtar then interrupts.stopForAll = false end
+				end
+				ImGui.Dummy(5,5)
 				ImGui.SeparatorText("Recording Settings##"..script)
-
-				-- GM Stop
-				ImGui.SetNextItemWidth(100)
-				stopForGM = ImGui.Checkbox("Stop for GM##"..script, stopForGM)
-
 				-- Set RecordDley
 				ImGui.SetNextItemWidth(100)
 				recordDelay = ImGui.InputInt("Record Delay##"..script, recordDelay, 1, 5)
