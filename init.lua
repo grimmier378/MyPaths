@@ -46,7 +46,7 @@ local interruptDelay = 2
 -- GUI Settings
 local winFlags = bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.MenuBar)
 local RUNNING, DEBUG = true, false
-local showMainGUI, showConfigGUI, showDebugGUI, showHUD = true, false, false, false
+local showMainGUI, showConfigGUI, showDebugTab, showHUD = true, false, false, false
 local scale = 1
 local aSize, locked, hasThemeZ = false, false, false
 local hudTransparency = 0.5
@@ -553,6 +553,12 @@ local function Draw_GUI()
 		end
 		-- Check if the window is showing
 		if showMain then
+			local tmpTable = sortPathsTable(currZone, selectedPath) or {}
+			local closestWaypointIndex = FindIndexClosestWaypoint(tmpTable)
+			local curWPTxt = 1
+			if tmpTable[currentStepIndex] ~= nil then
+				curWPTxt = tmpTable[currentStepIndex].step or 0
+			end
 			-- Set Window Font Scal
 			ImGui.SetWindowFontScale(scale)
 			if ImGui.BeginMenuBar() then
@@ -599,7 +605,7 @@ local function Draw_GUI()
 					if ImGui.IsItemHovered() then
 						ImGui.SetTooltip("Debug")
 						if ImGui.IsMouseReleased(0) then
-							showDebugGUI = not showDebugGUI
+							showDebugTab = not showDebugTab
 						end
 					end
 				end
@@ -621,9 +627,7 @@ local function Draw_GUI()
 				end
 				ImGui.EndMenuBar()
 			end
-
 			-- Main Window Content	
-
 			ImGui.Text("Current Zone: ")
 			ImGui.SameLine()
 			ImGui.TextColored(0,1,0,1,"%s", currZone)
@@ -635,266 +639,304 @@ local function Draw_GUI()
 			ImGui.Text("Current Loc: ")
 			ImGui.SameLine()
 			ImGui.TextColored(1,1,0,1,"%s", mq.TLO.Me.LocYXZ())
-
-
-			if ImGui.CollapsingHeader("Paths##") then
-
-				ImGui.SetNextItemWidth(150)
-				if ImGui.BeginCombo("##SelectPath", selectedPath) then
-					if not Paths[currZone] then Paths[currZone] = {} end
-					for name, data in pairs(Paths[currZone]) do
-						local isSelected = name == selectedPath
-						if ImGui.Selectable(name, isSelected) then
-							selectedPath = name
-						end
-					end
-					ImGui.EndCombo()
-				end
-				ImGui.SetNextItemWidth(150)
-				newPath = ImGui.InputText("##NewPathName", newPath)
+			if doNav then
+				ImGui.Text("Current Destination Waypoint: ")
 				ImGui.SameLine()
-				if ImGui.Button('Create Path') then
-					CreatePath(newPath)
-					selectedPath = newPath
-					newPath = ''
-				end
-
-				if ImGui.Button('Delete Path') then
-					DeletePath(selectedPath)
-					selectedPath = 'None'
-				end
+				ImGui.TextColored(0,1,0,1,"%s", curWPTxt)
+				ImGui.Text("Distance to Waypoint: ")
 				ImGui.SameLine()
-				if ImGui.Button('Save Paths') then
-					SavePaths()
-				end
+				ImGui.TextColored(0,1,1,1,"%.2f", mq.TLO.Math.Distance(string.format("%s:%s", tmpTable[currentStepIndex].loc:gsub(",", " "), mq.TLO.Me.LocYXZ()))())
 			end
-
-			local tmpTable = sortPathsTable(currZone, selectedPath) or {}
-			local closestWaypointIndex = FindIndexClosestWaypoint(tmpTable)
-			
-			if selectedPath ~= 'None' then
-				if ImGui.CollapsingHeader("Waypoints##") then
-						
-					if ImGui.Button('Add Waypoint') then
-						RecordWaypoint(selectedPath)
-					end
-					ImGui.SameLine()
-					if ImGui.Button('Clear Waypoints') then
-						ClearWaypoints(selectedPath)
-					end
-					ImGui.SameLine()
-					local label = autoRecord and 'Stop Recording' or 'Start Recording'
-					if autoRecord then
-						ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1.0, 0.4, 0.4, 0.4))
-					else
-						ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1.0, 0.4, 0.4))
-					end
-					if ImGui.Button(label) then
-						autoRecord = not autoRecord
-						if autoRecord then 
-							if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = mq.TLO.Zone.ShortName(), Path = selectedPath, WP = 'Start Recording', Status = 'Start Recording Waypoints!'}) end
-						else
-							if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = mq.TLO.Zone.ShortName(), Path = selectedPath, WP = 'Stop Recording', Status = 'Stop Recording Waypoints!'}) end
-						end
-					end
-					ImGui.PopStyleColor()
-					ImGui.SetNextItemWidth(100)
-					recordDelay = ImGui.InputInt("Auto Record Delay##"..script, recordDelay, 1, 10)
-				end
-
-				-- Navigation Controls
-
-				if ImGui.CollapsingHeader("Navigation##") then
-					if not doNav then doReverse = ImGui.Checkbox('Reverse Order', doReverse) ImGui.SameLine() end
-					
-					doLoop = ImGui.Checkbox('Loop Path', doLoop)
-					ImGui.SameLine()
-					doPingPong = ImGui.Checkbox('Ping Pong', doPingPong)
-					if doPingPong then
-						doLoop = true
-					end
-					ImGui.Separator()
-					if not Paths[currZone] then Paths[currZone] = {} end
-
-					local tmpLabel = doNav and 'Stop Navigation' or 'Start Navigation'
-					if doNav then
-						ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1.0, 0.4, 0.4, 0.4))
-					else
-						ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1.0, 0.4, 0.4))
-					end
-					if ImGui.Button(tmpLabel) then
-						doNav = not doNav
-						if not doNav then
-							mq.cmdf("/squelch /nav stop")
-						end
-					end
-					ImGui.PopStyleColor()
-					ImGui.SameLine()
-					if ImGui.Button("Start at Closest") then
-						currentStepIndex = closestWaypointIndex
-						doNav = true
-					end
-					ImGui.SetNextItemWidth(100)
-					stopDist = ImGui.InputInt("Stop Distance##"..script, stopDist, 1, 50)
-					ImGui.SetNextItemWidth(100)
-					wpPause = ImGui.InputInt("Global Pause##"..script, wpPause, 1,5 )
-				end
-				local curWPTxt = 1
-				if tmpTable[currentStepIndex] ~= nil then
-					curWPTxt = tmpTable[currentStepIndex].step or 0
-				end
-				if doNav then
-					ImGui.Text("Current Destination Waypoint: ")
-					ImGui.SameLine()
-					ImGui.TextColored(0,1,0,1,"%s", curWPTxt)
-					ImGui.Text("Distance to Waypoint: ")
-					ImGui.SameLine()
-					ImGui.TextColored(0,1,1,1,"%.2f", mq.TLO.Math.Distance(string.format("%s:%s", tmpTable[currentStepIndex].loc:gsub(",", " "), mq.TLO.Me.LocYXZ()))())
-				end
-				ImGui.Separator()
-				ImGui.Text("Status: ")
+			ImGui.Separator()
+			ImGui.Text("Status: ")
 				
-				ImGui.SameLine()
-				if status:find("Idle") then
-					ImGui.TextColored(ImVec4(0, 1, 1, 1), status)
-				elseif status:find("Paused") then
-					ImGui.TextColored(ImVec4(0.9, 0.4, 0.4, 1), status)
-				elseif status:find("Arrived") then
-					ImGui.TextColored(ImVec4(0, 1, 0, 1), status)
-				elseif status:find("Nav to WP") then
-					local tmpDist = mq.TLO.Math.Distance(string.format("%s:%s", wpLoc:gsub(",", " "), mq.TLO.Me.LocYXZ()))() or 0
-					local dist = string.format("%.2f",tmpDist)
-					local tmpStatus = status
-					if tmpStatus:find("Distance") then
-						tmpStatus = tmpStatus:sub(1, tmpStatus:find("Distance:") - 1)
-						tmpStatus = string.format("%s Distance: %s",tmpStatus,dist)
-						ImGui.TextColored(ImVec4(1,1,0,1), tmpStatus)
-					end
-					-- tmpStatus = tmpStatus:sub(1, tmpStatus:find("Distance") - 1)
-					-- tmpStatus = string.format("%s Distance: %s",status,dist)
-					-- ImGui.TextColored(ImVec4(1,1,0,1), tmpStatus)
+			ImGui.SameLine()
+			if status:find("Idle") then
+				ImGui.TextColored(ImVec4(0, 1, 1, 1), status)
+			elseif status:find("Paused") then
+				ImGui.TextColored(ImVec4(0.9, 0.4, 0.4, 1), status)
+			elseif status:find("Arrived") then
+				ImGui.TextColored(ImVec4(0, 1, 0, 1), status)
+			elseif status:find("Nav to WP") then
+				local tmpDist = mq.TLO.Math.Distance(string.format("%s:%s", wpLoc:gsub(",", " "), mq.TLO.Me.LocYXZ()))() or 0
+				local dist = string.format("%.2f",tmpDist)
+				local tmpStatus = status
+				if tmpStatus:find("Distance") then
+					tmpStatus = tmpStatus:sub(1, tmpStatus:find("Distance:") - 1)
+					tmpStatus = string.format("%s Distance: %s",tmpStatus,dist)
+					ImGui.TextColored(ImVec4(1,1,0,1), tmpStatus)
 				end
-				ImGui.Separator()
-				if ImGui.CollapsingHeader("Waypoint Table##Header") then
-					-- Waypoint Table
-					if ImGui.BeginTable('PathTable', 5, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), -1, -1) then
-						ImGui.TableSetupColumn('WP#', ImGuiTableColumnFlags.None, -1)
-						ImGui.TableSetupColumn('Loc', ImGuiTableColumnFlags.None, -1)
-						ImGui.TableSetupColumn('Delay', ImGuiTableColumnFlags.None, -1)
-						ImGui.TableSetupColumn('Actions', ImGuiTableColumnFlags.None, -1)
-						ImGui.TableSetupColumn('Move', ImGuiTableColumnFlags.None, -1)
-						ImGui.TableSetupScrollFreeze(0, 1)
-						ImGui.TableHeadersRow()
-			
-						for i = 1, #tmpTable do
-							ImGui.TableNextRow()
-							ImGui.TableSetColumnIndex(0)
-							ImGui.Text("%s", tmpTable[i].step)
-							if i == closestWaypointIndex then
-								ImGui.SameLine()
-								ImGui.TextColored(ImVec4(1, 1, 0, 1), Icon.MD_STAR)
-							end
-							ImGui.TableSetColumnIndex(1)
-							ImGui.Text(tmpTable[i].loc)
-							if not doNav then
-								if ImGui.BeginPopupContextItem("WP_" .. tmpTable[i].step) then
-									
-									if ImGui.MenuItem('Nav to WP ' .. tmpTable[i].step) then
-										currentStepIndex = i
-										doNav = true
-										doLoop = false
-										doSingle = true
-									end
-									
-									if ImGui.MenuItem('Start Path Here: WP ' .. tmpTable[i].step) then
-										currentStepIndex = i
-										doNav = true
-										doLoop = false
-										doSingle = false
-									end
-									if ImGui.MenuItem('Start Loop Here: WP ' .. tmpTable[i].step) then
-										currentStepIndex = i
-										doNav = true
-										doLoop = true
-										doSingle = false
-									end
-								
-									ImGui.EndPopup()
+				-- tmpStatus = tmpStatus:sub(1, tmpStatus:find("Distance") - 1)
+				-- tmpStatus = string.format("%s Distance: %s",status,dist)
+				-- ImGui.TextColored(ImVec4(1,1,0,1), tmpStatus)
+			end
+			ImGui.Separator()
+			if ImGui.BeginTabBar('MainTabBar') then
+				if ImGui.BeginTabItem('Controls') then
+					if ImGui.CollapsingHeader("Paths##") then
+
+						ImGui.SetNextItemWidth(150)
+						if ImGui.BeginCombo("##SelectPath", selectedPath) then
+							if not Paths[currZone] then Paths[currZone] = {} end
+							for name, data in pairs(Paths[currZone]) do
+								local isSelected = name == selectedPath
+								if ImGui.Selectable(name, isSelected) then
+									selectedPath = name
 								end
 							end
-							ImGui.TableSetColumnIndex(2)
-							ImGui.SetNextItemWidth(90)
-							tmpTable[i].delay, changed = ImGui.InputInt("##delay_" .. i, tmpTable[i].delay, 1, 1)
-							if changed then
-								for k, v in pairs(Paths[currZone][selectedPath]) do
-									if v.step == tmpTable[i].step then
-										Paths[currZone][selectedPath][k].delay = tmpTable[i].delay
-										SavePaths()
-									end
-								end
-							end
-							ImGui.TableSetColumnIndex(3)
-							ImGui.SetNextItemWidth(-1)
-							tmpTable[i].cmd, changedCmd = ImGui.InputText("##cmd_" .. i, tmpTable[i].cmd)
-							if changedCmd then
-								for k, v in pairs(Paths[currZone][selectedPath]) do
-									if v.step == tmpTable[i].step then
-										Paths[currZone][selectedPath][k].cmd = tmpTable[i].cmd
-										SavePaths()
-									end
-								end
-							end
-							ImGui.TableSetColumnIndex(4)
-							if not doNav then
-								if ImGui.Button(Icon.FA_TRASH .. "##_" .. i) then
-									deleteWP = true
-									deleteWPStep = tmpTable[i].step
-								end
-								ImGui.SameLine(0,0)
-								if i > 1 and ImGui.Button(upIcon .. "##up_" .. i) then
-									-- Swap items in tmpTable
-									local tmp = tmpTable[i]
-									tmpTable[i] = tmpTable[i - 1]
-									tmpTable[i - 1] = tmp
-						
-									-- Update step values
-									tmpTable[i].step, tmpTable[i - 1].step = tmpTable[i - 1].step, tmpTable[i].step
-			
-									-- Update Paths table
-									for k, v in pairs(Paths[currZone][selectedPath]) do
-										if v.step == tmpTable[i].step then
-											Paths[currZone][selectedPath][k] = tmpTable[i]
-										elseif v.step == tmpTable[i - 1].step then
-											Paths[currZone][selectedPath][k] = tmpTable[i - 1]
-										end
-									end
-									SavePaths()
-								end
-								ImGui.SameLine(0,0)
-								if i < #tmpTable and ImGui.Button(downIcon .. "##down_" .. i) then
-									-- Swap items in tmpTable
-									local tmp = tmpTable[i]
-									tmpTable[i] = tmpTable[i + 1]
-									tmpTable[i + 1] = tmp
-						
-									-- Update step values
-									tmpTable[i].step, tmpTable[i + 1].step = tmpTable[i + 1].step, tmpTable[i].step
-			
-									-- Update Paths table
-									for k, v in pairs(Paths[currZone][selectedPath]) do
-										if v.step == tmpTable[i].step then
-											Paths[currZone][selectedPath][k] = tmpTable[i]
-										elseif v.step == tmpTable[i + 1].step then
-											Paths[currZone][selectedPath][k] = tmpTable[i + 1]
-										end
-									end
-									SavePaths()
-								end
-							end
+							ImGui.EndCombo()
 						end
-						ImGui.EndTable()
+						ImGui.SetNextItemWidth(150)
+						newPath = ImGui.InputText("##NewPathName", newPath)
+						ImGui.SameLine()
+						if ImGui.Button('Create Path') then
+							CreatePath(newPath)
+							selectedPath = newPath
+							newPath = ''
+						end
+
+						if ImGui.Button('Delete Path') then
+							DeletePath(selectedPath)
+							selectedPath = 'None'
+						end
+						ImGui.SameLine()
+						if ImGui.Button('Save Paths') then
+							SavePaths()
+						end
+					end
+
+					if selectedPath ~= 'None' then
+						if ImGui.CollapsingHeader("Waypoints##") then
+								
+							if ImGui.Button('Add Waypoint') then
+								RecordWaypoint(selectedPath)
+							end
+							ImGui.SameLine()
+							if ImGui.Button('Clear Waypoints') then
+								ClearWaypoints(selectedPath)
+							end
+							ImGui.SameLine()
+							local label = autoRecord and 'Stop Recording' or 'Start Recording'
+							if autoRecord then
+								ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1.0, 0.4, 0.4, 0.4))
+							else
+								ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1.0, 0.4, 0.4))
+							end
+							if ImGui.Button(label) then
+								autoRecord = not autoRecord
+								if autoRecord then 
+									if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = mq.TLO.Zone.ShortName(), Path = selectedPath, WP = 'Start Recording', Status = 'Start Recording Waypoints!'}) end
+								else
+									if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = mq.TLO.Zone.ShortName(), Path = selectedPath, WP = 'Stop Recording', Status = 'Stop Recording Waypoints!'}) end
+								end
+							end
+							ImGui.PopStyleColor()
+							ImGui.SetNextItemWidth(100)
+							recordDelay = ImGui.InputInt("Auto Record Delay##"..script, recordDelay, 1, 10)
+						end
+					
+						-- Navigation Controls
+
+						if ImGui.CollapsingHeader("Navigation##") then
+							if not doNav then doReverse = ImGui.Checkbox('Reverse Order', doReverse) ImGui.SameLine() end
+							
+							doLoop = ImGui.Checkbox('Loop Path', doLoop)
+							ImGui.SameLine()
+							doPingPong = ImGui.Checkbox('Ping Pong', doPingPong)
+							if doPingPong then
+								doLoop = true
+							end
+							ImGui.Separator()
+							if not Paths[currZone] then Paths[currZone] = {} end
+
+							local tmpLabel = doNav and 'Stop Navigation' or 'Start Navigation'
+							if doNav then
+								ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1.0, 0.4, 0.4, 0.4))
+							else
+								ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1.0, 0.4, 0.4))
+							end
+							if ImGui.Button(tmpLabel) then
+								doNav = not doNav
+								if not doNav then
+									mq.cmdf("/squelch /nav stop")
+								end
+							end
+							ImGui.PopStyleColor()
+							ImGui.SameLine()
+							if ImGui.Button("Start at Closest") then
+								currentStepIndex = closestWaypointIndex
+								doNav = true
+							end
+							ImGui.SetNextItemWidth(100)
+							stopDist = ImGui.InputInt("Stop Distance##"..script, stopDist, 1, 50)
+							ImGui.SetNextItemWidth(100)
+							wpPause = ImGui.InputInt("Global Pause##"..script, wpPause, 1,5 )
+						end
+
+					end
+					ImGui.EndTabItem()
+				end
+				if ImGui.BeginTabItem('Path Data') then
+			
+					if ImGui.CollapsingHeader("Waypoint Table##Header") then
+						-- Waypoint Table
+						if selectedPath ~= 'None' then
+							if ImGui.BeginTable('PathTable', 5, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), -1, -1) then
+								ImGui.TableSetupColumn('WP#', ImGuiTableColumnFlags.WidthFixed, -1)
+								ImGui.TableSetupColumn('Loc', ImGuiTableColumnFlags.WidthFixed, -1)
+								ImGui.TableSetupColumn('Delay', ImGuiTableColumnFlags.WidthFixed, -1)
+								ImGui.TableSetupColumn('Actions', ImGuiTableColumnFlags.WidthFixed, -1)
+								ImGui.TableSetupColumn('Move', ImGuiTableColumnFlags.WidthFixed, -1)
+								ImGui.TableSetupScrollFreeze(0, 1)
+								ImGui.TableHeadersRow()
+					
+								for i = 1, #tmpTable do
+									ImGui.TableNextRow()
+									ImGui.TableSetColumnIndex(0)
+									ImGui.Text("%s", tmpTable[i].step)
+									if i == closestWaypointIndex then
+										ImGui.SameLine()
+										ImGui.TextColored(ImVec4(1, 1, 0, 1), Icon.MD_STAR)
+									end
+									ImGui.TableSetColumnIndex(1)
+									ImGui.Text(tmpTable[i].loc)
+									if not doNav then
+										if ImGui.BeginPopupContextItem("WP_" .. tmpTable[i].step) then
+											
+											if ImGui.MenuItem('Nav to WP ' .. tmpTable[i].step) then
+												currentStepIndex = i
+												doNav = true
+												doLoop = false
+												doSingle = true
+											end
+											
+											if ImGui.MenuItem('Start Path Here: WP ' .. tmpTable[i].step) then
+												currentStepIndex = i
+												doNav = true
+												doLoop = false
+												doSingle = false
+											end
+											if ImGui.MenuItem('Start Loop Here: WP ' .. tmpTable[i].step) then
+												currentStepIndex = i
+												doNav = true
+												doLoop = true
+												doSingle = false
+											end
+										
+											ImGui.EndPopup()
+										end
+									end
+									ImGui.TableSetColumnIndex(2)
+									ImGui.SetNextItemWidth(90)
+									tmpTable[i].delay, changed = ImGui.InputInt("##delay_" .. i, tmpTable[i].delay, 1, 1)
+									if changed then
+										for k, v in pairs(Paths[currZone][selectedPath]) do
+											if v.step == tmpTable[i].step then
+												Paths[currZone][selectedPath][k].delay = tmpTable[i].delay
+												SavePaths()
+											end
+										end
+									end
+									ImGui.TableSetColumnIndex(3)
+									ImGui.SetNextItemWidth(-1)
+									tmpTable[i].cmd, changedCmd = ImGui.InputText("##cmd_" .. i, tmpTable[i].cmd)
+									if changedCmd then
+										for k, v in pairs(Paths[currZone][selectedPath]) do
+											if v.step == tmpTable[i].step then
+												Paths[currZone][selectedPath][k].cmd = tmpTable[i].cmd
+												SavePaths()
+											end
+										end
+									end
+									ImGui.TableSetColumnIndex(4)
+									if not doNav then
+										if ImGui.Button(Icon.FA_TRASH .. "##_" .. i) then
+											deleteWP = true
+											deleteWPStep = tmpTable[i].step
+										end
+										ImGui.SameLine(0,0)
+										if i > 1 and ImGui.Button(upIcon .. "##up_" .. i) then
+											-- Swap items in tmpTable
+											local tmp = tmpTable[i]
+											tmpTable[i] = tmpTable[i - 1]
+											tmpTable[i - 1] = tmp
+								
+											-- Update step values
+											tmpTable[i].step, tmpTable[i - 1].step = tmpTable[i - 1].step, tmpTable[i].step
+					
+											-- Update Paths table
+											for k, v in pairs(Paths[currZone][selectedPath]) do
+												if v.step == tmpTable[i].step then
+													Paths[currZone][selectedPath][k] = tmpTable[i]
+												elseif v.step == tmpTable[i - 1].step then
+													Paths[currZone][selectedPath][k] = tmpTable[i - 1]
+												end
+											end
+											SavePaths()
+										end
+										ImGui.SameLine(0,0)
+										if i < #tmpTable and ImGui.Button(downIcon .. "##down_" .. i) then
+											-- Swap items in tmpTable
+											local tmp = tmpTable[i]
+											tmpTable[i] = tmpTable[i + 1]
+											tmpTable[i + 1] = tmp
+								
+											-- Update step values
+											tmpTable[i].step, tmpTable[i + 1].step = tmpTable[i + 1].step, tmpTable[i].step
+					
+											-- Update Paths table
+											for k, v in pairs(Paths[currZone][selectedPath]) do
+												if v.step == tmpTable[i].step then
+													Paths[currZone][selectedPath][k] = tmpTable[i]
+												elseif v.step == tmpTable[i + 1].step then
+													Paths[currZone][selectedPath][k] = tmpTable[i + 1]
+												end
+											end
+											SavePaths()
+										end
+									end
+								end
+								ImGui.EndTable()
+							end
+						else
+							ImGui.Text("No Path Selected")
+						end
+					end
+				ImGui.EndTabItem()
+				end
+				if showDebugTab then
+					if ImGui.BeginTabItem('Debug Messages') then
+						if ImGui.Button('Clear Debug Messages') then
+							debugMessages = {}
+						end
+						ImGui.Separator()
+						if ImGui.BeginTable('DebugTable', 5, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), ImVec2(0.0, 0.0)) then
+							ImGui.TableSetupColumn('Time##', ImGuiTableColumnFlags.WidthFixed, 100)
+							ImGui.TableSetupColumn('Zone##', ImGuiTableColumnFlags.WidthFixed, 100)
+							ImGui.TableSetupColumn('Path##', ImGuiTableColumnFlags.WidthFixed, 100)
+							ImGui.TableSetupColumn('Action / Step##', ImGuiTableColumnFlags.WidthFixed, 100)
+							ImGui.TableSetupColumn('Status##', ImGuiTableColumnFlags.WidthFixed, 100)
+							ImGui.TableSetupScrollFreeze(0, 1)
+							ImGui.TableHeadersRow()
+							for i = 1, #debugMessages do
+								ImGui.TableNextRow()
+								ImGui.TableSetColumnIndex(0)
+								ImGui.Text(debugMessages[i].Time)
+								ImGui.TableSetColumnIndex(1)
+								ImGui.Text(debugMessages[i].Zone)
+								ImGui.TableSetColumnIndex(2)
+								ImGui.Text(debugMessages[i].Path)
+								ImGui.TableSetColumnIndex(3)
+								ImGui.Text(debugMessages[i].WP)
+								ImGui.TableSetColumnIndex(4)
+								ImGui.Text(debugMessages[i].Status)
+							end
+							ImGui.EndTable()
+						end
+						ImGui.EndTabItem()
 					end
 				end
+				ImGui.EndTabBar()
 			end
 		end
 			-- Reset Font Scale
@@ -990,46 +1032,6 @@ local function Draw_GUI()
 			end
 			LoadTheme.EndTheme(ColCntConf, StyCntConf)
 			ImGui.End()
-	end
-
-	if showDebugGUI then
-		if mq.TLO.Me.Zoning() then return end
-		local ColorCount, StyleCount = LoadTheme.StartTheme(theme.Theme[themeID])
-		local openDebug, showDebug = ImGui.Begin("Debug Messages", true, bit32.bor(ImGuiWindowFlags.NoCollapse, ImGuiWindowFlags.NoFocusOnAppearing))
-		if not openDebug then
-			showDebugGUI = false
-		end
-		if showDebug then
-			if ImGui.Button('Clear Debug Messages') then
-				debugMessages = {}
-			end
-			ImGui.Separator()
-			if ImGui.BeginTable('DebugTable', 5, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), ImVec2(0.0, 0.0)) then
-				ImGui.TableSetupColumn('Time##', ImGuiTableColumnFlags.WidthFixed, 100)
-				ImGui.TableSetupColumn('Zone##', ImGuiTableColumnFlags.WidthFixed, 100)
-				ImGui.TableSetupColumn('Path##', ImGuiTableColumnFlags.WidthFixed, 100)
-				ImGui.TableSetupColumn('Action / Step##', ImGuiTableColumnFlags.WidthFixed, 100)
-				ImGui.TableSetupColumn('Status##', ImGuiTableColumnFlags.WidthFixed, 100)
-				ImGui.TableSetupScrollFreeze(0, 1)
-				ImGui.TableHeadersRow()
-				for i = 1, #debugMessages do
-					ImGui.TableNextRow()
-					ImGui.TableSetColumnIndex(0)
-					ImGui.Text(debugMessages[i].Time)
-					ImGui.TableSetColumnIndex(1)
-					ImGui.Text(debugMessages[i].Zone)
-					ImGui.TableSetColumnIndex(2)
-					ImGui.Text(debugMessages[i].Path)
-					ImGui.TableSetColumnIndex(3)
-					ImGui.Text(debugMessages[i].WP)
-					ImGui.TableSetColumnIndex(4)
-					ImGui.Text(debugMessages[i].Status)
-				end
-				ImGui.EndTable()
-			end
-		end
-		LoadTheme.EndTheme(ColorCount, StyleCount)
-		ImGui.End()
 	end
 
 	if showHUD then
