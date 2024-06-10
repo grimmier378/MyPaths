@@ -512,6 +512,7 @@ local function NavigatePath(name)
 				table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = zone, Path = name, WP = 'Command', Status = 'Executing Command: '..tmp[i].cmd})
 				mq.cmdf(tmp[i].cmd)
 				mq.delay(1)
+				coroutine.yield()
 			end
 			-- Check for Delay at Waypoint
 			if tmp[i].delay > 0 then
