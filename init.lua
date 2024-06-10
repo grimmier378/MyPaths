@@ -352,7 +352,7 @@ local function CheckInterrupts()
 	elseif mq.TLO.Me.Sitting() == true then
 		if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
 		mq.delay(30)
-		local curHP, curMP = mq.TLO.Me.PctHPs(), mq.TLO.Me.PctMana()
+		local curHP, curMP = mq.TLO.Me.PctHPs(), mq.TLO.Me.PctMana() or 0
 		if curHP - lastHP > 10 or curMP - lastMP > 10 then
 			lastHP, lastMP = curHP, curMP
 			status = string.format('Paused for Sitting. HP %s MP %s', curHP, curMP)
@@ -433,6 +433,9 @@ local function NavigatePath(name)
 		startNum = currentStepIndex
 	end
 	if doSingle then doNav = true end
+	if doLoop then
+		table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = zone, Path = name, WP = 'Loop Started', Status = 'Loop Started!'})
+	end
 	while doNav do
 		local tmp = sortPathsTable(zone, name)
 		if tmp == nil then
@@ -498,6 +501,7 @@ local function NavigatePath(name)
 			end
 			-- Check for Commands to execute at Waypoint
 			if tmp[i].cmd ~= '' then
+				table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = zone, Path = name, WP = 'Command', Status = 'Executing Command: '..tmp[i].cmd})
 				mq.cmdf(tmp[i].cmd)
 				mq.delay(1)
 			end
@@ -529,6 +533,7 @@ local function NavigatePath(name)
 			break
 		else
 			loopCount = loopCount + 1
+			table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = zone, Path = name, WP = 'Loop #'..loopCount, Status = 'Loop #'..loopCount..' Completed!'})
 			currentStepIndex = 1
 			startNum = 1
 			if doPingPong then

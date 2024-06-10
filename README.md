@@ -33,7 +33,7 @@ Paths are the series of waypoints you want to string to gether. You can create, 
 * Right Click Nav to a specific waypoint and stop there.
 * You can now set custom delays per waypoint. These will override the global delay if set.
 * You can also set custom commands to execute at each waypoint.
-  * PRO Tip! you can add something like ```/mypaths go loop "Loop A"```  at the last waypoint for the command to execute and it will load up the Path "Loop A" next in Loop Mode.
+  * PRO Tip! you can add something like ```/multiline ; /mypaths stop; /timed 5, /mypaths go loop "Loop A"```  at the last waypoint for the command to execute and it will load up the Path "Loop A" next in Loop Mode.
 
 ## Navigation Modes
 
