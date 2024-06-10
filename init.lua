@@ -42,6 +42,9 @@ local zoningHideGUI = false
 local interruptFound = false
 local ZoningPause
 local interruptDelay = 2
+local lastRecordedWP = ''
+local recordMinDist = 25
+local reported = false
 
 -- GUI Settings
 local winFlags = bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.MenuBar)
@@ -68,6 +71,7 @@ defaults = {
 	StopDistance = 30,
 	PauseStops = 1,
 	InterruptDelay = 1,
+	RecordMinDist = 25,
 }
 
 -------- Helper Functions --------
@@ -163,6 +167,11 @@ local function loadSettings()
 		newSetting = true
 	end
 
+	if settings[script].RecordMinDist == nil then
+		settings[script].RecordMinDist = recordMinDist
+		newSetting = true
+	end
+
 	if settings[script].RecordDelay == nil then
 		settings[script].RecordDelay = recordDelay
 		newSetting = true
@@ -206,6 +215,7 @@ local function loadSettings()
 	stopDist = settings[script].StopDistance
 	wpPause = settings[script].PauseStops
 	aSize = settings[script].AutoSize
+	recordMinDist = settings[script].RecordMinDist
 	locked = settings[script].locked
 	scale = settings[script].Scale
 	themeName = settings[script].LoadTheme
@@ -226,15 +236,34 @@ local function RecordWaypoint(name)
 	local tmp = Paths[zone][name]
 	local loc = mq.TLO.Me.LocYXZ()
 	local index = #tmp or 1
+	local distToLast = 0
+	if lastRecordedWP ~= loc and lastRecordedWP ~= '' then
+		distToLast = mq.TLO.Math.Distance(string.format("%s:%s", lastRecordedWP, loc))()
+		if distToLast < recordMinDist and autoRecord then
+			status = "Recording: Distance to Last WP is less than "..recordMinDist.."!"
+			if DEBUG and not reported then
+				table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = zone, Path = name, WP = 'Record WP', Status = 'Distance to Last WP is less than '..recordMinDist..' units!'})
+				reported = true
+			end
+			return
+		end
+	end
 	if tmp[index] ~= nil then
 		if tmp[index].loc == loc then return end
 		table.insert(tmp, {step = index + 1, loc = loc, delay = 0, cmd = ''})
+		lastRecordedWP = loc
 		index = index + 1
+		reported = false
 	else
 		table.insert(tmp, {step = 1, loc = loc, delay = 0, cmd = ''})
 		index = 1
+		lastRecordedWP = loc
+		reported = false
 	end
 	Paths[zone][name] = tmp
+	if autoRecord then
+		status = "Recording: Waypoint #"..index.." Added!"
+	end
 	if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = zone, Path = name, WP = "Add WP#"..index, Status = 'Waypoint #'..index..' Added Successfully!'}) end
 	SavePaths()
 end
@@ -286,6 +315,7 @@ end
 local function AutoRecordPath(name)
 	curTime = os.time()
 	if curTime - lastTime > recordDelay then
+
 		RecordWaypoint(name)
 		lastTime = curTime
 	end
@@ -648,6 +678,16 @@ local function Draw_GUI()
 				ImGui.TextColored(0,1,1,1,"%.2f", mq.TLO.Math.Distance(string.format("%s:%s", tmpTable[currentStepIndex].loc:gsub(",", " "), mq.TLO.Me.LocYXZ()))())
 			end
 			ImGui.Separator()
+	
+			if doNav then
+				ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1.0, 0.4, 0.4, 0.4))
+				if ImGui.Button('Stop') then
+					doNav = false
+					mq.cmdf("/squelch /nav stop")
+				end
+				ImGui.PopStyleColor()
+				ImGui.SameLine()
+			end
 			ImGui.Text("Status: ")
 				
 			ImGui.SameLine()
@@ -655,6 +695,10 @@ local function Draw_GUI()
 				ImGui.TextColored(ImVec4(0, 1, 1, 1), status)
 			elseif status:find("Paused") then
 				ImGui.TextColored(ImVec4(0.9, 0.4, 0.4, 1), status)
+			elseif status:find("Last WP is less than") then
+				ImGui.TextColored(ImVec4(0.9, 0.4, 0.4, 1), status)
+			elseif status:find("Recording") then
+				ImGui.TextColored(ImVec4(0.4, 0.9, 0.4, 1), status)
 			elseif status:find("Arrived") then
 				ImGui.TextColored(ImVec4(0, 1, 0, 1), status)
 			elseif status:find("Nav to WP") then
@@ -670,6 +714,8 @@ local function Draw_GUI()
 				-- tmpStatus = string.format("%s Distance: %s",status,dist)
 				-- ImGui.TextColored(ImVec4(1,1,0,1), tmpStatus)
 			end
+
+
 			ImGui.Separator()
 			if ImGui.BeginTabBar('MainTabBar') then
 				if ImGui.BeginTabItem('Controls') then
@@ -706,35 +752,7 @@ local function Draw_GUI()
 					end
 
 					if selectedPath ~= 'None' then
-						if ImGui.CollapsingHeader("Waypoints##") then
-								
-							if ImGui.Button('Add Waypoint') then
-								RecordWaypoint(selectedPath)
-							end
-							ImGui.SameLine()
-							if ImGui.Button('Clear Waypoints') then
-								ClearWaypoints(selectedPath)
-							end
-							ImGui.SameLine()
-							local label = autoRecord and 'Stop Recording' or 'Start Recording'
-							if autoRecord then
-								ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1.0, 0.4, 0.4, 0.4))
-							else
-								ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1.0, 0.4, 0.4))
-							end
-							if ImGui.Button(label) then
-								autoRecord = not autoRecord
-								if autoRecord then 
-									if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = mq.TLO.Zone.ShortName(), Path = selectedPath, WP = 'Start Recording', Status = 'Start Recording Waypoints!'}) end
-								else
-									if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = mq.TLO.Zone.ShortName(), Path = selectedPath, WP = 'Stop Recording', Status = 'Stop Recording Waypoints!'}) end
-								end
-							end
-							ImGui.PopStyleColor()
-							ImGui.SetNextItemWidth(100)
-							recordDelay = ImGui.InputInt("Auto Record Delay##"..script, recordDelay, 1, 10)
-						end
-					
+
 						-- Navigation Controls
 
 						if ImGui.CollapsingHeader("Navigation##") then
@@ -777,10 +795,42 @@ local function Draw_GUI()
 					ImGui.EndTabItem()
 				end
 				if ImGui.BeginTabItem('Path Data') then
-			
+					if selectedPath ~= 'None' then
+						if ImGui.CollapsingHeader("Manage Waypoints##") then
+									
+							if ImGui.Button('Add Waypoint') then
+								RecordWaypoint(selectedPath)
+							end
+							ImGui.SameLine()
+							if ImGui.Button('Clear Waypoints') then
+								ClearWaypoints(selectedPath)
+							end
+							
+							local label = autoRecord and 'Stop Recording' or 'Start Recording'
+							if autoRecord then
+								ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1.0, 0.4, 0.4, 0.4))
+							else
+								ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1.0, 0.4, 0.4))
+							end
+							if ImGui.Button(label) then
+								autoRecord = not autoRecord
+								if autoRecord then 
+									if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = mq.TLO.Zone.ShortName(), Path = selectedPath, WP = 'Start Recording', Status = 'Start Recording Waypoints!'}) end
+								else
+									if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = mq.TLO.Zone.ShortName(), Path = selectedPath, WP = 'Stop Recording', Status = 'Stop Recording Waypoints!'}) end
+								end
+							end
+							ImGui.PopStyleColor()
+							ImGui.SameLine()
+							ImGui.SetNextItemWidth(100)
+							recordDelay = ImGui.InputInt("Auto Record Delay##"..script, recordDelay, 1, 10)
+						end
+						ImGui.Separator()
+					end
 					if ImGui.CollapsingHeader("Waypoint Table##Header") then
 						-- Waypoint Table
 						if selectedPath ~= 'None' then
+
 							if ImGui.BeginTable('PathTable', 5, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), -1, -1) then
 								ImGui.TableSetupColumn('WP#', ImGuiTableColumnFlags.WidthFixed, -1)
 								ImGui.TableSetupColumn('Loc', ImGuiTableColumnFlags.WidthFixed, -1)
@@ -1000,10 +1050,16 @@ local function Draw_GUI()
 				-- HUD Transparency --
 				ImGui.SetNextItemWidth(100)
 				hudTransparency = ImGui.SliderFloat("HUD Transparency##"..script, hudTransparency, 0.0, 1)
+				ImGui.SeparatorText("Recording Settings##"..script)
 
 				-- Set RecordDley
 				ImGui.SetNextItemWidth(100)
 				recordDelay = ImGui.InputInt("Record Delay##"..script, recordDelay, 1, 5)
+				-- Minimum Distance Between Waypoints
+				ImGui.SetNextItemWidth(100)
+				recordMinDist = ImGui.InputInt("Min Dist. Between WP##"..script, recordMinDist, 1, 50)
+
+				ImGui.SeparatorText("Navigation Settings##"..script)
 				-- Set Stop Distance
 				ImGui.SetNextItemWidth(100)
 				stopDist = ImGui.InputInt("Stop Distance##"..script, stopDist, 1, 50)
@@ -1024,6 +1080,7 @@ local function Draw_GUI()
 					settings[script].AutoSize = aSize
 					settings[script].RecordDelay = recordDelay
 					settings[script].StopDistance = stopDist
+					settings[script].RecordMinDist = recordMinDist
 					settings[script].PauseStops = wpPause
 					settings[script].InterruptDelay = interruptDelay
 					mq.pickle(configFile, settings)
@@ -1103,6 +1160,10 @@ local function Draw_GUI()
 				ImGui.Text("Status: ")
 				ImGui.SameLine()
 				ImGui.TextColored(ImVec4(0, 1, 0, 1), status)
+			elseif status:find("Last WP is less than") then
+				ImGui.TextColored(ImVec4(0.9, 0.4, 0.4, 1), status)
+			elseif status:find("Recording") then
+				ImGui.TextColored(ImVec4(0.4, 0.9, 0.4, 1), status)
 			elseif status:find("Nav to WP") then
 				ImGui.Text("Status: ")
 				ImGui.SameLine()
@@ -1267,11 +1328,21 @@ local function Loop()
 			doNav = false
 			lastZone = currZone
 			currentStepIndex = 1
+			autoRecord = false
 			pauseTime = 0
 			status = 'Idle'
 			pauseStart = 0
 			printf("\ay[\at%s\ax] \agZone Changed Last: \at%s Current: \ay%s", script, lastZone, currZone)
 		end
+
+		if mq.TLO.SpawnCount('gm')() > 0 then
+			printf("\ay[\at%s\ax] \arGM Detected, \ayPausing Navigation...", script)
+			doNav = false
+			mq.cmdf("/squelch /nav stop")
+			mq.delay(1)
+			status = 'Paused: GM Detected'
+		end
+
 		if zoningHideGUI then
 			printf("\ay[\at%s\ax] \agZoning, \ayHiding GUI...", script)
 			mq.delay(1)
@@ -1345,7 +1416,7 @@ local function Loop()
 				-- If the coroutine is dead, create a new one
 				co = coroutine.create(NavigatePath)
 			end
-		elseif not doNav then
+		elseif not doNav and not autoRecord then
 			-- Reset state when doNav is false
 			currentStepIndex = 1
 			status = 'Idle'
