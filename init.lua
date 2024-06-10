@@ -41,6 +41,7 @@ local previousDoNav = false
 local zoningHideGUI = false
 local interruptFound = false
 local ZoningPause
+local interruptDelay = 2
 
 -- GUI Settings
 local winFlags = bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.MenuBar)
@@ -66,6 +67,7 @@ defaults = {
 	HeadsUpTransparency = 0.5,
 	StopDistance = 30,
 	PauseStops = 1,
+	InterruptDelay = 1,
 }
 
 -------- Helper Functions --------
@@ -156,6 +158,11 @@ local function loadSettings()
 		newSetting = true
 	end
 
+	if settings[script].InterruptDelay == nil then
+		settings[script].InterruptDelay = interruptDelay
+		newSetting = true
+	end
+
 	if settings[script].RecordDelay == nil then
 		settings[script].RecordDelay = recordDelay
 		newSetting = true
@@ -203,6 +210,7 @@ local function loadSettings()
 	scale = settings[script].Scale
 	themeName = settings[script].LoadTheme
 	recordDelay = settings[script].RecordDelay
+	interruptDelay = settings[script].InterruptDelay
 
 	-- Save the settings if new settings were added
 	if newSetting then mq.pickle(configFile, settings) end
@@ -284,73 +292,75 @@ local function AutoRecordPath(name)
 	SavePaths()
 end
 
-local function ScanXtar()
+local interruptInProcess = false
+local function CheckInterrupts()
+	if not doNav then return false end
 	local xCount = mq.TLO.Me.XTarget() or 0
-	if xCount > 0 then
+	local flag = false
+	if mq.TLO.Window('LootWnd').Open() then
+		if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
+		status = 'Paused for Looting.'
+		flag = true
+	elseif mq.TLO.Window('AdvancedLootWnd').Open() then
+		if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
+		status = 'Paused for Looting.'
+		flag = true
+	elseif mq.TLO.Me.Combat() then
+		if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
+		status = 'Paused for Combat.'
+		flag = true
+	elseif xCount > 0 then
 		for i = 1, mq.TLO.Me.XTargetSlots() do
-			local xTarg = mq.TLO.Me.XTarget(i)
-			local xName, xType = xTarg.Name(), xTarg.Type()
-			if (xTarg.Name() ~= 'NULL' and xTarg.ID() ~= 0 and xTarg.Master.Type() ~= 'PC') then
-				return true
+			if mq.TLO.Me.XTarget(i) ~= nil then
+				if (mq.TLO.Me.XTarget(i).ID() ~= 0 and mq.TLO.Me.XTarget(i).Type() ~= 'PC' and mq.TLO.Me.XTarget(i).Master.Type() ~= "PC") then
+					if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
+					status = string.format('Paused for XTarget. XTarg Count %s', mq.TLO.Me.XTarget())
+					flag = true
+				end
 			end
 		end
-	end
-	return false
-end
-
-local function CheckInterrupts()
-
-	if mq.TLO.Window('LootWnd').Open() then
-		mq.cmdf("/squelch /nav stop")
-		status = 'Paused for Looting.'
-		return true
-	elseif mq.TLO.Window('AdvancedLootWnd').Open() then
-		mq.cmdf("/squelch /nav stop")
-		status = 'Paused for Looting.'
-		return true
-	elseif mq.TLO.Me.Combat() then
-		mq.cmdf("/squelch /nav stop")
-		status = 'Paused for Combat.'
-		return true
-	elseif ScanXtar() then
-		mq.cmdf("/squelch /nav stop")
-		status = string.format('Paused for XTarget. XTarg Count %s', mq.TLO.Me.XTarget())
-		return true
 	elseif mq.TLO.Me.Sitting() == true then
-		mq.cmdf("/squelch /nav stop")
+		if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
+		mq.delay(30)
 		local curHP, curMP = mq.TLO.Me.PctHPs(), mq.TLO.Me.PctMana()
 		if curHP - lastHP > 10 or curMP - lastMP > 10 then
 			lastHP, lastMP = curHP, curMP
 			status = string.format('Paused for Sitting. HP %s MP %s', curHP, curMP)
 		end
-		return true
+		flag = true
 	elseif mq.TLO.Me.Rooted() then
-		mq.cmdf("/squelch /nav stop")
+		if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
 		status = 'Paused for Rooted.'
-		return true
+		flag = true
 	elseif mq.TLO.Me.Feared() then
-		mq.cmdf("/squelch /nav stop")
+		if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
 		status = 'Paused for Feared.'
-		return true
+		flag = true
 	elseif mq.TLO.Me.Mezzed() then
-		mq.cmdf("/squelch /nav stop")
+		if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
 		status = 'Paused for Mezzed.'
-		return true
+		flag = true
 	elseif mq.TLO.Me.Charmed() then
-		mq.cmdf("/squelch /nav stop")
+		if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
 		status = 'Paused for Charmed.'
-		return true
+		flag = true
 	elseif mq.TLO.Me.Zoning() then
-		mq.cmdf("/squelch /nav stop")
+		if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
 		status = 'Paused for Zoning.'
-		return true
+		flag = true
 	end
-	return false
+
+	if flag then
+		pauseStart = os.time()
+		pauseTime = interruptDelay
+	else
+		interruptInProcess = false
+	end
+
+	return flag
 end
 
 --------- Navigation Functions --------
-
-
 
 local function FindIndexClosestWaypoint(table)
 	local tmp = table
@@ -382,7 +392,6 @@ local function sortPathsTable(zone, path)
 	else table.sort(tmp, function(a, b) return a.step < b.step end) end
 	return tmp
 end
-
 
 local function NavigatePath(name)
 	if not doNav then
@@ -428,16 +437,19 @@ local function NavigatePath(name)
 
 					return
 				end
-
-				if mq.TLO.Me.Speed() == 0 then
-
+				if CheckInterrupts() then
+					coroutine.yield()
+				end
+				if mq.TLO.Me.Speed() == 0 and not CheckInterrupts() then
+					mq.delay(20)
+					if not mq.TLO.Me.Sitting() then
 						mq.cmdf("/squelch /nav locyxz %s | distance %s", tmpLoc, stopDist)
 						tmpLoc = string.format("%s:%s", tmp[i].loc, mq.TLO.Me.LocYXZ())
 						tmpLoc = tmpLoc:gsub(",", " ")
 						tmpDist = mq.TLO.Math.Distance(tmpLoc)() or 0
 						status = "Nav to WP #: "..tmp[i].step.." Distance: "..string.format("%.2f",tmpDist)
 						coroutine.yield()
-
+					end
 				end
 				mq.delay(1)
 				tmpLoc = string.format("%s:%s", wpLoc, mq.TLO.Me.LocYXZ())
@@ -445,7 +457,7 @@ local function NavigatePath(name)
 				coroutine.yield()  -- Yield here to allow updates
 			end
 			mq.cmdf("/squelch /nav stop")
-			status = "Arrived at WP #: "..tmp[i].step
+			-- status = "Arrived at WP #: "..tmp[i].step
 			
 			if doSingle then
 				doNav = false
@@ -472,8 +484,10 @@ local function NavigatePath(name)
 				coroutine.yield()
 				-- coroutine.yield()  -- Yield here to allow updates
 			else
-				pauseTime = 0
-				pauseStart = 0
+				if not interruptFound then
+					pauseTime = 0
+					pauseStart = 0
+				end
 			end
 		end
 		-- Check if we need to loop
@@ -553,18 +567,18 @@ local function Draw_GUI()
 						showConfigGUI = not showConfigGUI
 					end
 				end
-				ImGui.SameLine()
-				rIcon = aSize and Icon.FA_EXPAND or Icon.FA_COMPRESS
-				ImGui.Text(rIcon)
-				if ImGui.IsItemHovered() then
-					-- Set Tooltip
-					ImGui.SetTooltip("Toggle Auto Size")
-					-- Check if the Gear Icon is clicked
-					if ImGui.IsMouseReleased(0) then
-						-- Toggle Config Window
-						aSize = not aSize
-					end
-				end
+				-- ImGui.SameLine()
+				-- rIcon = aSize and Icon.FA_EXPAND or Icon.FA_COMPRESS
+				-- ImGui.Text(rIcon)
+				-- if ImGui.IsItemHovered() then
+				-- 	-- Set Tooltip
+				-- 	ImGui.SetTooltip("Toggle Auto Size")
+				-- 	-- Check if the Gear Icon is clicked
+				-- 	if ImGui.IsMouseReleased(0) then
+				-- 		-- Toggle Config Window
+				-- 		aSize = not aSize
+				-- 	end
+				-- end
 				ImGui.SameLine()
 				lIcon = locked and Icon.FA_LOCK or Icon.FA_UNLOCK
 				ImGui.Text(lIcon)
@@ -575,6 +589,8 @@ local function Draw_GUI()
 					if ImGui.IsMouseReleased(0) then
 						-- Toggle Config Window
 						locked = not locked
+						settings[script].locked = locked
+						mq.pickle(configFile, settings)
 					end
 				end
 				if DEBUG then
@@ -759,124 +775,125 @@ local function Draw_GUI()
 					-- ImGui.TextColored(ImVec4(1,1,0,1), tmpStatus)
 				end
 				ImGui.Separator()
-
-				-- Waypoint Table
-				if ImGui.BeginTable('PathTable', 5, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), -1, -1) then
-					ImGui.TableSetupColumn('WP#', ImGuiTableColumnFlags.None, -1)
-					ImGui.TableSetupColumn('Loc', ImGuiTableColumnFlags.None, -1)
-					ImGui.TableSetupColumn('Delay', ImGuiTableColumnFlags.None, -1)
-					ImGui.TableSetupColumn('Actions', ImGuiTableColumnFlags.None, -1)
-					ImGui.TableSetupColumn('Move', ImGuiTableColumnFlags.None, -1)
-					ImGui.TableSetupScrollFreeze(0, 1)
-					ImGui.TableHeadersRow()
-		
-					for i = 1, #tmpTable do
-						ImGui.TableNextRow()
-						ImGui.TableSetColumnIndex(0)
-						ImGui.Text("%s", tmpTable[i].step)
-						if i == closestWaypointIndex then
-							ImGui.SameLine()
-							ImGui.TextColored(ImVec4(1, 1, 0, 1), Icon.MD_STAR)
-						end
-						ImGui.TableSetColumnIndex(1)
-						ImGui.Text(tmpTable[i].loc)
-						if not doNav then
-							if ImGui.BeginPopupContextItem("WP_" .. tmpTable[i].step) then
-								
-								if ImGui.MenuItem('Nav to WP ' .. tmpTable[i].step) then
-									currentStepIndex = i
-									doNav = true
-									doLoop = false
-									doSingle = true
-								end
-								
-								if ImGui.MenuItem('Start Path Here: WP ' .. tmpTable[i].step) then
-									currentStepIndex = i
-									doNav = true
-									doLoop = false
-									doSingle = false
-								end
-								if ImGui.MenuItem('Start Loop Here: WP ' .. tmpTable[i].step) then
-									currentStepIndex = i
-									doNav = true
-									doLoop = true
-									doSingle = false
-								end
-							
-								ImGui.EndPopup()
+				if ImGui.CollapsingHeader("Waypoint Table##Header") then
+					-- Waypoint Table
+					if ImGui.BeginTable('PathTable', 5, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), -1, -1) then
+						ImGui.TableSetupColumn('WP#', ImGuiTableColumnFlags.None, -1)
+						ImGui.TableSetupColumn('Loc', ImGuiTableColumnFlags.None, -1)
+						ImGui.TableSetupColumn('Delay', ImGuiTableColumnFlags.None, -1)
+						ImGui.TableSetupColumn('Actions', ImGuiTableColumnFlags.None, -1)
+						ImGui.TableSetupColumn('Move', ImGuiTableColumnFlags.None, -1)
+						ImGui.TableSetupScrollFreeze(0, 1)
+						ImGui.TableHeadersRow()
+			
+						for i = 1, #tmpTable do
+							ImGui.TableNextRow()
+							ImGui.TableSetColumnIndex(0)
+							ImGui.Text("%s", tmpTable[i].step)
+							if i == closestWaypointIndex then
+								ImGui.SameLine()
+								ImGui.TextColored(ImVec4(1, 1, 0, 1), Icon.MD_STAR)
 							end
-						end
-						ImGui.TableSetColumnIndex(2)
-						ImGui.SetNextItemWidth(90)
-						tmpTable[i].delay, changed = ImGui.InputInt("##delay_" .. i, tmpTable[i].delay, 1, 1)
-						if changed then
-							for k, v in pairs(Paths[currZone][selectedPath]) do
-								if v.step == tmpTable[i].step then
-									Paths[currZone][selectedPath][k].delay = tmpTable[i].delay
+							ImGui.TableSetColumnIndex(1)
+							ImGui.Text(tmpTable[i].loc)
+							if not doNav then
+								if ImGui.BeginPopupContextItem("WP_" .. tmpTable[i].step) then
+									
+									if ImGui.MenuItem('Nav to WP ' .. tmpTable[i].step) then
+										currentStepIndex = i
+										doNav = true
+										doLoop = false
+										doSingle = true
+									end
+									
+									if ImGui.MenuItem('Start Path Here: WP ' .. tmpTable[i].step) then
+										currentStepIndex = i
+										doNav = true
+										doLoop = false
+										doSingle = false
+									end
+									if ImGui.MenuItem('Start Loop Here: WP ' .. tmpTable[i].step) then
+										currentStepIndex = i
+										doNav = true
+										doLoop = true
+										doSingle = false
+									end
+								
+									ImGui.EndPopup()
+								end
+							end
+							ImGui.TableSetColumnIndex(2)
+							ImGui.SetNextItemWidth(90)
+							tmpTable[i].delay, changed = ImGui.InputInt("##delay_" .. i, tmpTable[i].delay, 1, 1)
+							if changed then
+								for k, v in pairs(Paths[currZone][selectedPath]) do
+									if v.step == tmpTable[i].step then
+										Paths[currZone][selectedPath][k].delay = tmpTable[i].delay
+										SavePaths()
+									end
+								end
+							end
+							ImGui.TableSetColumnIndex(3)
+							ImGui.SetNextItemWidth(-1)
+							tmpTable[i].cmd, changedCmd = ImGui.InputText("##cmd_" .. i, tmpTable[i].cmd)
+							if changedCmd then
+								for k, v in pairs(Paths[currZone][selectedPath]) do
+									if v.step == tmpTable[i].step then
+										Paths[currZone][selectedPath][k].cmd = tmpTable[i].cmd
+										SavePaths()
+									end
+								end
+							end
+							ImGui.TableSetColumnIndex(4)
+							if not doNav then
+								if ImGui.Button(Icon.FA_TRASH .. "##_" .. i) then
+									deleteWP = true
+									deleteWPStep = tmpTable[i].step
+								end
+								ImGui.SameLine(0,0)
+								if i > 1 and ImGui.Button(upIcon .. "##up_" .. i) then
+									-- Swap items in tmpTable
+									local tmp = tmpTable[i]
+									tmpTable[i] = tmpTable[i - 1]
+									tmpTable[i - 1] = tmp
+						
+									-- Update step values
+									tmpTable[i].step, tmpTable[i - 1].step = tmpTable[i - 1].step, tmpTable[i].step
+			
+									-- Update Paths table
+									for k, v in pairs(Paths[currZone][selectedPath]) do
+										if v.step == tmpTable[i].step then
+											Paths[currZone][selectedPath][k] = tmpTable[i]
+										elseif v.step == tmpTable[i - 1].step then
+											Paths[currZone][selectedPath][k] = tmpTable[i - 1]
+										end
+									end
+									SavePaths()
+								end
+								ImGui.SameLine(0,0)
+								if i < #tmpTable and ImGui.Button(downIcon .. "##down_" .. i) then
+									-- Swap items in tmpTable
+									local tmp = tmpTable[i]
+									tmpTable[i] = tmpTable[i + 1]
+									tmpTable[i + 1] = tmp
+						
+									-- Update step values
+									tmpTable[i].step, tmpTable[i + 1].step = tmpTable[i + 1].step, tmpTable[i].step
+			
+									-- Update Paths table
+									for k, v in pairs(Paths[currZone][selectedPath]) do
+										if v.step == tmpTable[i].step then
+											Paths[currZone][selectedPath][k] = tmpTable[i]
+										elseif v.step == tmpTable[i + 1].step then
+											Paths[currZone][selectedPath][k] = tmpTable[i + 1]
+										end
+									end
 									SavePaths()
 								end
 							end
 						end
-						ImGui.TableSetColumnIndex(3)
-						ImGui.SetNextItemWidth(-1)
-						tmpTable[i].cmd, changedCmd = ImGui.InputText("##cmd_" .. i, tmpTable[i].cmd)
-						if changedCmd then
-							for k, v in pairs(Paths[currZone][selectedPath]) do
-								if v.step == tmpTable[i].step then
-									Paths[currZone][selectedPath][k].cmd = tmpTable[i].cmd
-									SavePaths()
-								end
-							end
-						end
-						ImGui.TableSetColumnIndex(4)
-						if not doNav then
-							if ImGui.Button(Icon.FA_TRASH .. "##_" .. i) then
-								deleteWP = true
-								deleteWPStep = tmpTable[i].step
-							end
-							ImGui.SameLine(0,0)
-							if i > 1 and ImGui.Button(upIcon .. "##up_" .. i) then
-								-- Swap items in tmpTable
-								local tmp = tmpTable[i]
-								tmpTable[i] = tmpTable[i - 1]
-								tmpTable[i - 1] = tmp
-					
-								-- Update step values
-								tmpTable[i].step, tmpTable[i - 1].step = tmpTable[i - 1].step, tmpTable[i].step
-		
-								-- Update Paths table
-								for k, v in pairs(Paths[currZone][selectedPath]) do
-									if v.step == tmpTable[i].step then
-										Paths[currZone][selectedPath][k] = tmpTable[i]
-									elseif v.step == tmpTable[i - 1].step then
-										Paths[currZone][selectedPath][k] = tmpTable[i - 1]
-									end
-								end
-								SavePaths()
-							end
-							ImGui.SameLine(0,0)
-							if i < #tmpTable and ImGui.Button(downIcon .. "##down_" .. i) then
-								-- Swap items in tmpTable
-								local tmp = tmpTable[i]
-								tmpTable[i] = tmpTable[i + 1]
-								tmpTable[i + 1] = tmp
-					
-								-- Update step values
-								tmpTable[i].step, tmpTable[i + 1].step = tmpTable[i + 1].step, tmpTable[i].step
-		
-								-- Update Paths table
-								for k, v in pairs(Paths[currZone][selectedPath]) do
-									if v.step == tmpTable[i].step then
-										Paths[currZone][selectedPath][k] = tmpTable[i]
-									elseif v.step == tmpTable[i + 1].step then
-										Paths[currZone][selectedPath][k] = tmpTable[i + 1]
-									end
-								end
-								SavePaths()
-							end
-						end
+						ImGui.EndTable()
 					end
-					ImGui.EndTable()
 				end
 			end
 		end
@@ -903,6 +920,7 @@ local function Draw_GUI()
 				ImGui.Text("Cur Theme: %s", themeName)
 
 				-- Combo Box Load Theme
+				ImGui.SetNextItemWidth(100)
 				if ImGui.BeginCombo("Load Theme##"..script, themeName) then
 					for k, data in pairs(theme.Theme) do
 						local isSelected = data.Name == themeName
@@ -916,6 +934,7 @@ local function Draw_GUI()
 				end
 
 				-- Configure Scale --
+				ImGui.SetNextItemWidth(100)
 				scale = ImGui.SliderFloat("Scale##"..script, scale, 0.5, 2)
 				if scale ~= settings[script].Scale then
 					if scale < 0.5 then scale = 0.5 end
@@ -937,14 +956,21 @@ local function Draw_GUI()
 
 				ImGui.SeparatorText("MyPaths Settings##"..script)
 				-- HUD Transparency --
+				ImGui.SetNextItemWidth(100)
 				hudTransparency = ImGui.SliderFloat("HUD Transparency##"..script, hudTransparency, 0.0, 1)
 
 				-- Set RecordDley
+				ImGui.SetNextItemWidth(100)
 				recordDelay = ImGui.InputInt("Record Delay##"..script, recordDelay, 1, 5)
 				-- Set Stop Distance
+				ImGui.SetNextItemWidth(100)
 				stopDist = ImGui.InputInt("Stop Distance##"..script, stopDist, 1, 50)
 				-- Set Waypoint Pause time
+				ImGui.SetNextItemWidth(100)
 				wpPause = ImGui.InputInt("Waypoint Pause##"..script, wpPause, 1, 5)
+				-- Set Interrupt Delay
+				ImGui.SetNextItemWidth(100)
+				interruptDelay = ImGui.InputInt("Interrupt Delay##"..script, interruptDelay, 1, 5)
 
 				-- Save & Close Button --
 				if ImGui.Button("Save & Close") then
@@ -957,6 +983,7 @@ local function Draw_GUI()
 					settings[script].RecordDelay = recordDelay
 					settings[script].StopDistance = stopDist
 					settings[script].PauseStops = wpPause
+					settings[script].InterruptDelay = interruptDelay
 					mq.pickle(configFile, settings)
 					showConfigGUI = false
 				end
@@ -1225,8 +1252,6 @@ local function Init()
 end
 
 local function Loop()
-	-- Create the coroutine for NavigatePath
-	
 	-- Main Loop
 	while RUNNING do
 		currZone = mq.TLO.Zone.ShortName()
@@ -1234,6 +1259,7 @@ local function Loop()
 			printf("\ay[\at%s\ax] \agZoning, \ayPausing Navigation...", script)
 			ZoningPause()
 		end
+		-- if pauseStart > 0 then print("Pause Start: "..pauseStart) end
 		if currZone ~= lastZone then
 			selectedPath = 'None'
 			doNav = false
@@ -1264,7 +1290,7 @@ local function Loop()
 				printf("\ay[\at%s\ax] \agZone Changed Last: \at%s Current: \ay%s", script, lastZone, currZone)
 			end
 		end
-
+		
 		if not mq.TLO.Me.Sitting() then 
 			lastHP, lastMP = 0,0
 		end
@@ -1275,8 +1301,11 @@ local function Loop()
 			mq.exit()
 		end
 
-		interruptFound = CheckInterrupts()
-
+		if doNav then
+			mq.delay(5)
+			interruptFound = CheckInterrupts()
+		end
+		
 		if doNav and not interruptFound then
 
 			if previousDoNav ~= doNav then
@@ -1290,7 +1319,7 @@ local function Loop()
 			if coroutine.status(co) ~= "dead" then
 				-- Check if we need to pause
 				if pauseStart > 0 then
-					if curTime - pauseStart >= pauseTime then
+					if curTime - pauseStart > pauseTime then
 						-- Time is up, resume the coroutine and reset the timer values
 						pauseTime = 0
 						pauseStart = 0
@@ -1353,7 +1382,7 @@ local function Loop()
 		winFlags = locked and bit32.bor(ImGuiWindowFlags.NoMove, ImGuiWindowFlags.MenuBar) or bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.MenuBar)
 		winFlags = aSize and bit32.bor(winFlags, ImGuiWindowFlags.AlwaysAutoResize, ImGuiWindowFlags.MenuBar) or winFlags
 
-		mq.delay(100)
+		mq.delay(10)
 	end
 end
 
