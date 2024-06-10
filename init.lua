@@ -45,6 +45,7 @@ local interruptDelay = 2
 local lastRecordedWP = ''
 local recordMinDist = 25
 local reported = false
+local stopForGM = true
 
 -- GUI Settings
 local winFlags = bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.MenuBar)
@@ -66,6 +67,7 @@ defaults = {
 	LoadTheme = 'Default',
 	locked = false,
 	AutoSize = false,
+	stopForGM = true,
 	RecordDlay = 5,
 	HeadsUpTransparency = 0.5,
 	StopDistance = 30,
@@ -167,6 +169,11 @@ local function loadSettings()
 		newSetting = true
 	end
 
+	if settings[script].stopForGM == nil then
+		settings[script].stopForGM = stopForGM
+		newSetting = true
+	end
+
 	if settings[script].RecordMinDist == nil then
 		settings[script].RecordMinDist = recordMinDist
 		newSetting = true
@@ -216,6 +223,7 @@ local function loadSettings()
 	wpPause = settings[script].PauseStops
 	aSize = settings[script].AutoSize
 	recordMinDist = settings[script].RecordMinDist
+	stopForGM = settings[script].stopForGM
 	locked = settings[script].locked
 	scale = settings[script].Scale
 	themeName = settings[script].LoadTheme
@@ -1060,6 +1068,10 @@ local function Draw_GUI()
 				hudTransparency = ImGui.SliderFloat("HUD Transparency##"..script, hudTransparency, 0.0, 1)
 				ImGui.SeparatorText("Recording Settings##"..script)
 
+				-- GM Stop
+				ImGui.SetNextItemWidth(100)
+				stopForGM = ImGui.Checkbox("Stop for GM##"..script, stopForGM)
+
 				-- Set RecordDley
 				ImGui.SetNextItemWidth(100)
 				recordDelay = ImGui.InputInt("Record Delay##"..script, recordDelay, 1, 5)
@@ -1087,6 +1099,7 @@ local function Draw_GUI()
 					settings[script].locked = locked
 					settings[script].AutoSize = aSize
 					settings[script].RecordDelay = recordDelay
+					settings[script].StopForGM = stopForGM
 					settings[script].StopDistance = stopDist
 					settings[script].RecordMinDist = recordMinDist
 					settings[script].PauseStops = wpPause
@@ -1345,10 +1358,11 @@ local function Loop()
 			printf("\ay[\at%s\ax] \agZone Changed Last: \at%s Current: \ay%s", script, lastZone, currZone)
 		end
 
-		if mq.TLO.SpawnCount('gm')() > 0 then
+		if mq.TLO.SpawnCount('gm')() > 0 and stopForGM then
 			printf("\ay[\at%s\ax] \arGM Detected, \ayPausing Navigation...", script)
 			doNav = false
 			mq.cmdf("/squelch /nav stop")
+			mq.cmd("/multiline ; /squelch /beep; /timed  3, /beep ; /timed 2, /beep ; /timed 1, /beep")
 			mq.delay(1)
 			status = 'Paused: GM Detected'
 		end

@@ -52,6 +52,7 @@ Auto Pause and Resume navigating upon Interruptions:
 
 * sitting, combat, xtarget, looting, stopped moving (stuck), status effects (Rooted, Mezzed, Charmed, Feared)
 * You can customize a delay for how long to wait after the above interruptions, incase you need time to loot or sit and med.
+* GM Detection (togglable), shuts down Navigation if a GM is detected.
 
 If we detect any of the above we will pause navigation until the issue is resolved, then resume. This allows us to pair MyPaths with automation like KA and RGMercs. For Aggressive zones you can just face pull as you run around. For non-Aggressive areas you will want to use a delay at the WP to give the automation time to pull those spawns.
 
@@ -78,6 +79,7 @@ The table is set with a 100 row buffer limit.
 * Set delay to pause at the waypoints 0 for no delay keep running.
 * Set desired distance from waypoint count as arriving.
 * Adjust the transparency of the HUD
+* GM Detection (togglable), shuts down Navigation if a GM is detected.
 * Set desired delay to enact after an interrupt is over.
  * This is so your automation has time to sit you down after fighting basically. 
  * Otherwise you may get stuck trying to sit while running, which won't trigger is sitting.
