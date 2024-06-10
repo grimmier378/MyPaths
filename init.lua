@@ -39,6 +39,7 @@ local lastHP, lastMP, pauseTime = 0, 0, 0
 local pauseStart = 0
 local previousDoNav = false
 local zoningHideGUI = false
+local interruptFound = false
 local ZoningPause
 
 -- GUI Settings
@@ -284,15 +285,13 @@ local function AutoRecordPath(name)
 end
 
 local function ScanXtar()
-	if mq.TLO.Me.XTarget() > 0 then
+	local xCount = mq.TLO.Me.XTarget() or 0
+	if xCount > 0 then
 		for i = 1, mq.TLO.Me.XTargetSlots() do
 			local xTarg = mq.TLO.Me.XTarget(i)
-			local xCount = mq.TLO.Me.XTarget() or 0
 			local xName, xType = xTarg.Name(), xTarg.Type()
-			if (xCount > 0) then
-				if ((xTarg.Name() ~= 'NULL' and xTarg.ID() ~= 0) and (xType ~= 'Corpse') and (xType ~= 'Chest') and (xTarg.Master.Type() ~= 'PC')) then
-					return true
-				end
+			if (xTarg.Name() ~= 'NULL' and xTarg.ID() ~= 0 and xTarg.Master.Type() ~= 'PC') then
+				return true
 			end
 		end
 	end
@@ -300,8 +299,50 @@ local function ScanXtar()
 end
 
 local function CheckInterrupts()
-	if mq.TLO.Window('LootWnd').Open() or mq.TLO.Window('AdvancedLootWnd').Open() then return true end
-	if mq.TLO.Me.Combat() or ScanXtar() or mq.TLO.Me.Sitting() or mq.TLO.Me.Rooted() or mq.TLO.Me.Feared() or mq.TLO.Me.Mezzed() or mq.TLO.Me.Charmed() then
+
+	if mq.TLO.Window('LootWnd').Open() then
+		mq.cmdf("/squelch /nav stop")
+		status = 'Paused for Looting.'
+		return true
+	elseif mq.TLO.Window('AdvancedLootWnd').Open() then
+		mq.cmdf("/squelch /nav stop")
+		status = 'Paused for Looting.'
+		return true
+	elseif mq.TLO.Me.Combat() then
+		mq.cmdf("/squelch /nav stop")
+		status = 'Paused for Combat.'
+		return true
+	elseif ScanXtar() then
+		mq.cmdf("/squelch /nav stop")
+		status = string.format('Paused for XTarget. XTarg Count %s', mq.TLO.Me.XTarget())
+		return true
+	elseif mq.TLO.Me.Sitting() == true then
+		mq.cmdf("/squelch /nav stop")
+		local curHP, curMP = mq.TLO.Me.PctHPs(), mq.TLO.Me.PctMana()
+		if curHP - lastHP > 10 or curMP - lastMP > 10 then
+			lastHP, lastMP = curHP, curMP
+			status = string.format('Paused for Sitting. HP %s MP %s', curHP, curMP)
+		end
+		return true
+	elseif mq.TLO.Me.Rooted() then
+		mq.cmdf("/squelch /nav stop")
+		status = 'Paused for Rooted.'
+		return true
+	elseif mq.TLO.Me.Feared() then
+		mq.cmdf("/squelch /nav stop")
+		status = 'Paused for Feared.'
+		return true
+	elseif mq.TLO.Me.Mezzed() then
+		mq.cmdf("/squelch /nav stop")
+		status = 'Paused for Mezzed.'
+		return true
+	elseif mq.TLO.Me.Charmed() then
+		mq.cmdf("/squelch /nav stop")
+		status = 'Paused for Charmed.'
+		return true
+	elseif mq.TLO.Me.Zoning() then
+		mq.cmdf("/squelch /nav stop")
+		status = 'Paused for Zoning.'
 		return true
 	end
 	return false
@@ -387,130 +428,25 @@ local function NavigatePath(name)
 
 					return
 				end
-				local function processDelay()
-					-- coroutine.yield()  -- Yield here to allow updates
-					while mq.TLO.Window('LootWnd').Open() do
-						status = 'Paused for Looting.'
-						if not doNav then
-							return
-						end
-						mq.delay(1)
-						coroutine.yield()  -- Yield here to allow updates
-					end
-					while mq.TLO.Window('AdvancedLootWnd').Open() do
-						status = 'Paused for Looting.'
-						if not doNav then
-							return
-						end
-						mq.delay(1)
-						coroutine.yield()  -- Yield here to allow updates
-					end
-					while mq.TLO.Me.Combat() do
-						status = 'Paused for Combat.'
-						if not doNav then
-							return
-						end
-						mq.delay(1)
-						coroutine.yield()  -- Yield here to allow updates
-					end
-					while mq.TLO.Me.Sitting() == true do
-						local curHP, curMP = mq.TLO.Me.PctHPs(), mq.TLO.Me.PctMana()
-						if curHP - lastHP > 10 or curMP - lastMP > 10 then
-							lastHP, lastMP = curHP, curMP
-							status = string.format('Paused for Sitting. HP %s MP %s', curHP, curMP)
-						end
-						-- status = string.format('Paused for Sitting. HP %s MP %s', curHP, curMP)
-						if not doNav then
-							return
-						end
-						mq.delay(1)
-						coroutine.yield()  -- Yield here to allow updates
-					end
-					while mq.TLO.Me.Rooted() do
-						status = 'Paused for Rooted.'
-						if not doNav then
-							return
-						end
-						mq.delay(1)
-						coroutine.yield()  -- Yield here to allow updates
-					end
-					while mq.TLO.Me.Feared() do
-						status = 'Paused for Feared.'
-						if not doNav then
-							return
-						end
-						mq.delay(1)
-						coroutine.yield()  -- Yield here to allow updates
-					end
-					while mq.TLO.Me.Mezzed() do
-						status = 'Paused for Mezzed.'
-						if not doNav then
-							return
-						end
-						mq.delay(1)
-						coroutine.yield()  -- Yield here to allow updates
-					end
-					while mq.TLO.Me.Charmed() do
-						status = 'Paused for Charmed.'
-						if not doNav then
-							return
-						end
-						mq.delay(1)
-						coroutine.yield()  -- Yield here to allow updates
-					end
-					if ScanXtar() then
-						status = string.format('Paused for XTarget. XTarg Count %s', mq.TLO.Me.XTarget())
-						if not doNav then
-							return
-						end
-						mq.delay(1)
-						coroutine.yield()  -- Yield here to allow updates
-					end
-				end
-
-
-				if CheckInterrupts() then
-					-- mq.cmdf("/squelch /nav stop")
-					status = "Paused Interrupt detected."
-					mq.delay(10)
-
-					while CheckInterrupts() do
-						processDelay()
-					end
-
-					mq.delay(1)
-					mq.cmdf("/squelch /nav locyxz %s | distance %s", tmpLoc, stopDist)
-					tmpLoc = string.format("%s:%s", tmp[i].loc, mq.TLO.Me.LocYXZ())
-					tmpLoc = tmpLoc:gsub(",", " ")
-					tmpDist = mq.TLO.Math.Distance(tmpLoc)() or 0
-					status = "Nav to WP #: "..tmp[i].step.." Distance: "..string.format("%.2f",tmpDist)
-					coroutine.yield()
-				end
 
 				if mq.TLO.Me.Speed() == 0 then
-					mq.delay(1)
-					coroutine.yield()
-					if CheckInterrupts() then processDelay()
-					elseif mq.TLO.Me.Speed() == 0 then
-						status = "Paused because we have Stopped!"
-						mq.delay(100,  function () return mq.TLO.Me.Speed() > 0 end)
+
 						mq.cmdf("/squelch /nav locyxz %s | distance %s", tmpLoc, stopDist)
 						tmpLoc = string.format("%s:%s", tmp[i].loc, mq.TLO.Me.LocYXZ())
 						tmpLoc = tmpLoc:gsub(",", " ")
 						tmpDist = mq.TLO.Math.Distance(tmpLoc)() or 0
 						status = "Nav to WP #: "..tmp[i].step.." Distance: "..string.format("%.2f",tmpDist)
 						coroutine.yield()
-					end
+
 				end
 				mq.delay(1)
 				tmpLoc = string.format("%s:%s", wpLoc, mq.TLO.Me.LocYXZ())
 				tmpLoc = tmpLoc:gsub(",", " ")
 				coroutine.yield()  -- Yield here to allow updates
 			end
-
-			coroutine.yield()
 			mq.cmdf("/squelch /nav stop")
 			status = "Arrived at WP #: "..tmp[i].step
+			
 			if doSingle then
 				doNav = false
 				doSingle = false
@@ -1105,7 +1041,7 @@ local function Draw_GUI()
 			ImGui.Text("Nav Type: ")
 			ImGui.SameLine()
 			if not doNav then
-				ImGui.TextColored(ImVec4(0, 1, 0, 1), "Idle")
+				ImGui.TextColored(ImVec4(0, 1, 0, 1), "None")
 			else
 				
 				if doPingPong then
@@ -1138,6 +1074,10 @@ local function Draw_GUI()
 				ImGui.Text("Status: ")
 				ImGui.SameLine()
 				ImGui.TextColored(ImVec4(0, 1, 0, 1), status)
+			elseif status:find("Nav to WP") then
+				ImGui.Text("Status: ")
+				ImGui.SameLine()
+				ImGui.TextColored(ImVec4(1,1,0,1), status)
 			end
 		end
 		ImGui.PopStyleColor()
@@ -1335,7 +1275,9 @@ local function Loop()
 			mq.exit()
 		end
 
-		if doNav then
+		interruptFound = CheckInterrupts()
+
+		if doNav and not interruptFound then
 
 			if previousDoNav ~= doNav then
 				-- Reset the coroutine since doNav changed from false to true
@@ -1372,7 +1314,7 @@ local function Loop()
 				-- If the coroutine is dead, create a new one
 				co = coroutine.create(NavigatePath)
 			end
-		else
+		elseif not doNav then
 			-- Reset state when doNav is false
 			currentStepIndex = 1
 			status = 'Idle'
@@ -1411,7 +1353,7 @@ local function Loop()
 		winFlags = locked and bit32.bor(ImGuiWindowFlags.NoMove, ImGuiWindowFlags.MenuBar) or bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.MenuBar)
 		winFlags = aSize and bit32.bor(winFlags, ImGuiWindowFlags.AlwaysAutoResize, ImGuiWindowFlags.MenuBar) or winFlags
 
-		mq.delay(1)
+		mq.delay(100)
 	end
 end
 
