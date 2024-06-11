@@ -612,10 +612,11 @@ local function serialize_table(val, name, skipnewlines, depth)
     return tmp
 end
 
-local function export_paths(pathname, paths)
-    local serialized_paths = serialize_table({[pathname] = paths})
+local function export_paths(zone, pathname, paths)
+    local serialized_paths = serialize_table({[zone] = {[pathname] = paths}})
     return base64.enc('return ' .. serialized_paths)
 end
+
 
 local function import_paths(import_string)
     if not import_string or import_string == '' then return end
@@ -626,8 +627,19 @@ local function import_paths(import_string)
         print('\arERROR: Failed to import paths\ax')
         return
     end
+    for zone, paths in pairs(imported_paths) do
+        if not Paths[zone] then
+            Paths[zone] = paths
+        else
+            for pathName, pathData in pairs(paths) do
+                Paths[zone][pathName] = pathData
+            end
+        end
+    end
+    SavePaths()
     return imported_paths
 end
+
 -------- GUI Functions --------
 local importString = ''
 local tmpCmd = ''
@@ -657,14 +669,14 @@ local function Draw_GUI()
             -- Set Window Font Scale
             ImGui.SetWindowFontScale(scale)
             if ImGui.BeginMenuBar() then
-                if ImGui.BeginMenu("File") then
+                if ImGui.BeginMenu("Export") then
                     if ImGui.MenuItem("Export Path") then
                         if selectedPath ~= 'None' then
-                            local exportData = export_paths(selectedPath, Paths[currZone][selectedPath])
+                            local exportData = export_paths(currZone, selectedPath, Paths[currZone][selectedPath])
                             ImGui.LogToClipboard()
                             ImGui.LogText(exportData)
                             ImGui.LogFinish()
-                            
+        
                             print('\ayPath data copied to clipboard!\ax')
                         else
                             print('\arNo path selected for export!\ax')
@@ -818,13 +830,18 @@ local function Draw_GUI()
                         if ImGui.Button('Import Path') then
                             local imported = import_paths(importString)
                             if imported then
-                                for pathName, pathData in pairs(imported) do
-                                    Paths[currZone][pathName] = pathData
-                                    selectedPath = pathName
+                                for zone, paths in pairs(imported) do
+                                    if not Paths[zone] then Paths[zone] = {} end
+                                    for pathName, pathData in pairs(paths) do
+                                        Paths[zone][pathName] = pathData
+                                        if currZone == zone then selectedPath = pathName end
+                                    end
                                 end
+                                importString = ''
                                 SavePaths()
                             end
                         end
+    
                     end
 
                     if selectedPath ~= 'None' then

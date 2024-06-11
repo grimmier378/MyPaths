@@ -58,6 +58,12 @@ If we detect any of the above we will pause navigation until the issue is resolv
 
 Stopped Moving interruptions will attempt to restart if you start moving again or after a few seconds. This check happens after checking for sitting and rooted.
 
+## Sharing
+
+* You can Export your selected Path and the import code will be copied to clipboard.
+  * Exporting is found in the menubar
+* You can Import shared Paths by pasting the code into the field and clicking Import. 
+
 ## Debug Mode
 
 You can enable Debug mode with 
