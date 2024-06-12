@@ -50,6 +50,7 @@ local showMainGUI, showConfigGUI, showDebugTab, showHUD = true, false, false, fa
 local scale = 1
 local aSize, locked, hasThemeZ = false, false, false
 local hudTransparency = 0.5
+local hudMouse = true
 
 -- File Paths
 local themeFile = string.format('%s/MyUI/MyThemeZ.lua', mq.configDir)
@@ -641,6 +642,7 @@ local function import_paths(import_string)
 end
 
 -------- GUI Functions --------
+local transFlag = false
 local importString = ''
 local tmpCmd = ''
 local function Draw_GUI()
@@ -1099,51 +1101,51 @@ local function Draw_GUI()
                 showConfigGUI = false
             end
             if showConfig then
+                if ImGui.CollapsingHeader('Theme##Settings'..script) then
+                    -- Configure ThemeZ --
+                    ImGui.SeparatorText("Theme##"..script)
+                    ImGui.Text("Cur Theme: %s", themeName)
 
-                -- Configure ThemeZ --
-                ImGui.SeparatorText("Theme##"..script)
-                ImGui.Text("Cur Theme: %s", themeName)
-
-                -- Combo Box Load Theme
-                ImGui.SetNextItemWidth(100)
-                if ImGui.BeginCombo("Load Theme##"..script, themeName) then
-                    for k, data in pairs(theme.Theme) do
-                        local isSelected = data.Name == themeName
-                        if ImGui.Selectable(data.Name, isSelected) then
-                            theme.LoadTheme = data.Name
-                            themeID = k
-                            themeName = theme.LoadTheme
+                    -- Combo Box Load Theme
+                    ImGui.SetNextItemWidth(100)
+                    if ImGui.BeginCombo("Load Theme##"..script, themeName) then
+                        for k, data in pairs(theme.Theme) do
+                            local isSelected = data.Name == themeName
+                            if ImGui.Selectable(data.Name, isSelected) then
+                                theme.LoadTheme = data.Name
+                                themeID = k
+                                themeName = theme.LoadTheme
+                            end
                         end
+                        ImGui.EndCombo()
                     end
-                    ImGui.EndCombo()
-                end
 
-                -- Configure Scale --
-                ImGui.SetNextItemWidth(100)
-                scale = ImGui.SliderFloat("Scale##"..script, scale, 0.5, 2)
-                if scale ~= settings[script].Scale then
-                    if scale < 0.5 then scale = 0.5 end
-                    if scale > 2 then scale = 2 end
-                end
-
-                -- Edit ThemeZ Button if ThemeZ lua exists.
-                if hasThemeZ then
-                    if ImGui.Button('Edit ThemeZ') then
-                        mq.cmd("/lua run themez")
+                    -- Configure Scale --
+                    ImGui.SetNextItemWidth(100)
+                    scale = ImGui.SliderFloat("Scale##"..script, scale, 0.5, 2)
+                    if scale ~= settings[script].Scale then
+                        if scale < 0.5 then scale = 0.5 end
+                        if scale > 2 then scale = 2 end
                     end
-                    ImGui.SameLine()
-                end
 
-                -- Reload Theme File incase of changes --
-                if ImGui.Button('Reload Theme File') then
-                    loadTheme()
-                end
+                    -- Edit ThemeZ Button if ThemeZ lua exists.
+                    if hasThemeZ then
+                        if ImGui.Button('Edit ThemeZ') then
+                            mq.cmd("/lua run themez")
+                        end
+                        ImGui.SameLine()
+                    end
 
+                    -- Reload Theme File incase of changes --
+                    if ImGui.Button('Reload Theme File') then
+                        loadTheme()
+                    end
+                end
                 ImGui.SeparatorText("MyPaths Settings##"..script)
                 -- HUD Transparency --
                 ImGui.SetNextItemWidth(100)
                 hudTransparency = ImGui.SliderFloat("HUD Transparency##"..script, hudTransparency, 0.0, 1)
-                
+                hudMouse = ImGui.Checkbox("On Mouseover##"..script, hudMouse)
                 if ImGui.CollapsingHeader("Interrupt Settings##"..script) then
                 -- Set Interrupts we will stop for
                     interrupts.stopForAll = ImGui.Checkbox("Stop for All##"..script, interrupts.stopForAll)
@@ -1222,7 +1224,13 @@ local function Draw_GUI()
 
     if showHUD then
         if mq.TLO.Me.Zoning() then return end
-        ImGui.PushStyleColor(ImGuiCol.WindowBg, ImVec4(0.0, 0.0, 0.0, hudTransparency))
+        if transFlag and hudMouse then
+            ImGui.PushStyleColor(ImGuiCol.WindowBg, ImVec4(0.0, 0.0, 0.0, hudTransparency))
+        elseif not hudMouse then
+            ImGui.PushStyleColor(ImGuiCol.WindowBg, ImVec4(0.0, 0.0, 0.0, hudTransparency))
+        else
+            ImGui.PushStyleColor(ImGuiCol.WindowBg, ImVec4(0.0, 0.0, 0.0, 0.0))
+        end
         local openHUDWin, showHUDWin = ImGui.Begin("MyPaths HUD##HUD", true, bit32.bor(ImGuiWindowFlags.NoCollapse, ImGuiWindowFlags.AlwaysAutoResize, ImGuiWindowFlags.NoTitleBar))
         if not openHUDWin then
             ImGui.PopStyleColor()
@@ -1230,10 +1238,13 @@ local function Draw_GUI()
         end
         if showHUDWin then
             if ImGui.IsWindowHovered() then
+                transFlag = true
                 if ImGui.IsMouseDoubleClicked(0) then
                     showMainGUI = not showMainGUI
                 end
                 ImGui.SetTooltip("Double Click to Toggle Main GUI")
+            else
+                transFlag = false
             end
             ImGui.Text("Current Zone: ")
             ImGui.SameLine()
