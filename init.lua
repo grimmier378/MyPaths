@@ -69,6 +69,7 @@ defaults = {
     WatchMana = 60,
     WatchType = 'None',
     WatchHealth = 90,
+    GroupWatch = false,
     HeadsUpTransparency = 0.5,
     StopDistance = 30,
     PauseStops = 1,
@@ -221,6 +222,11 @@ local function loadSettings()
 
     if settings[script].WatchType == nil then
         settings[script].WatchType = 'None'
+        newSetting = true
+    end
+
+    if settings[script].GroupWatch == nil then
+        settings[script].GroupWatch = false
         newSetting = true
     end
 
@@ -459,7 +465,7 @@ local function CheckInterrupts()
         if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
         status = 'Paused for Zoning.'
         flag = true
-    elseif settings[script].WatchType ~= 'None' then
+    elseif settings[script].groupWatch then
         flag = groupWatch(settings[script].WatchType)
     end
     if flag then
