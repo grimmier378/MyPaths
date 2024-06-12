@@ -1163,7 +1163,7 @@ local function Draw_GUI()
                     if not interrupts.stopForCharm then interrupts.stopForAll = false end
                     interrupts.stopForCombat = ImGui.Checkbox("Stop for Combat##"..script, interrupts.stopForCombat)
                     if not interrupts.stopForCombat then interrupts.stopForAll = false end
-                    interrupts.stopForFear = ImGui.Checkbox("Stop for Follow##"..script, interrupts.stopForFear)
+                    interrupts.stopForFear = ImGui.Checkbox("Stop for Fear##"..script, interrupts.stopForFear)
                     if not interrupts.stopForFear then interrupts.stopForAll = false end
                     interrupts.stopForGM = ImGui.Checkbox("Stop for GM##"..script, interrupts.stopForGM)
                     if not interrupts.stopForGM then interrupts.stopForAll = false end
