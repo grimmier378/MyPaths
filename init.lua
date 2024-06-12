@@ -66,11 +66,29 @@ defaults = {
     AutoSize = false,
     stopForGM = true,
     RecordDlay = 5,
+    WatchMana = 60,
+    WatchType = 'None',
+    WatchHealth = 90,
     HeadsUpTransparency = 0.5,
     StopDistance = 30,
     PauseStops = 1,
     InterruptDelay = 1,
     RecordMinDist = 25,
+}
+
+local manaClass = {
+    'WIZ',
+    'MAG',
+    'NEC',
+    'ENC',
+    'DRU',
+    'SHM',
+    'CLR',
+    'BST',
+    'BRD',
+    'PAL',
+    'RNG',
+    'SHD',
 }
 
 -------- Helper Functions --------
@@ -188,6 +206,21 @@ local function loadSettings()
 
     if not settings[script].LoadTheme then
         settings[script].LoadTheme = 'Default'
+        newSetting = true
+    end
+
+    if settings[script].WatchMana == nil then
+        settings[script].WatchMana = 60
+        newSetting = true
+    end
+
+    if settings[script].WatchHealth == nil then
+        settings[script].WatchHealth = 90
+        newSetting = true
+    end
+
+    if settings[script].WatchType == nil then
+        settings[script].WatchType = 'None'
         newSetting = true
     end
 
@@ -326,6 +359,50 @@ local function AutoRecordPath(name)
     SavePaths()
 end
 
+local function groupWatch(type)
+    if type == 'None' then return false end
+    if type == "Self" then
+        if mq.TLO.Me.PctHPs() < settings[script].WatchHealth then
+            return true
+        end
+        if mq.TLO.Me.PctMana() < settings[script].WatchMana then
+            return true
+        end
+    elseif mq.TLO.Me.GroupSize() > 0 then
+        local member = mq.TLO.Group.Member
+        for i = 1,mq.TLO.Me.GroupSize() - 1 do
+            if type == 'Healer' then
+                local class = member(i).Class.ShortName()
+                if class == 'CLR' or class == 'DRU' or class == 'SHM' then
+                    if member(i).PctHPs() < settings[script].WatchHealth then
+                        status = string.format('Paused for Healer Health.')
+                        return true
+                    end
+                    if member(i).PctMana() < settings[script].WatchMana then
+                        status = string.format('Paused for Healer Mana.')
+                        return true
+                    end
+                end
+            end
+            if type == 'All' then
+                if member(i).PctHPs() < settings[script].WatchHealth then
+                    status = string.format('Paused for Health Watch.')
+                    return true
+                end
+                for x = 1 , #manaClass do
+                    if member(i).Class.ShortName() == manaClass[x] then
+                        if member(i).PctMana() < settings[script].WatchMana then
+                            status = string.format('Paused for Mana Watch.')
+                            return true
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return false
+end
+
 local interruptInProcess = false
 local function CheckInterrupts()
     if not doNav then return false end
@@ -382,8 +459,9 @@ local function CheckInterrupts()
         if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
         status = 'Paused for Zoning.'
         flag = true
+    elseif settings[script].WatchType ~= 'None' then
+        flag = groupWatch(settings[script].WatchType)
     end
-
     if flag then
         pauseStart = os.time()
         pauseTime = interruptDelay
@@ -576,6 +654,7 @@ function ZoningPause()
         mq.delay(1000, function () return mq.TLO.Me.Zoning() == false end)
     end
 end
+
 
 -------- Import and Export Functions --------
 local function serialize_table(val, name, skipnewlines, depth)
@@ -1161,24 +1240,66 @@ local function Draw_GUI()
                         interrupts.stopForSitting = true
                         interrupts.stopForXtar = true
                     end
-                    interrupts.stopForCharm = ImGui.Checkbox("Stop for Charmed##"..script, interrupts.stopForCharm)
-                    if not interrupts.stopForCharm then interrupts.stopForAll = false end
-                    interrupts.stopForCombat = ImGui.Checkbox("Stop for Combat##"..script, interrupts.stopForCombat)
-                    if not interrupts.stopForCombat then interrupts.stopForAll = false end
-                    interrupts.stopForFear = ImGui.Checkbox("Stop for Fear##"..script, interrupts.stopForFear)
-                    if not interrupts.stopForFear then interrupts.stopForAll = false end
-                    interrupts.stopForGM = ImGui.Checkbox("Stop for GM##"..script, interrupts.stopForGM)
-                    if not interrupts.stopForGM then interrupts.stopForAll = false end
-                    interrupts.stopForLoot = ImGui.Checkbox("Stop for Loot##"..script, interrupts.stopForLoot)
-                    if not interrupts.stopForLoot then interrupts.stopForAll = false end
-                    interrupts.stopForMez = ImGui.Checkbox("Stop for Mez##"..script, interrupts.stopForMez)
-                    if not interrupts.stopForMez then interrupts.stopForAll = false end
-                    interrupts.stopForRoot = ImGui.Checkbox("Stop for Root##"..script, interrupts.stopForRoot)
-                    if not interrupts.stopForRoot then interrupts.stopForAll = false end
-                    interrupts.stopForSitting = ImGui.Checkbox("Stop for Sitting##"..script, interrupts.stopForSitting)
-                    if not interrupts.stopForSitting then interrupts.stopForAll = false end
-                    interrupts.stopForXtar = ImGui.Checkbox("Stop for Xtarget##"..script, interrupts.stopForXtar)
-                    if not interrupts.stopForXtar then interrupts.stopForAll = false end
+                    if ImGui.BeginTable("##Interrupts", 2, bit32.bor(ImGuiTableFlags.Borders), -1,0) then
+                        ImGui.TableNextRow()
+                        ImGui.TableSetColumnIndex(0)
+                        interrupts.stopForAggro = ImGui.Checkbox("Stop for Aggro##"..script, interrupts.stopForAggro)
+                        if not interrupts.stopForAggro then interrupts.stopForAll = false end
+                        ImGui.TableSetColumnIndex(1)
+                        interrupts.stopForCharm = ImGui.Checkbox("Stop for Charmed##"..script, interrupts.stopForCharm)
+                        if not interrupts.stopForCharm then interrupts.stopForAll = false end
+                        ImGui.TableNextRow()
+                        ImGui.TableSetColumnIndex(0)
+                        interrupts.stopForCombat = ImGui.Checkbox("Stop for Combat##"..script, interrupts.stopForCombat)
+                        if not interrupts.stopForCombat then interrupts.stopForAll = false end
+                        ImGui.TableSetColumnIndex(1)
+                        interrupts.stopForFear = ImGui.Checkbox("Stop for Fear##"..script, interrupts.stopForFear)
+                        if not interrupts.stopForFear then interrupts.stopForAll = false end
+                        ImGui.TableNextRow()
+                        ImGui.TableSetColumnIndex(0)
+                        interrupts.stopForGM = ImGui.Checkbox("Stop for GM##"..script, interrupts.stopForGM)
+                        if not interrupts.stopForGM then interrupts.stopForAll = false end
+                        ImGui.TableSetColumnIndex(1)
+                        interrupts.stopForLoot = ImGui.Checkbox("Stop for Loot##"..script, interrupts.stopForLoot)
+                        if not interrupts.stopForLoot then interrupts.stopForAll = false end
+                        ImGui.TableNextRow()
+                        ImGui.TableSetColumnIndex(0)
+                        interrupts.stopForMez = ImGui.Checkbox("Stop for Mez##"..script, interrupts.stopForMez)
+                        if not interrupts.stopForMez then interrupts.stopForAll = false end
+                        ImGui.TableSetColumnIndex(1)
+                        interrupts.stopForRoot = ImGui.Checkbox("Stop for Root##"..script, interrupts.stopForRoot)
+                        if not interrupts.stopForRoot then interrupts.stopForAll = false end
+                        ImGui.TableNextRow()
+                        ImGui.TableSetColumnIndex(0)
+                        interrupts.stopForSitting = ImGui.Checkbox("Stop for Sitting##"..script, interrupts.stopForSitting)
+                        if not interrupts.stopForSitting then interrupts.stopForAll = false end
+                        ImGui.TableSetColumnIndex(1)
+                        interrupts.stopForXtar = ImGui.Checkbox("Stop for Xtarget##"..script, interrupts.stopForXtar)
+                        if not interrupts.stopForXtar then interrupts.stopForAll = false end
+                        ImGui.EndTable()
+                    end
+                    settings[script].GroupWatch = ImGui.Checkbox("Group Watch##"..script, settings[script].GroupWatch)
+                    if settings[script].GroupWatch then
+                        if ImGui.CollapsingHeader("Group Watch Settings##"..script) then
+                            settings[script].WatchHealth = ImGui.InputInt("Watch Health##"..script, settings[script].WatchHealth, 1, 5)
+                            if settings[script].WatchHealth > 100 then settings[script].WatchHealth = 100 end
+                            if settings[script].WatchHealth < 1 then settings[script].WatchHealth = 1 end
+                            settings[script].WatchMana = ImGui.InputInt("Watch Mana##"..script, settings[script].WatchMana, 1, 5)
+                            if settings[script].WatchMana > 100 then settings[script].WatchMana = 100 end
+                            if settings[script].WatchMana < 1 then settings[script].WatchMana = 1 end
+
+                            if ImGui.BeginCombo("Watch Type##"..script, settings[script].WatchType) then
+                                local types = {"All", "Healer","Self", "None"}
+                                for i = 1, #types do
+                                    local isSelected = types[i] == settings[script].WatchType
+                                    if ImGui.Selectable(types[i], isSelected) then
+                                        settings[script].WatchType = types[i]
+                                    end
+                                end
+                                ImGui.EndCombo()
+                            end
+                        end
+                    end
                 end
                 ImGui.Dummy(5,5)
                 ImGui.SeparatorText("Recording Settings##"..script)
@@ -1202,7 +1323,6 @@ local function Draw_GUI()
 
                 -- Save & Close Button --
                 if ImGui.Button("Save & Close") then
-                    settings = dofile(configFile)
                     settings[script].HeadsUpTransparency = hudTransparency
                     settings[script].Scale = scale
                     settings[script].LoadTheme = themeName
