@@ -909,9 +909,10 @@ local function Draw_GUI()
                             ImGui.SameLine()
                             if ImGui.Button('Copy Path') then
                                 CreatePath(newPath)
-                                for i, data in pairs(Paths[currZone][selectedPath]) do
-                                    table.insert(Paths[currZone][newPath], data)
+                                for i = 1, #Paths[currZone][selectedPath] do
+                                    table.insert(Paths[currZone][newPath], Paths[currZone][selectedPath][i])
                                 end
+                                SavePaths()
                                 selectedPath = newPath
                                 newPath = ''
                             end
