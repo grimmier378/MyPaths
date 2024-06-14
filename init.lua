@@ -408,15 +408,17 @@ local function groupWatch(type)
             end
             if type == 'All' then
                 for i = 1, gsize- 1 do
-                    if member(i).PctHPs() < settings[script].WatchHealth then
-                        status = string.format('Paused for Health Watch.')
-                        return true
-                    end
-                    for x = 1 , #manaClass do
-                        if member(i).Class.ShortName() == manaClass[x] then
-                            if member(i).PctMana() < settings[script].WatchMana then
-                                status = string.format('Paused for Mana Watch.')
-                                return true
+                    if member(i).Present() then
+                        if member(i).PctHPs() < settings[script].WatchHealth then
+                            status = string.format('Paused for Health Watch.')
+                            return true
+                        end
+                        for x = 1 , #manaClass do
+                            if member(i).Class.ShortName() == manaClass[x] then
+                                if member(i).PctMana() < settings[script].WatchMana then
+                                    status = string.format('Paused for Mana Watch.')
+                                    return true
+                                end
                             end
                         end
                     end
@@ -613,13 +615,7 @@ local function NavigatePath(name)
             end
             mq.cmdf("/squelch /nav stop")
             -- status = "Arrived at WP #: "..tmp[i].step
-            if tmp[i].door and not doReverse then
-                openDoor = true
-                ToggleSwitches()
-            elseif tmp[i].doorRev and doReverse then
-                openDoor = true
-                ToggleSwitches()
-            end
+
             if doSingle then
                 doNav = false
                 doSingle = false
@@ -630,6 +626,7 @@ local function NavigatePath(name)
             -- Check for Commands to execute at Waypoint
             if tmp[i].cmd ~= '' then
                 table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = zone, Path = name, WP = 'Command', Status = 'Executing Command: '..tmp[i].cmd})
+                if tmp[i].cmd:find("/mypaths stop") then doNav = false end
                 mq.cmdf(tmp[i].cmd)
                 mq.delay(1)
                 coroutine.yield()
@@ -652,6 +649,14 @@ local function NavigatePath(name)
                     pauseTime = 0
                     pauseStart = 0
                 end
+            end
+            -- Door Check
+            if tmp[i].door and not doReverse then
+                openDoor = true
+                ToggleSwitches()
+            elseif tmp[i].doorRev and doReverse then
+                openDoor = true
+                ToggleSwitches()
             end
         end
         -- Check if we need to loop
@@ -1604,6 +1609,8 @@ local function bind(...)
             displayHelp()
         elseif key == 'debug' then
             DEBUG = not DEBUG
+        elseif key == 'hud' then
+            showHUD = not showHUD
         elseif key == 'show' then
             showMainGUI = not showMainGUI
         elseif key == 'quit' or key == 'exit' then
@@ -1683,10 +1690,22 @@ local function processArgs()
         displayHelp()
         return
     end
+    if #args == 2 then
+        if (args[1]== 'debug' and args[2] == 'hud') or (args[2]== 'debug' and args[1] == 'hud') then
+            DEBUG = not DEBUG
+            showHUD = not showHUD
+            return
+        end
+    end
     if args[1] == 'debug' then
         DEBUG = not DEBUG
         return
     end
+    if args[1] == 'hud' then
+        showHUD = not showHUD
+        return
+    end
+
 end
 
 local function Init()

@@ -37,6 +37,8 @@ Paths are the series of waypoints you want to string to gether. You can create, 
 * You can now set custom delays per waypoint. These will override the global delay if set.
 * You can also set custom commands to execute at each waypoint.
   * PRO Tip! you can add something like ```/multiline ; /mypaths stop; /timed 5, /mypaths go loop "Loop A"```  at the last waypoint for the command to execute and it will load up the Path "Loop A" next in Loop Mode.
+* Doors!!! you can toggle if this way point has a door and we will attempt to open it. 
+  * There are toggles for both forward direction and reverse directions.
 
 ## Navigation Modes
 
@@ -96,12 +98,19 @@ The table is set with a 100 row buffer limit.
  * This is so your automation has time to sit you down after fighting basically. 
  * Otherwise you may get stuck trying to sit while running, which won't trigger is sitting.
 
+## Startup Ooptions
+
+* ```/lua run mypaths``` Start the script normally.
+* ```/lua run mypaths debug``` Start the script with Debug enabled.
+* ```/lua run mypaths hud``` Start the script with the HUD display on.
+* ```/lua run mypaths debug hud``` Start the script with Debug enabled and the HUD display on
+
 ## Commands 
 
 ```
 Command Line Commands:
 
-	/mypaths [go|stop|list|show|quit|debug|help] [loop|rloop|start|reverse|pingpong|closest|rclosest] [path]
+	/mypaths [go|stop|list|show|quit|debug|hud|help] [loop|rloop|start|reverse|pingpong|closest|rclosest] [path]
 
 Command: go = REQUIRES arguments and Path name see below for Arguments.
 Command: stop = Stops the current Navigation.
@@ -109,6 +118,7 @@ Command: show = Toggles Main GUI.
 Command: debug = Enable Debug logging of status updates to a table.
 Command: list = Lists all Paths in the current Zone.
 Command: quit or exit = Exits the script.
+Command: hud = Toggles the HUD Display
 Command: help = Prints out this help list.
 
 Arguments: loop = Loops the path, rloop = Loop in reverse.
