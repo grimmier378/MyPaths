@@ -124,6 +124,7 @@ end
 
 local function loadPaths()
     -- Check for the Paths File
+    Paths = {} -- Reset the Paths Table
     if File_Exists(pathsFile) then
         Paths = dofile(pathsFile)
     else
@@ -378,7 +379,8 @@ local function groupWatch(type)
         end
     elseif mq.TLO.Me.GroupSize() > 0 then
         local member = mq.TLO.Group.Member
-        for i = 1,mq.TLO.Me.GroupSize() - 1 do
+        local gsize = mq.TLO.Me.GroupSize() or 0
+        for i = 1, gsize- 1 do
             if type == 'Healer' then
                 local class = member(i).Class.ShortName()
                 if class == 'CLR' or class == 'DRU' or class == 'SHM' then
@@ -406,6 +408,7 @@ local function groupWatch(type)
                     end
                 end
             end
+            mq.delay(1)
         end
     end
     return false
@@ -467,7 +470,7 @@ local function CheckInterrupts()
         if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
         status = 'Paused for Zoning.'
         flag = true
-    elseif settings[script].groupWatch then
+    elseif settings[script].GroupWatch == true then
         flag = groupWatch(settings[script].WatchType)
     end
     if flag then
@@ -1501,6 +1504,8 @@ local function bind(...)
         if key == 'stop' then
             doNav = false
             mq.cmdf("/squelch /nav stop")
+            selectedPath = 'None'
+            loadPaths()
         elseif key == 'help' then
             displayHelp()
         elseif key == 'debug' then
