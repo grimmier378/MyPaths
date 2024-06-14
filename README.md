@@ -24,6 +24,9 @@ Paths are the series of waypoints you want to string to gether. You can create, 
 * You can record them one point at a time with the add waypoint button.
 * You can use the Start Recording button to have the points Auto Record for you at a customizable interval. Checks are made so we can't duplicate a waypoint when creating the Path.
 * Auto Recording Paths has an extra threshold as well, you can delare a minimum distance from the last WP recorded. Set in the settings window
+* Copy a path to save it as a new name with all of the same waypoints and settings. 
+  * This can be useful for renaming paths. 
+  * Also if you have multiple paths that use the same start point/starting path before branching out.
 
 ## Navigating Paths
 

@@ -369,9 +369,11 @@ local function groupWatch(type)
     if type == 'None' then return false end
     if type == "Self" then
         if mq.TLO.Me.PctHPs() < settings[script].WatchHealth then
+            mq.TLO.Me.Sit()
             return true
         end
         if mq.TLO.Me.PctMana() < settings[script].WatchMana then
+            mq.TLO.Me.Sit()
             return true
         end
     elseif mq.TLO.Me.GroupSize() > 0 then
@@ -902,6 +904,17 @@ local function Draw_GUI()
                             CreatePath(newPath)
                             selectedPath = newPath
                             newPath = ''
+                        end
+                        if selectedPath ~= 'None' then
+                            ImGui.SameLine()
+                            if ImGui.Button('Copy Path') then
+                                CreatePath(newPath)
+                                for i, data in pairs(Paths[currZone][selectedPath]) do
+                                    table.insert(Paths[currZone][newPath], data)
+                                end
+                                selectedPath = newPath
+                                newPath = ''
+                            end
                         end
 
                         if ImGui.Button('Delete Path') then
