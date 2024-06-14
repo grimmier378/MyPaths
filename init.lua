@@ -680,7 +680,6 @@ function ZoningPause()
     end
 end
 
-
 -------- Import and Export Functions --------
 local function serialize_table(val, name, skipnewlines, depth)
     skipnewlines = skipnewlines or false
@@ -1121,6 +1120,20 @@ local function Draw_GUI()
                                             deleteWP = true
                                             deleteWPStep = tmpTable[i].step
                                         end
+                                        if ImGui.IsAnyItemHovered() then
+                                            ImGui.SetTooltip("Delete WP")
+                                        end
+                                        -- if not doReverse then
+                                        ImGui.SameLine(0,0)
+                                        if ImGui.Button(Icon.MD_UPDATE..'##Update_'..i) then
+                                            tmpTable[i].loc = mq.TLO.Me.LocYXZ()
+                                            Paths[currZone][selectedPath][tmpTable[i].step].loc = mq.TLO.Me.LocYXZ()
+                                            SavePaths()
+                                        end
+                                        if ImGui.IsAnyItemHovered() then
+                                            ImGui.SetTooltip("Update Loc")
+                                        end
+                                    -- end
                                         ImGui.SameLine(0,0)
                                         if i > 1 and ImGui.Button(Icon.FA_CHEVRON_UP.. "##up_" .. i) then
                                             -- Swap items in tmpTable
@@ -1272,7 +1285,7 @@ local function Draw_GUI()
                 -- Set Interrupts we will stop for
                     interrupts.stopForAll = ImGui.Checkbox("Stop for All##"..script, interrupts.stopForAll)
                     if interrupts.stopForAll then
-                        interrupts.stopForAggro = true
+                        
                         interrupts.stopForCharm = true
                         interrupts.stopForCombat = true
                         interrupts.stopForFear = true
@@ -1286,37 +1299,38 @@ local function Draw_GUI()
                     if ImGui.BeginTable("##Interrupts", 2, bit32.bor(ImGuiTableFlags.Borders), -1,0) then
                         ImGui.TableNextRow()
                         ImGui.TableSetColumnIndex(0)
-                        interrupts.stopForAggro = ImGui.Checkbox("Stop for Aggro##"..script, interrupts.stopForAggro)
-                        if not interrupts.stopForAggro then interrupts.stopForAll = false end
-                        ImGui.TableSetColumnIndex(1)
                         interrupts.stopForCharm = ImGui.Checkbox("Stop for Charmed##"..script, interrupts.stopForCharm)
                         if not interrupts.stopForCharm then interrupts.stopForAll = false end
-                        ImGui.TableNextRow()
-                        ImGui.TableSetColumnIndex(0)
+                        ImGui.TableSetColumnIndex(1)
                         interrupts.stopForCombat = ImGui.Checkbox("Stop for Combat##"..script, interrupts.stopForCombat)
                         if not interrupts.stopForCombat then interrupts.stopForAll = false end
-                        ImGui.TableSetColumnIndex(1)
+                        ImGui.TableNextRow()
+
+                        ImGui.TableSetColumnIndex(0)
                         interrupts.stopForFear = ImGui.Checkbox("Stop for Fear##"..script, interrupts.stopForFear)
                         if not interrupts.stopForFear then interrupts.stopForAll = false end
-                        ImGui.TableNextRow()
-                        ImGui.TableSetColumnIndex(0)
+                        ImGui.TableSetColumnIndex(1)
                         interrupts.stopForGM = ImGui.Checkbox("Stop for GM##"..script, interrupts.stopForGM)
                         if not interrupts.stopForGM then interrupts.stopForAll = false end
-                        ImGui.TableSetColumnIndex(1)
+                        ImGui.TableNextRow()
+
+                        ImGui.TableSetColumnIndex(0)
                         interrupts.stopForLoot = ImGui.Checkbox("Stop for Loot##"..script, interrupts.stopForLoot)
                         if not interrupts.stopForLoot then interrupts.stopForAll = false end
-                        ImGui.TableNextRow()
-                        ImGui.TableSetColumnIndex(0)
+                        ImGui.TableSetColumnIndex(1)
                         interrupts.stopForMez = ImGui.Checkbox("Stop for Mez##"..script, interrupts.stopForMez)
                         if not interrupts.stopForMez then interrupts.stopForAll = false end
-                        ImGui.TableSetColumnIndex(1)
+                        ImGui.TableNextRow()
+
+                        ImGui.TableSetColumnIndex(0)
                         interrupts.stopForRoot = ImGui.Checkbox("Stop for Root##"..script, interrupts.stopForRoot)
                         if not interrupts.stopForRoot then interrupts.stopForAll = false end
-                        ImGui.TableNextRow()
-                        ImGui.TableSetColumnIndex(0)
+                        ImGui.TableSetColumnIndex(1)
                         interrupts.stopForSitting = ImGui.Checkbox("Stop for Sitting##"..script, interrupts.stopForSitting)
                         if not interrupts.stopForSitting then interrupts.stopForAll = false end
-                        ImGui.TableSetColumnIndex(1)
+                        ImGui.TableNextRow()
+
+                        ImGui.TableSetColumnIndex(0)
                         interrupts.stopForXtar = ImGui.Checkbox("Stop for Xtarget##"..script, interrupts.stopForXtar)
                         if not interrupts.stopForXtar then interrupts.stopForAll = false end
                         ImGui.EndTable()
