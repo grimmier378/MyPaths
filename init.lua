@@ -380,36 +380,50 @@ local function groupWatch(type)
     elseif mq.TLO.Me.GroupSize() > 0 then
         local member = mq.TLO.Group.Member
         local gsize = mq.TLO.Me.GroupSize() or 0
-        for i = 1, gsize- 1 do
+        
             if type == 'Healer' then
-                local class = member(i).Class.ShortName()
-                if class == 'CLR' or class == 'DRU' or class == 'SHM' then
-                    if member(i).PctHPs() < settings[script].WatchHealth then
-                        status = string.format('Paused for Healer Health.')
-                        return true
-                    end
-                    if member(i).PctMana() < settings[script].WatchMana then
-                        status = string.format('Paused for Healer Mana.')
-                        return true
-                    end
-                end
-            end
-            if type == 'All' then
-                if member(i).PctHPs() < settings[script].WatchHealth then
-                    status = string.format('Paused for Health Watch.')
-                    return true
-                end
-                for x = 1 , #manaClass do
-                    if member(i).Class.ShortName() == manaClass[x] then
+                for i = 1, gsize- 1 do
+                    local class = member(i).Class.ShortName()
+                    local myClass = mq.TLO.Me.Class.ShortName()
+                    if class == 'CLR' or class == 'DRU' or class == 'SHM' or myClass == 'CLR' or myClass == 'DRU' or myClass == 'SHM'then
+                        if member(i).PctHPs() < settings[script].WatchHealth then
+                            status = string.format('Paused for Healer Health.')
+                            return true
+                        end
                         if member(i).PctMana() < settings[script].WatchMana then
-                            status = string.format('Paused for Mana Watch.')
+                            status = string.format('Paused for Healer Mana.')
                             return true
                         end
                     end
                 end
             end
-            mq.delay(1)
-        end
+            if type == 'All' then
+                for i = 1, gsize- 1 do
+                    if member(i).PctHPs() < settings[script].WatchHealth then
+                        status = string.format('Paused for Health Watch.')
+                        return true
+                    end
+                    for x = 1 , #manaClass do
+                        if member(i).Class.ShortName() == manaClass[x] then
+                            if member(i).PctMana() < settings[script].WatchMana then
+                                status = string.format('Paused for Mana Watch.')
+                                return true
+                            end
+                        end
+                    end
+                    if mq.TLO.Me.PctHPs() < settings[script].WatchHealth then
+                        status = string.format('Paused for Health Watch.')
+                        mq.TLO.Me.Sit()
+                        return true
+                    end
+                    if mq.TLO.Me.PctMana() < settings[script].WatchMana then
+                        mq.TLO.Me.Sit()
+                        status = string.format('Paused for Mana Watch.')
+                        return true
+                    end
+                end
+            end
+        mq.delay(1)
     end
     return false
 end
@@ -866,7 +880,13 @@ local function Draw_GUI()
             if status:find("Idle") then
                 ImGui.TextColored(ImVec4(0, 1, 1, 1), status)
             elseif status:find("Paused") then
-                ImGui.TextColored(ImVec4(0.9, 0.4, 0.4, 1), status)
+                if status:find("Mana") then
+                    ImGui.TextColored(ImVec4(0.000, 0.438, 0.825, 1.000), status)
+                elseif status:find("Health") then
+                    ImGui.TextColored(ImVec4(0.928, 0.352, 0.035, 1.000), status)
+                else
+                    ImGui.TextColored(ImVec4(0.9, 0.4, 0.4, 1), status)
+                end
             elseif status:find("Last WP is less than") then
                 ImGui.TextColored(ImVec4(0.9, 0.4, 0.4, 1), status)
             elseif status:find("Recording") then
@@ -1439,7 +1459,13 @@ local function Draw_GUI()
             elseif status:find("Paused") then
                 ImGui.Text("Status: ")
                 ImGui.SameLine()
-                ImGui.TextColored(ImVec4(0.9, 0.4, 0.4, 1), status)
+                if status:find("Mana") then
+                    ImGui.TextColored(ImVec4(0.000, 0.438, 0.825, 1.000), status)
+                elseif status:find("Health") then
+                    ImGui.TextColored(ImVec4(0.928, 0.352, 0.035, 1.000), status)
+                else
+                    ImGui.TextColored(ImVec4(0.9, 0.4, 0.4, 1), status)
+                end
             elseif status:find("Arrived") then
                 ImGui.Text("Status: ")
                 ImGui.SameLine()
