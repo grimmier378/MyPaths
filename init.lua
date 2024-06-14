@@ -36,6 +36,7 @@ local pauseStart = 0
 local previousDoNav = false
 local zoningHideGUI = false
 local interruptFound = false
+local openDoor = false
 local ZoningPause
 local interruptDelay = 2
 local lastRecordedWP = ''
@@ -142,6 +143,14 @@ local function loadPaths()
                 end
                 if wData.cmd == nil then
                     wData.cmd = ''
+                    needsUpdate = true
+                end
+                if wData.door == nil then
+                    wData.door = false
+                    needsUpdate = true
+                end
+                if wData.doorRev == nil then
+                    wData.doorRev = false
                     needsUpdate = true
                 end
             end
@@ -499,6 +508,12 @@ end
 
 --------- Navigation Functions --------
 
+local function ToggleSwitches()
+    mq.cmdf("/squelch /multiline ; /doortarget; /timed 10, /click left door")
+    mq.delay(500)
+    openDoor = not openDoor
+end
+
 local function FindIndexClosestWaypoint(table)
     local tmp = table
     local closest = 999999
@@ -598,7 +613,13 @@ local function NavigatePath(name)
             end
             mq.cmdf("/squelch /nav stop")
             -- status = "Arrived at WP #: "..tmp[i].step
-            
+            if tmp[i].door and not doReverse then
+                openDoor = true
+                ToggleSwitches()
+            elseif tmp[i].doorRev and doReverse then
+                openDoor = true
+                ToggleSwitches()
+            end
             if doSingle then
                 doNav = false
                 doSingle = false
@@ -1047,11 +1068,12 @@ local function Draw_GUI()
                         -- Waypoint Table
                         if selectedPath ~= 'None' then
 
-                            if ImGui.BeginTable('PathTable', 5, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), -1, -1) then
+                            if ImGui.BeginTable('PathTable', 6, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), -1, -1) then
                                 ImGui.TableSetupColumn('WP#', ImGuiTableColumnFlags.WidthFixed, -1)
                                 ImGui.TableSetupColumn('Loc', ImGuiTableColumnFlags.WidthFixed, -1)
                                 ImGui.TableSetupColumn('Delay', ImGuiTableColumnFlags.WidthFixed, -1)
                                 ImGui.TableSetupColumn('Actions', ImGuiTableColumnFlags.WidthFixed, -1)
+                                ImGui.TableSetupColumn('Door', ImGuiTableColumnFlags.WidthFixed, -1)
                                 ImGui.TableSetupColumn('Move', ImGuiTableColumnFlags.WidthFixed, -1)
                                 ImGui.TableSetupScrollFreeze(0, 1)
                                 ImGui.TableHeadersRow()
@@ -1103,6 +1125,9 @@ local function Draw_GUI()
                                             end
                                         end
                                     end
+                                    if ImGui.IsItemHovered() then
+                                        ImGui.SetTooltip("Delay in Seconds")
+                                    end
                                     ImGui.TableSetColumnIndex(3)
                                     ImGui.SetNextItemWidth(-1)
                                     tmpTable[i].cmd, changedCmd = ImGui.InputText("##cmd_" .. i, tmpTable[i].cmd)
@@ -1114,13 +1139,42 @@ local function Draw_GUI()
                                             end
                                         end
                                     end
+                                    if ImGui.IsItemHovered() then
+                                        ImGui.SetTooltip("Command")
+                                    end
                                     ImGui.TableSetColumnIndex(4)
+                                    tmpTable[i].door, changedDoor = ImGui.Checkbox(Icon.FA_FORWARD.."##door_" .. i, tmpTable[i].door)
+                                    if changedDoor then
+                                        for k, v in pairs(Paths[currZone][selectedPath]) do
+                                            if v.step == tmpTable[i].step then
+                                                Paths[currZone][selectedPath][k].door = tmpTable[i].door
+                                                SavePaths()
+                                            end
+                                        end
+                                    end
+                                    if ImGui.IsItemHovered() then
+                                        ImGui.SetTooltip("Door Forward")
+                                    end
+                                    ImGui.SameLine(0,0)
+                                    tmpTable[i].doorRev, changedDoorRev = ImGui.Checkbox(Icon.FA_BACKWARD.."##doorRev_" .. i, tmpTable[i].doorRev)
+                                    if changedDoorRev then
+                                        for k, v in pairs(Paths[currZone][selectedPath]) do
+                                            if v.step == tmpTable[i].step then
+                                                Paths[currZone][selectedPath][k].doorRev = tmpTable[i].doorRev
+                                                SavePaths()
+                                            end
+                                        end
+                                    end
+                                    if ImGui.IsItemHovered() then
+                                        ImGui.SetTooltip("Door Reverse")
+                                    end
+                                    ImGui.TableSetColumnIndex(5)
                                     if not doNav then
                                         if ImGui.Button(Icon.FA_TRASH .. "##_" .. i) then
                                             deleteWP = true
                                             deleteWPStep = tmpTable[i].step
                                         end
-                                        if ImGui.IsAnyItemHovered() then
+                                        if ImGui.IsItemHovered() then
                                             ImGui.SetTooltip("Delete WP")
                                         end
                                         -- if not doReverse then
@@ -1130,7 +1184,7 @@ local function Draw_GUI()
                                             Paths[currZone][selectedPath][tmpTable[i].step].loc = mq.TLO.Me.LocYXZ()
                                             SavePaths()
                                         end
-                                        if ImGui.IsAnyItemHovered() then
+                                        if ImGui.IsItemHovered() then
                                             ImGui.SetTooltip("Update Loc")
                                         end
                                     -- end
