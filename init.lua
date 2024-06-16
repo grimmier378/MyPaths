@@ -384,14 +384,18 @@ end
 
 local function groupWatch(type)
     if type == 'None' then return false end
+    local myClass = mq.TLO.Me.Class.ShortName()
     if type == "Self" then
         if mq.TLO.Me.PctHPs() < settings[script].WatchHealth then
             mq.TLO.Me.Sit()
             return true
         end
-        if mq.TLO.Me.PctMana() < settings[script].WatchMana then
-            mq.TLO.Me.Sit()
-            return true
+        for x = 1 , #manaClass do
+            if manaClass[x] == myClass and mq.TLO.Me.PctMana() < settings[script].WatchMana then
+                mq.TLO.Me.Sit()
+                status = string.format('Paused for Mana Watch.')
+                return true
+            end
         end
     elseif mq.TLO.Me.GroupSize() > 0 then
         local member = mq.TLO.Group.Member
@@ -399,17 +403,31 @@ local function groupWatch(type)
         
             if type == 'Healer' then
                 for i = 1, gsize- 1 do
-                    local class = member(i).Class.ShortName()
-                    local myClass = mq.TLO.Me.Class.ShortName()
-                    if class == 'CLR' or class == 'DRU' or class == 'SHM' or myClass == 'CLR' or myClass == 'DRU' or myClass == 'SHM'then
-                        if member(i).PctHPs() < settings[script].WatchHealth then
-                            status = string.format('Paused for Healer Health.')
-                            return true
+                    if member(i).Present() then
+                        local class = member(i).Class.ShortName()
+                        
+                        if class == 'CLR' or class == 'DRU' or class == 'SHM' then
+                            if member(i).PctHPs() < settings[script].WatchHealth then
+                                status = string.format('Paused for Healer Health.')
+                                return true
+                            end
+                            if member(i).PctMana() < settings[script].WatchMana then
+                                status = string.format('Paused for Healer Mana.')
+                                return true
+                            end
                         end
-                        if member(i).PctMana() < settings[script].WatchMana then
-                            status = string.format('Paused for Healer Mana.')
-                            return true
-                        end
+                    end
+                end
+                if myClass == 'CLR' or myClass == 'DRU' or myClass == 'SHM' then
+                    if mq.TLO.Me.PctHPs() < settings[script].WatchHealth then
+                        status = string.format('Paused for Health Watch.')
+                        mq.TLO.Me.Sit()
+                        return true
+                    end
+                    if manaClass[myClass] and mq.TLO.Me.PctMana() < settings[script].WatchMana then
+                        mq.TLO.Me.Sit()
+                        status = string.format('Paused for Mana Watch.')
+                        return true
                     end
                 end
             end
@@ -434,10 +452,12 @@ local function groupWatch(type)
                         mq.TLO.Me.Sit()
                         return true
                     end
-                    if mq.TLO.Me.PctMana() < settings[script].WatchMana then
-                        mq.TLO.Me.Sit()
-                        status = string.format('Paused for Mana Watch.')
-                        return true
+                    for x = 1 , #manaClass do
+                        if manaClass[x] == myClass and mq.TLO.Me.PctMana() < settings[script].WatchMana then
+                            mq.TLO.Me.Sit()
+                            status = string.format('Paused for Mana Watch.')
+                            return true
+                        end
                     end
                 end
             end
