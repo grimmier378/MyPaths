@@ -37,6 +37,7 @@ local previousDoNav = false
 local zoningHideGUI = false
 local interruptFound = false
 local openDoor = false
+local pausedGM = false
 local ZoningPause
 local interruptDelay = 2
 local lastRecordedWP = ''
@@ -240,6 +241,11 @@ local function loadSettings()
         newSetting = true
     end
 
+    if settings[script].MouseHUD == nil then
+        settings[script].MouseHUD = hudMouse
+        newSetting = true
+    end
+
     if settings[script].AutoSize == nil then
         settings[script].AutoSize = aSize
         newSetting = true
@@ -268,6 +274,7 @@ local function loadSettings()
     stopDist = settings[script].StopDistance
     wpPause = settings[script].PauseStops
     aSize = settings[script].AutoSize
+    hudMouse = settings[script].MouseHUD
     recordMinDist = settings[script].RecordMinDist
     interrupts.stopForGM = settings[script].stopForGM
     locked = settings[script].locked
@@ -512,8 +519,9 @@ end
 
 local function ToggleSwitches()
     mq.cmdf("/squelch /multiline ; /doortarget; /timed 10, /click left door")
-    mq.delay(500)
+    mq.delay(750)
     openDoor = not openDoor
+    mq.cmd("/doortarget clear")
 end
 
 local function FindIndexClosestWaypoint(table)
@@ -631,6 +639,14 @@ local function NavigatePath(name)
                 mq.delay(1)
                 coroutine.yield()
             end
+            -- Door Check
+            if tmp[i].door and not doReverse then
+                openDoor = true
+                ToggleSwitches()
+            elseif tmp[i].doorRev and doReverse then
+                openDoor = true
+                ToggleSwitches()
+            end
             -- Check for Delay at Waypoint
             if tmp[i].delay > 0 then
                 status = string.format("Paused %s seconds at WP #: %s", tmp[i].delay, tmp[i].step)
@@ -650,14 +666,7 @@ local function NavigatePath(name)
                     pauseStart = 0
                 end
             end
-            -- Door Check
-            if tmp[i].door and not doReverse then
-                openDoor = true
-                ToggleSwitches()
-            elseif tmp[i].doorRev and doReverse then
-                openDoor = true
-                ToggleSwitches()
-            end
+
         end
         -- Check if we need to loop
         if not doLoop then
@@ -868,6 +877,12 @@ local function Draw_GUI()
                 end
                 ImGui.EndMenuBar()
             end
+            if pausedGM then
+                if mq.TLO.SpawnCount('gm')() > 0 then
+                ImGui.TextColored(1,0,0,1,"!!%s GM in Zone %s!!", Icon.FA_BELL,Icon.FA_BELL)
+                end
+            end
+            if not showHUD then
             -- Main Window Content 
             ImGui.Text("Current Zone: ")
             ImGui.SameLine()
@@ -889,16 +904,27 @@ local function Draw_GUI()
                 ImGui.TextColored(0,1,1,1,"%.2f", mq.TLO.Math.Distance(string.format("%s:%s", tmpTable[currentStepIndex].loc:gsub(",", " "), mq.TLO.Me.LocYXZ()))())
             end
             ImGui.Separator()
-
-            if doNav then
-                ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1.0, 0.4, 0.4, 0.4))
-                if ImGui.Button('Stop') then
-                    doNav = false
-                    mq.cmdf("/squelch /nav stop")
+        end
+            if selectedPath ~= 'None' then
+                if doNav then
+                    ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1.0, 0.4, 0.4, 0.4))
+                    if ImGui.Button('Stop') then
+                        doNav = false
+                        mq.cmdf("/squelch /nav stop")
+                    end
+                    ImGui.PopStyleColor()
+                    ImGui.SameLine()
+                else
+                    ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
+                    if ImGui.Button('Start') then
+                        pausedGM = false
+                        doNav = true
+                    end
+                    ImGui.PopStyleColor()
+                    ImGui.SameLine()
                 end
-                ImGui.PopStyleColor()
-                ImGui.SameLine()
             end
+        
             ImGui.Text("Status: ")
                 
             ImGui.SameLine()
@@ -928,6 +954,7 @@ local function Draw_GUI()
                     ImGui.TextColored(ImVec4(1,1,0,1), tmpStatus)
                 end
             end
+
 
             ImGui.Separator()
             if ImGui.BeginTabBar('MainTabBar') then
@@ -1016,6 +1043,7 @@ local function Draw_GUI()
                                 ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1.0, 0.4, 0.4))
                             end
                             if ImGui.Button(tmpLabel) then
+                                pausedGM = false
                                 doNav = not doNav
                                 if not doNav then
                                     mq.cmdf("/squelch /nav stop")
@@ -1026,6 +1054,7 @@ local function Draw_GUI()
                             if ImGui.Button("Start at Closest") then
                                 currentStepIndex = closestWaypointIndex
                                 doNav = true
+                                pausedGM = false
                             end
                             ImGui.SetNextItemWidth(100)
                             stopDist = ImGui.InputInt("Stop Distance##"..script, stopDist, 1, 50)
@@ -1086,11 +1115,29 @@ local function Draw_GUI()
                                 for i = 1, #tmpTable do
                                     ImGui.TableNextRow()
                                     ImGui.TableSetColumnIndex(0)
-                                    ImGui.Text("%s", tmpTable[i].step)
+                                    if tmpTable[i].step == tmpTable[currentStepIndex].step then
+                                        ImGui.TextColored(ImVec4(0, 1, 0, 1),"%s", tmpTable[i].step)
+                                        if ImGui.IsItemHovered() then
+                                            ImGui.SetTooltip("Current Waypoint")
+                                        end
+                                    else
+                                        ImGui.Text("%s", tmpTable[i].step)
+                                    end
+                                    
                                     if i == closestWaypointIndex then
                                         ImGui.SameLine()
                                         ImGui.TextColored(ImVec4(1, 1, 0, 1), Icon.MD_STAR)
+                                        if ImGui.IsItemHovered() then
+                                            ImGui.SetTooltip("Closest Waypoint")
+                                        end
                                     end
+                                    -- if tmpTable[i].step == tmpTable[currentStepIndex].step then
+                                    --     ImGui.SameLine()
+                                    --     ImGui.TextColored(ImVec4(0, 1, 1, 1), Icon.MD_STAR)
+                                    --     if ImGui.IsItemHovered() then
+                                    --         ImGui.SetTooltip("Current Waypoint")
+                                    --     end
+                                    -- end
                                     ImGui.TableSetColumnIndex(1)
                                     ImGui.Text(tmpTable[i].loc)
                                     if not doNav then
@@ -1186,7 +1233,13 @@ local function Draw_GUI()
                                         ImGui.SameLine(0,0)
                                         if ImGui.Button(Icon.MD_UPDATE..'##Update_'..i) then
                                             tmpTable[i].loc = mq.TLO.Me.LocYXZ()
-                                            Paths[currZone][selectedPath][tmpTable[i].step].loc = mq.TLO.Me.LocYXZ()
+                                            -- Update Paths table
+                                            for k, v in pairs(Paths[currZone][selectedPath]) do
+                                                if v.step == tmpTable[i].step then
+                                                    Paths[currZone][selectedPath][k] = tmpTable[i]
+                                                end
+                                            end
+                                            -- Paths[currZone][selectedPath][tmpTable[i].step].loc = mq.TLO.Me.LocYXZ()
                                             SavePaths()
                                         end
                                         if ImGui.IsItemHovered() then
@@ -1339,6 +1392,7 @@ local function Draw_GUI()
                 -- HUD Transparency --
                 ImGui.SetNextItemWidth(100)
                 hudTransparency = ImGui.SliderFloat("HUD Transparency##"..script, hudTransparency, 0.0, 1)
+                
                 hudMouse = ImGui.Checkbox("On Mouseover##"..script, hudMouse)
                 if ImGui.CollapsingHeader("Interrupt Settings##"..script) then
                 -- Set Interrupts we will stop for
@@ -1444,6 +1498,7 @@ local function Draw_GUI()
                     settings[script].LoadTheme = themeName
                     settings[script].locked = locked
                     settings[script].AutoSize = aSize
+                    settings[script].MouseHUD = hudMouse
                     settings[script].RecordDelay = recordDelay
                     settings[script].StopForGM = interrupts.stopForGM
                     settings[script].StopDistance = stopDist
@@ -1460,6 +1515,7 @@ local function Draw_GUI()
 
     if showHUD then
         if mq.TLO.Me.Zoning() then return end
+        
         if transFlag and hudMouse then
             ImGui.PushStyleColor(ImGuiCol.WindowBg, ImVec4(0.0, 0.0, 0.0, hudTransparency))
         elseif not hudMouse then
@@ -1482,6 +1538,11 @@ local function Draw_GUI()
             else
                 transFlag = false
             end
+            if pausedGM then
+                if mq.TLO.SpawnCount('gm')() > 0 then
+                ImGui.TextColored(1,0,0,1,"!!%s GM in Zone %s!!", Icon.FA_BELL,Icon.FA_BELL)
+                end
+            end
             ImGui.Text("Current Zone: ")
             ImGui.SameLine()
             ImGui.TextColored(0,1,0,1,"%s", currZone)
@@ -1493,10 +1554,13 @@ local function Draw_GUI()
             ImGui.SameLine()
             ImGui.TextColored(1,1,0,1,"%s", mq.TLO.Me.LocYXZ())
             if doNav then
-                ImGui.Text("Distance to Waypoint: ")
-                ImGui.SameLine()
-    
                 local tmpTable = sortPathsTable(currZone, selectedPath) or {}
+                ImGui.Text("Current WP: ")
+                ImGui.SameLine()
+                ImGui.TextColored(1,1,0,1,"%s ",tmpTable[currentStepIndex].step or 0)
+                ImGui.SameLine()
+                ImGui.Text("Distance: ")
+                ImGui.SameLine()
                 ImGui.TextColored(0,1,1,1,"%.2f", mq.TLO.Math.Distance(string.format("%s:%s", tmpTable[currentStepIndex].loc:gsub(",", " "), mq.TLO.Me.LocYXZ()))())
             end
 
@@ -1749,13 +1813,14 @@ local function Loop()
             printf("\ay[\at%s\ax] \agZone Changed Last: \at%s Current: \ay%s", script, lastZone, currZone)
         end
 
-        if mq.TLO.SpawnCount('gm')() > 0 and interrupts.stopForGM then
+        if mq.TLO.SpawnCount('gm')() > 0 and interrupts.stopForGM and not pausedGM then
             printf("\ay[\at%s\ax] \arGM Detected, \ayPausing Navigation...", script)
             doNav = false
             mq.cmdf("/squelch /nav stop")
             mq.cmd("/multiline ; /squelch /beep; /timed  3, /beep ; /timed 2, /beep ; /timed 1, /beep")
             mq.delay(1)
             status = 'Paused: GM Detected'
+            pausedGM = true
         end
 
         if zoningHideGUI then
