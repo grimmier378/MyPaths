@@ -24,7 +24,8 @@ local selectedPath = 'None'
 local newPath = ''
 local curTime = os.time()
 local lastTime = curTime
-local autoRecord, doNav, doSingle, doLoop, doReverse, doPingPong = false, false, false, false, false, false
+local controls = {}
+controls.autoRecord, controls.doNav, controls.doSingle, controls.doLoop, controls.doReverse, controls.doPingPong = false, false, false, false, false, false
 local recordDelay, stopDist, wpPause = 5, 30, 1
 local currentStepIndex, loopCount = 1, 0
 local deleteWP, deleteWPStep = false, 0
@@ -35,15 +36,27 @@ local lastHP, lastMP, pauseTime = 0, 0, 0
 local pauseStart = 0
 local previousDoNav = false
 local zoningHideGUI = false
-local interruptFound = false
-local openDoor = false
 local pausedGM = false
 local ZoningPause
 local interruptDelay = 2
 local lastRecordedWP = ''
 local recordMinDist = 25
-local reported = false
-local interrupts = {stopForAll = true, stopForGM = true, stopForSitting = true, stopForCombat = true, stopForXtar = true, stopForFear = true, stopForCharm = true, stopForMez = true, stopForRoot = true, stopForLoot = true}
+
+local PathStartClock,PathStartTime = nil, nil
+local interrupts = {
+interruptFound = false,
+reported = false,
+openDoor = false,
+stopForAll = true,
+stopForGM = true,
+stopForSitting = true,
+stopForCombat = true,
+stopForXtar = true,
+stopForFear = true,
+stopForCharm = true,
+stopForMez = true,
+stopForRoot = true,
+stopForLoot = true}
 
 -- GUI Settings
 local winFlags = bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.MenuBar)
@@ -300,11 +313,11 @@ local function RecordWaypoint(name)
     local distToLast = 0
     if lastRecordedWP ~= loc and lastRecordedWP ~= '' then
         distToLast = mq.TLO.Math.Distance(string.format("%s:%s", lastRecordedWP, loc))()
-        if distToLast < recordMinDist and autoRecord then
+        if distToLast < recordMinDist and controls.autoRecord then
             status = "Recording: Distance to Last WP is less than "..recordMinDist.."!"
-            if DEBUG and not reported then
+            if DEBUG and not interrupts.reported then
                 table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = zone, Path = name, WP = 'Record WP', Status = 'Distance to Last WP is less than '..recordMinDist..' units!'})
-                reported = true
+                interrupts.reported = true
             end
             return
         end
@@ -314,15 +327,15 @@ local function RecordWaypoint(name)
         table.insert(tmp, {step = index + 1, loc = loc, delay = 0, cmd = ''})
         lastRecordedWP = loc
         index = index + 1
-        reported = false
+        interrupts.reported = false
     else
         table.insert(tmp, {step = 1, loc = loc, delay = 0, cmd = ''})
         index = 1
         lastRecordedWP = loc
-        reported = false
+        interrupts.reported = false
     end
     Paths[zone][name] = tmp
-    if autoRecord then
+    if controls.autoRecord then
         status = "Recording: Waypoint #"..index.." Added!"
     end
     if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = zone, Path = name, WP = "Add WP#"..index, Status = 'Waypoint #'..index..' Added Successfully!'}) end
@@ -468,7 +481,7 @@ end
 
 local interruptInProcess = false
 local function CheckInterrupts()
-    if not doNav then return false end
+    if not controls.doNav then return false end
     local xCount = mq.TLO.Me.XTarget() or 0
     local flag = false
     if mq.TLO.Window('LootWnd').Open() and interrupts.stopForLoot then
@@ -540,7 +553,7 @@ end
 local function ToggleSwitches()
     mq.cmdf("/squelch /multiline ; /doortarget; /timed 10, /click left door")
     mq.delay(750)
-    openDoor = not openDoor
+    interrupts.openDoor = not interrupts.openDoor
     mq.cmd("/doortarget clear")
 end
 
@@ -569,14 +582,14 @@ local function sortPathsTable(zone, path)
         table.insert(tmp, data)
     end
     
-    if doReverse then
+    if controls.doReverse then
         table.sort(tmp, function(a, b) return a.step > b.step end)
     else table.sort(tmp, function(a, b) return a.step < b.step end) end
     return tmp
 end
 
 local function NavigatePath(name)
-    if not doNav then
+    if not controls.doNav then
         return
     end
     local zone = mq.TLO.Zone.ShortName()
@@ -584,21 +597,21 @@ local function NavigatePath(name)
     if currentStepIndex ~= 1 then
         startNum = currentStepIndex
     end
-    if doSingle then doNav = true end
-    if doLoop then
+    if controls.doSingle then controls.doNav = true end
+    if controls.doLoop then
         table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = zone, Path = name, WP = 'Loop Started', Status = 'Loop Started!'})
     end
-    while doNav do
+    while controls.doNav do
         local tmp = sortPathsTable(zone, name)
         if tmp == nil then
-            doNav = false
+            controls.doNav = false
             status = 'Idle'
             return
         end
         for i = startNum , #tmp do
-            if doSingle then i = currentStepIndex end
+            if controls.doSingle then i = currentStepIndex end
             currentStepIndex = i
-            if not doNav then
+            if not controls.doNav then
                 return
             end
             local tmpLoc = string.format("%s:%s", tmp[i].loc, mq.TLO.Me.LocYXZ())
@@ -611,12 +624,12 @@ local function NavigatePath(name)
             -- mq.delay(3000, function () return mq.TLO.Me.Speed() > 0 end)
             -- coroutine.yield()  -- Yield here to allow updates
             while mq.TLO.Math.Distance(tmpLoc)() > stopDist do
-                if not doNav then
+                if not controls.doNav then
                     return
                 end
                 if currZone ~= lastZone then
                     selectedPath = 'None'
-                    doNav = false
+                    controls.doNav = false
                     pauseTime = 0
                     pauseStart = 0
 
@@ -644,9 +657,9 @@ local function NavigatePath(name)
             mq.cmdf("/squelch /nav stop")
             -- status = "Arrived at WP #: "..tmp[i].step
 
-            if doSingle then
-                doNav = false
-                doSingle = false
+            if controls.doSingle then
+                controls.doNav = false
+                controls.doSingle = false
                 status = 'Idle - Arrived at Destination!'
                 loopCount = 0
                 return
@@ -654,17 +667,17 @@ local function NavigatePath(name)
             -- Check for Commands to execute at Waypoint
             if tmp[i].cmd ~= '' then
                 table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = zone, Path = name, WP = 'Command', Status = 'Executing Command: '..tmp[i].cmd})
-                if tmp[i].cmd:find("/mypaths stop") then doNav = false end
+                if tmp[i].cmd:find("/mypaths stop") then controls.doNav = false end
                 mq.cmdf(tmp[i].cmd)
                 mq.delay(1)
                 coroutine.yield()
             end
             -- Door Check
-            if tmp[i].door and not doReverse then
-                openDoor = true
+            if tmp[i].door and not controls.doReverse then
+                interrupts.openDoor = true
                 ToggleSwitches()
-            elseif tmp[i].doorRev and doReverse then
-                openDoor = true
+            elseif tmp[i].doorRev and controls.doReverse then
+                interrupts.openDoor = true
                 ToggleSwitches()
             end
             -- Check for Delay at Waypoint
@@ -681,7 +694,7 @@ local function NavigatePath(name)
                 coroutine.yield()
                 -- coroutine.yield()  -- Yield here to allow updates
             else
-                if not interruptFound then
+                if not interrupts.interruptFound then
                     pauseTime = 0
                     pauseStart = 0
                 end
@@ -689,8 +702,8 @@ local function NavigatePath(name)
 
         end
         -- Check if we need to loop
-        if not doLoop then
-            doNav = false
+        if not controls.doLoop then
+            controls.doNav = false
             status = 'Idle - Arrived at Destination!'
             loopCount = 0
             break
@@ -699,8 +712,8 @@ local function NavigatePath(name)
             table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = zone, Path = name, WP = 'Loop #'..loopCount, Status = 'Loop #'..loopCount..' Completed!'})
             currentStepIndex = 1
             startNum = 1
-            if doPingPong then
-                doReverse = not doReverse
+            if controls.doPingPong then
+                controls.doReverse = not controls.doReverse
             end
         end
     end
@@ -714,7 +727,7 @@ function ZoningPause()
     table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = 'Zoning', Path = "Zoning", WP = 'Zoning', Status = 'Zoning'})
     mq.delay(1)
     while mq.TLO.Me.Zoning() == true do
-        doNav = false
+        controls.doNav = false
         if coroutine.status(co) ~= "dead" then
             local success, message = coroutine.close(co)
             if not success then
@@ -915,7 +928,7 @@ local function Draw_GUI()
             ImGui.Text("Current Loc: ")
             ImGui.SameLine()
             ImGui.TextColored(1,1,0,1,"%s", mq.TLO.Me.LocYXZ())
-            if doNav then
+            if controls.doNav then
                 ImGui.Text("Current Destination Waypoint: ")
                 ImGui.SameLine()
                 ImGui.TextColored(0,1,0,1,"%s", curWPTxt)
@@ -926,11 +939,12 @@ local function Draw_GUI()
             ImGui.Separator()
         end
             if selectedPath ~= 'None' then
-                if doNav then
+                if controls.doNav then
                     ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1.0, 0.4, 0.4, 0.4))
                     if ImGui.Button('Stop') then
-                        doNav = false
+                        controls.doNav = false
                         mq.cmdf("/squelch /nav stop")
+                        PathStartClock,PathStartTime = nil, nil
                     end
                     ImGui.PopStyleColor()
                     ImGui.SameLine()
@@ -938,7 +952,8 @@ local function Draw_GUI()
                     ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
                     if ImGui.Button('Start') then
                         pausedGM = false
-                        doNav = true
+                        controls.doNav = true
+                        PathStartClock,PathStartTime = os.date("%H:%M:%S %p"), os.time()
                     end
                     ImGui.PopStyleColor()
                     ImGui.SameLine()
@@ -974,8 +989,22 @@ local function Draw_GUI()
                     ImGui.TextColored(ImVec4(1,1,0,1), tmpStatus)
                 end
             end
+            if PathStartClock ~= nil then
+                ImGui.Text("Start Time: ")
+                ImGui.SameLine()
+                ImGui.TextColored(0,1,1,1,"%s", PathStartClock)
+                ImGui.SameLine()
+                ImGui.Text("Elapsed : ")
+                ImGui.SameLine()
+                local timeDiff = os.time() - PathStartTime
+                local hours = math.floor(timeDiff / 3600)
+                local minutes = math.floor((timeDiff % 3600) / 60)
+                local seconds = timeDiff % 60
+    
+                ImGui.TextColored(0, 1, 0, 1, string.format("%02d:%02d:%02d", hours, minutes, seconds))
+    
 
-
+            end
             ImGui.Separator()
             if ImGui.BeginTabBar('MainTabBar') then
                 if ImGui.BeginTabItem('Controls') then
@@ -1045,36 +1074,40 @@ local function Draw_GUI()
                         -- Navigation Controls
 
                         if ImGui.CollapsingHeader("Navigation##") then
-                            if not doNav then doReverse = ImGui.Checkbox('Reverse Order', doReverse) ImGui.SameLine() end
+                            if not controls.doNav then controls.doReverse = ImGui.Checkbox('Reverse Order', controls.doReverse) ImGui.SameLine() end
                             
-                            doLoop = ImGui.Checkbox('Loop Path', doLoop)
+                            controls.doLoop = ImGui.Checkbox('Loop Path', controls.doLoop)
                             ImGui.SameLine()
-                            doPingPong = ImGui.Checkbox('Ping Pong', doPingPong)
-                            if doPingPong then
-                                doLoop = true
+                            controls.doPingPong = ImGui.Checkbox('Ping Pong', controls.doPingPong)
+                            if controls.doPingPong then
+                                controls.doLoop = true
                             end
                             ImGui.Separator()
                             if not Paths[currZone] then Paths[currZone] = {} end
 
-                            local tmpLabel = doNav and 'Stop Navigation' or 'Start Navigation'
-                            if doNav then
+                            local tmpLabel = controls.doNav and 'Stop Navigation' or 'Start Navigation'
+                            if controls.doNav then
                                 ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1.0, 0.4, 0.4, 0.4))
                             else
                                 ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1.0, 0.4, 0.4))
                             end
                             if ImGui.Button(tmpLabel) then
                                 pausedGM = false
-                                doNav = not doNav
-                                if not doNav then
+                                controls.doNav = not controls.doNav
+                                if not controls.doNav then
                                     mq.cmdf("/squelch /nav stop")
+                                    PathStartClock,PathStartTime = nil, nil
+                                else
+                                    PathStartClock,PathStartTime = os.date("%H:%M:%S %p"), os.time()
                                 end
                             end
                             ImGui.PopStyleColor()
                             ImGui.SameLine()
                             if ImGui.Button("Start at Closest") then
                                 currentStepIndex = closestWaypointIndex
-                                doNav = true
+                                controls.doNav = true
                                 pausedGM = false
+                                PathStartClock, PathStartTime = os.date("%H:%M:%S %p"), os.time()
                             end
                             ImGui.SetNextItemWidth(100)
                             stopDist = ImGui.InputInt("Stop Distance##"..script, stopDist, 1, 50)
@@ -1097,15 +1130,15 @@ local function Draw_GUI()
                                 ClearWaypoints(selectedPath)
                             end
                             
-                            local label = autoRecord and 'Stop Recording' or 'Start Recording'
-                            if autoRecord then
+                            local label = controls.autoRecord and 'Stop Recording' or 'Start Recording'
+                            if controls.autoRecord then
                                 ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1.0, 0.4, 0.4, 0.4))
                             else
                                 ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1.0, 0.4, 0.4))
                             end
                             if ImGui.Button(label) then
-                                autoRecord = not autoRecord
-                                if autoRecord then 
+                                controls.autoRecord = not controls.autoRecord
+                                if controls.autoRecord then 
                                     if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = mq.TLO.Zone.ShortName(), Path = selectedPath, WP = 'Start Recording', Status = 'Start Recording Waypoints!'}) end
                                 else
                                     if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = mq.TLO.Zone.ShortName(), Path = selectedPath, WP = 'Stop Recording', Status = 'Stop Recording Waypoints!'}) end
@@ -1160,27 +1193,30 @@ local function Draw_GUI()
                                     -- end
                                     ImGui.TableSetColumnIndex(1)
                                     ImGui.Text(tmpTable[i].loc)
-                                    if not doNav then
+                                    if not controls.doNav then
                                         if ImGui.BeginPopupContextItem("WP_" .. tmpTable[i].step) then
                                             
                                             if ImGui.MenuItem('Nav to WP ' .. tmpTable[i].step) then
                                                 currentStepIndex = i
-                                                doNav = true
-                                                doLoop = false
-                                                doSingle = true
+                                                controls.doNav = true
+                                                controls.doLoop = false
+                                                controls.doSingle = true
+                                                PathStartClock, PathStartTime = os.date("%H:%M:%S %p"), os.time()
                                             end
                                             
                                             if ImGui.MenuItem('Start Path Here: WP ' .. tmpTable[i].step) then
                                                 currentStepIndex = i
-                                                doNav = true
-                                                doLoop = false
-                                                doSingle = false
+                                                controls.doNav = true
+                                                controls.doLoop = false
+                                                controls.doSingle = false
+                                                PathStartClock, PathStartTime = os.date("%H:%M:%S %p"), os.time()
                                             end
                                             if ImGui.MenuItem('Start Loop Here: WP ' .. tmpTable[i].step) then
                                                 currentStepIndex = i
-                                                doNav = true
-                                                doLoop = true
-                                                doSingle = false
+                                                controls.doNav = true
+                                                controls.doLoop = true
+                                                controls.doSingle = false
+                                                PathStartClock, PathStartTime = os.date("%H:%M:%S %p"), os.time()
                                             end
                                         
                                             ImGui.EndPopup()
@@ -1241,7 +1277,7 @@ local function Draw_GUI()
                                         ImGui.SetTooltip("Door Reverse")
                                     end
                                     ImGui.TableSetColumnIndex(5)
-                                    if not doNav then
+                                    if not controls.doNav then
                                         if ImGui.Button(Icon.FA_TRASH .. "##_" .. i) then
                                             deleteWP = true
                                             deleteWPStep = tmpTable[i].step
@@ -1573,7 +1609,7 @@ local function Draw_GUI()
             ImGui.Text("Current Loc: ")
             ImGui.SameLine()
             ImGui.TextColored(1,1,0,1,"%s", mq.TLO.Me.LocYXZ())
-            if doNav then
+            if controls.doNav then
                 local tmpTable = sortPathsTable(currZone, selectedPath) or {}
                 ImGui.Text("Current WP: ")
                 ImGui.SameLine()
@@ -1586,16 +1622,16 @@ local function Draw_GUI()
 
             ImGui.Text("Nav Type: ")
             ImGui.SameLine()
-            if not doNav then
+            if not controls.doNav then
                 ImGui.TextColored(ImVec4(0, 1, 0, 1), "None")
             else
-                if doPingPong then
+                if controls.doPingPong then
                     ImGui.TextColored(ImVec4(0, 1, 0, 1), "Ping Pong")
-                elseif doLoop then
+                elseif controls.doLoop then
                     ImGui.TextColored(ImVec4(0, 1, 0, 1), "Loop ")
                     ImGui.SameLine()
                     ImGui.TextColored(ImVec4(0, 1, 1, 1), "(%s)", loopCount)
-                elseif doSingle then
+                elseif controls.doSingle then
                     ImGui.TextColored(ImVec4(0, 1, 0, 1), "Single")
                 else 
                     ImGui.TextColored(ImVec4(0, 1, 0, 1), "Normal")
@@ -1603,7 +1639,7 @@ local function Draw_GUI()
                 ImGui.SameLine()
                 ImGui.Text("Reverse: ")
                 ImGui.SameLine()
-                if doReverse then
+                if controls.doReverse then
                     ImGui.TextColored(ImVec4(0, 1, 0, 1), "Yes")
                 else
                     ImGui.TextColored(ImVec4(0, 1, 0, 1), "No")
@@ -1635,6 +1671,22 @@ local function Draw_GUI()
                 ImGui.Text("Status: ")
                 ImGui.SameLine()
                 ImGui.TextColored(ImVec4(1,1,0,1), status)
+            end
+            if PathStartClock ~= nil then
+                ImGui.Text("Start Time: ")
+                ImGui.SameLine()
+                ImGui.TextColored(0,1,1,1,"%s", PathStartClock)
+                ImGui.SameLine()
+                ImGui.Text("Elapsed : ")
+                ImGui.SameLine()
+                local timeDiff = os.time() - PathStartTime
+                local hours = math.floor(timeDiff / 3600)
+                local minutes = math.floor((timeDiff % 3600) / 60)
+                local seconds = timeDiff % 60
+        
+                ImGui.TextColored(0, 1, 0, 1, string.format("%02d:%02d:%02d", hours, minutes, seconds))
+        
+    
             end
         end
         ImGui.PopStyleColor()
@@ -1685,7 +1737,7 @@ local function bind(...)
 
     if #args == 1 then
         if key == 'stop' then
-            doNav = false
+            controls.doNav = false
             mq.cmdf("/squelch /nav stop")
             selectedPath = 'None'
             loadPaths()
@@ -1702,7 +1754,7 @@ local function bind(...)
             mq.cmd("/squelch /nav stop")
             mq.TLO.Me.Stand()
             mq.delay(1)
-            doNav = false
+            controls.doNav = false
             RUNNING = false
         elseif key == 'list' then
             if Paths[zone] == nil then 
@@ -1724,42 +1776,42 @@ local function bind(...)
         if key == 'go' then
             if action == 'loop' then
                 selectedPath = path
-                doReverse = false
-                doNav = true
-                doLoop = true
+                controls.doReverse = false
+                controls.doNav = true
+                controls.doLoop = true
             end
             if action == 'rloop' then
                 selectedPath = path
-                doReverse = true
-                doNav = true
-                doLoop = true
+                controls.doReverse = true
+                controls.doNav = true
+                controls.doLoop = true
             end
             if action == 'start' then
                 selectedPath = path
-                doReverse = false
-                doNav = true
-                doLoop = false
+                controls.doReverse = false
+                controls.doNav = true
+                controls.doLoop = false
             end
             if action == 'reverse' then
                 selectedPath = path
-                doReverse = true
-                doNav = true
+                controls.doReverse = true
+                controls.doNav = true
             end
             if action == 'pingpong' then
                 selectedPath = path
-                doPingPong = true
-                doNav = true
+                controls.doPingPong = true
+                controls.doNav = true
             end
             if action == 'closest' then
                 selectedPath = path
-                doNav = true
-                doReverse = false
+                controls.doNav = true
+                controls.doReverse = false
                 currentStepIndex = FindIndexClosestWaypoint(Paths[zone][path])
             end
             if action == 'rclosest' then
                 selectedPath = path
-                doNav = true
-                doReverse = true
+                controls.doNav = true
+                controls.doReverse = true
                 currentStepIndex = FindIndexClosestWaypoint(Paths[zone][path])
             end
         end
@@ -1823,10 +1875,10 @@ local function Loop()
         -- if pauseStart > 0 then print("Pause Start: "..pauseStart) end
         if currZone ~= lastZone then
             selectedPath = 'None'
-            doNav = false
+            controls.doNav = false
             lastZone = currZone
             currentStepIndex = 1
-            autoRecord = false
+            controls.autoRecord = false
             pauseTime = 0
             status = 'Idle'
             pauseStart = 0
@@ -1835,7 +1887,7 @@ local function Loop()
 
         if mq.TLO.SpawnCount('gm')() > 0 and interrupts.stopForGM and not pausedGM then
             printf("\ay[\at%s\ax] \arGM Detected, \ayPausing Navigation...", script)
-            doNav = false
+            controls.doNav = false
             mq.cmdf("/squelch /nav stop")
             mq.cmd("/multiline ; /squelch /beep; /timed  3, /beep ; /timed 2, /beep ; /timed 1, /beep")
             mq.delay(1)
@@ -1850,13 +1902,13 @@ local function Loop()
             zoningHideGUI = false
             currentStepIndex = 1
             selectedPath = 'None'
-            doNav = false
+            controls.doNav = false
             table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = mq.TLO.Zone.ShortName(), Path = selectedPath, WP = 1, Status = 'Finished Zoning'})
             mq.delay(1)
             status = 'Idle'
             if currZone ~= lastZone then
                 selectedPath = 'None'
-                doNav = false
+                controls.doNav = false
                 lastZone = currZone
                 pauseTime = 0
                 pauseStart = 0
@@ -1874,14 +1926,14 @@ local function Loop()
             mq.exit()
         end
 
-        if doNav then
+        if controls.doNav then
             mq.delay(5)
-            interruptFound = CheckInterrupts()
+            interrupts.interruptFound = CheckInterrupts()
         end
         
-        if doNav and not interruptFound then
+        if controls.doNav and not interrupts.interruptFound then
 
-            if previousDoNav ~= doNav then
+            if previousDoNav ~= controls.doNav then
                 -- Reset the coroutine since doNav changed from false to true
                 co = coroutine.create(NavigatePath)
             end
@@ -1916,16 +1968,17 @@ local function Loop()
                 -- If the coroutine is dead, create a new one
                 co = coroutine.create(NavigatePath)
             end
-        elseif not doNav and not autoRecord then
+        elseif not controls.doNav and not controls.autoRecord then
             -- Reset state when doNav is false
             currentStepIndex = 1
             status = 'Idle'
+            PathStartClock, PathStartTime = nil, nil
         end
 
         -- Update previousDoNav to the current state
-        previousDoNav = doNav
+        previousDoNav = controls.doNav
 
-        if autoRecord then
+        if controls.autoRecord then
             AutoRecordPath(selectedPath)
         end
 
@@ -1955,7 +2008,7 @@ local function Loop()
         winFlags = locked and bit32.bor(ImGuiWindowFlags.NoMove, ImGuiWindowFlags.MenuBar) or bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.MenuBar)
         winFlags = aSize and bit32.bor(winFlags, ImGuiWindowFlags.AlwaysAutoResize, ImGuiWindowFlags.MenuBar) or winFlags
 
-        mq.delay(10)
+        mq.delay(1)
     end
 end
 
