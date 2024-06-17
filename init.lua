@@ -934,7 +934,9 @@ local function Draw_GUI()
                 ImGui.TextColored(0,1,0,1,"%s", curWPTxt)
                 ImGui.Text("Distance to Waypoint: ")
                 ImGui.SameLine()
-                ImGui.TextColored(0,1,1,1,"%.2f", mq.TLO.Math.Distance(string.format("%s:%s", tmpTable[currentStepIndex].loc:gsub(",", " "), mq.TLO.Me.LocYXZ()))())
+                if tmpTable[currentStepIndex].loc ~= nil then
+                    ImGui.TextColored(0,1,1,1,"%.2f", mq.TLO.Math.Distance(string.format("%s:%s", tmpTable[currentStepIndex].loc:gsub(",", " "), mq.TLO.Me.LocYXZ()))())
+                end
             end
             ImGui.Separator()
         end
