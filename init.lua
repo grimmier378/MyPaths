@@ -25,7 +25,7 @@ local newPath = ''
 local curTime = os.time()
 local lastTime = curTime
 local controls = {}
-controls.autoRecord, controls.doNav, controls.doSingle, controls.doLoop, controls.doReverse, controls.doPingPong = false, false, false, false, false, false
+controls.autoRecord, controls.doNav, controls.doSingle, controls.doLoop, controls.doReverse, controls.doPingPong, controls.doPause = false, false, false, false, false, false, false
 local recordDelay, stopDist, wpPause = 5, 30, 1
 local currentStepIndex, loopCount = 1, 0
 local deleteWP, deleteWPStep = false, 0
@@ -960,6 +960,25 @@ local function Draw_GUI()
                     ImGui.PopStyleColor()
                     ImGui.SameLine()
                 end
+                if controls.doPause and controls.doNav then
+                    ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
+                    if ImGui.Button('Resume') then
+                        controls.doPause = false
+                        pausedGM = false
+                        table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = currZone, Path = selectedPath, WP = 'Resume', Status = 'Resumed Navigation!'})
+                    end
+                    ImGui.PopStyleColor()
+                    ImGui.SameLine()
+                elseif not controls.doPause and controls.doNav then
+                    ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1, 0.4, 0.4, 0.4))
+                    if ImGui.Button('Pause') then
+                        controls.doPause = true
+                        mq.cmd("/squelch /nav stop")
+                        table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = currZone, Path = selectedPath, WP = 'Pause', Status = 'Paused Navigation!'})
+                    end
+                    ImGui.PopStyleColor()
+                    ImGui.SameLine()
+                end
             end
         
             ImGui.Text("Status: ")
@@ -1086,7 +1105,27 @@ local function Draw_GUI()
                             end
                             ImGui.Separator()
                             if not Paths[currZone] then Paths[currZone] = {} end
-
+                            if controls.doPause and controls.doNav then
+                                ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
+                                
+                                if ImGui.Button('Resume') then
+                                    controls.doPause = false
+                                    pausedGM = false
+                                    table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = currZone, Path = selectedPath, WP = 'Resume', Status = 'Resumed Navigation!'})
+                                end
+                                ImGui.PopStyleColor()
+                                ImGui.SameLine()
+                            elseif not controls.doPause and controls.doNav then
+                                ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1, 0.4, 0.4, 0.4))
+                                
+                                if ImGui.Button('Pause') then
+                                    controls.doPause = true
+                                    mq.cmd("/squelch /nav stop")
+                                    table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = currZone, Path = selectedPath, WP = 'Pause', Status = 'Paused Navigation!'})
+                                end
+                                ImGui.PopStyleColor()
+                                ImGui.SameLine()
+                            end
                             local tmpLabel = controls.doNav and 'Stop Navigation' or 'Start Navigation'
                             if controls.doNav then
                                 ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1.0, 0.4, 0.4, 0.4))
@@ -1111,6 +1150,7 @@ local function Draw_GUI()
                                 pausedGM = false
                                 PathStartClock, PathStartTime = os.date("%H:%M:%S %p"), os.time()
                             end
+
                             ImGui.SetNextItemWidth(100)
                             stopDist = ImGui.InputInt("Stop Distance##"..script, stopDist, 1, 50)
                             ImGui.SetNextItemWidth(100)
@@ -1928,12 +1968,12 @@ local function Loop()
             mq.exit()
         end
 
-        if controls.doNav then
+        if controls.doNav and not controls.doPause then
             mq.delay(5)
             interrupts.interruptFound = CheckInterrupts()
         end
         
-        if controls.doNav and not interrupts.interruptFound then
+        if controls.doNav and not interrupts.interruptFound and not controls.doPause then
 
             if previousDoNav ~= controls.doNav then
                 -- Reset the coroutine since doNav changed from false to true
