@@ -551,10 +551,9 @@ end
 --------- Navigation Functions --------
 
 local function ToggleSwitches()
-    mq.cmdf("/squelch /multiline ; /doortarget; /timed 10, /click left door")
+    mq.cmdf("/squelch /multiline ; /doortarget; /timed 15, /click left door; /timed 25, /doortarget clear")
     mq.delay(750)
     interrupts.openDoor = not interrupts.openDoor
-    mq.cmd("/doortarget clear")
 end
 
 local function FindIndexClosestWaypoint(table)
