@@ -1811,6 +1811,10 @@ local function bind(...)
             showHUD = not showHUD
         elseif key == 'show' then
             showMainGUI = not showMainGUI
+        elseif key == 'pause' then
+            controls.doPause = true
+        elseif key == 'resume' then
+            controls.doPause = false
         elseif key == 'quit' or key == 'exit' then
             -- mq.exit()
             mq.cmd("/squelch /nav stop")
