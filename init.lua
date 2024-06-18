@@ -1834,6 +1834,16 @@ local function bind(...)
         else
             printf("\ay[\at%s\ax] \arInvalid Command!", script)
         end
+    elseif #args == 2 then
+        if key == 'resume' then
+            if action == 'next' then
+                currentStepIndex = currentStepIndex + 1
+                controls.doPause = false
+            elseif action == 'back' then
+                currentStepIndex = currentStepIndex - 1
+                controls.doPause = false
+            end
+        end
     elseif #args  == 3 then
         if Paths[zone]["'"..path.."'"] ~= nil then
             printf("\ay[\at%s\ax] \arInvalid Path!", script)
