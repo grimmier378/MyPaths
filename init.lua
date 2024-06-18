@@ -789,7 +789,6 @@ local function export_paths(zone, pathname, paths)
     return base64.enc('return ' .. serialized_paths)
 end
 
-
 local function import_paths(import_string)
     if not import_string or import_string == '' then return end
     local decoded = base64.dec(import_string)
@@ -816,6 +815,8 @@ end
 local transFlag = false
 local importString = ''
 local tmpCmd = ''
+local exportZone = ''
+local exportPathName = ''
 local function Draw_GUI()
     -- Main Window
     if showMainGUI then
@@ -842,71 +843,65 @@ local function Draw_GUI()
             -- Set Window Font Scale
             ImGui.SetWindowFontScale(scale)
             if ImGui.BeginMenuBar() then
-                if ImGui.BeginMenu("Export") then
+                if selectedPath ~= 'None' then
                     if ImGui.MenuItem("Export Path") then
-                        if selectedPath ~= 'None' then
-                            local exportData = export_paths(currZone, selectedPath, Paths[currZone][selectedPath])
-                            ImGui.LogToClipboard()
-                            ImGui.LogText(exportData)
-                            ImGui.LogFinish()
-        
-                            print('\ayPath data copied to clipboard!\ax')
-                        else
-                            print('\arNo path selected for export!\ax')
-                        end
+                        local exportData = export_paths(currZone, selectedPath, Paths[currZone][selectedPath])
+                        ImGui.LogToClipboard()
+                        ImGui.LogText(exportData)
+                        ImGui.LogFinish()
+                        print('\ayPath data copied to clipboard!\ax')
+                        
                     end
-                    ImGui.EndMenu()
+                    if ImGui.IsItemHovered() then
+                        ImGui.SetTooltip("Export the selected path to the clipboard.")
+                    end
                 end
 
-                ImGui.Text(Icon.FA_COG)
+                
+                if ImGui.MenuItem(Icon.FA_COG) then
+                    -- Toggle Config Window
+                    showConfigGUI = not showConfigGUI
+                end
                 if ImGui.IsItemHovered() then
-                    -- Set Tooltip
                     ImGui.SetTooltip("Settings")
-                    -- Check if the Gear Icon is clicked
-                    if ImGui.IsMouseReleased(0) then
-                        -- Toggle Config Window
-                        showConfigGUI = not showConfigGUI
-                    end
                 end
                 ImGui.SameLine()
                 local lIcon = locked and Icon.FA_LOCK or Icon.FA_UNLOCK
-                ImGui.Text(lIcon)
-                if ImGui.IsItemHovered() then
-                    -- Set Tooltip
-                    ImGui.SetTooltip("Toggle Lock Window")
-                    -- Check if the Gear Icon is clicked
-                    if ImGui.IsMouseReleased(0) then
+                
+                if ImGui.MenuItem(lIcon) then
                         -- Toggle Config Window
-                        locked = not locked
-                        settings[script].locked = locked
-                        mq.pickle(configFile, settings)
-                    end
+                    locked = not locked
+                    settings[script].locked = locked
+                    mq.pickle(configFile, settings)
+                end
+                if ImGui.IsItemHovered() then
+                    ImGui.SetTooltip("Toggle Lock Window")
                 end
                 if DEBUG then
                     ImGui.SameLine()
-                    ImGui.Text(Icon.FA_BUG)
+                    
+                    if ImGui.MenuItem(Icon.FA_BUG) then
+                        showDebugTab = not showDebugTab
+                    end
                     if ImGui.IsItemHovered() then
                         ImGui.SetTooltip("Debug")
-                        if ImGui.IsMouseReleased(0) then
-                            showDebugTab = not showDebugTab
-                        end
                     end
                 end
                 ImGui.SameLine()
-                ImGui.Text(Icon.MD_TV)
+                
+                if ImGui.MenuItem(Icon.MD_TV) then
+                    showHUD = not showHUD
+                end
                 if ImGui.IsItemHovered() then
-                    ImGui.SetTooltip("HUD")
-                    if ImGui.IsMouseReleased(0) then
-                        showHUD = not showHUD
-                    end
+                    ImGui.SetTooltip("Toggle Heads Up Display")
                 end
                 ImGui.SameLine(ImGui.GetWindowWidth() - 30)
-                ImGui.Text(Icon.FA_WINDOW_CLOSE)
+                
+                if ImGui.MenuItem(Icon.FA_WINDOW_CLOSE) then
+                    RUNNING = false
+                end
                 if ImGui.IsItemHovered() then
                     ImGui.SetTooltip("Exit\nThe Window Close button will only close the window.\nThis will exit the script completely.\nThe same as typing '/mypaths quit'.")
-                    if ImGui.IsMouseReleased(0) then
-                        RUNNING = false
-                    end
                 end
                 ImGui.EndMenuBar()
             end
@@ -1071,23 +1066,64 @@ local function Draw_GUI()
                         if ImGui.Button('Save Paths') then
                             SavePaths()
                         end
-                        importString   = ImGui.InputText("##ImportString", importString)
-                        ImGui.SameLine()
-                        if ImGui.Button('Import Path') then
-                            local imported = import_paths(importString)
-                            if imported then
-                                for zone, paths in pairs(imported) do
-                                    if not Paths[zone] then Paths[zone] = {} end
-                                    for pathName, pathData in pairs(paths) do
-                                        Paths[zone][pathName] = pathData
-                                        if currZone == zone then selectedPath = pathName end
+                        if ImGui.CollapsingHeader("Share Paths##") then
+                            importString   = ImGui.InputText("##ImportString", importString)
+                            ImGui.SameLine()
+                            if ImGui.Button('Import Path') then
+                                local imported = import_paths(importString)
+                                if imported then
+                                    for zone, paths in pairs(imported) do
+                                        if not Paths[zone] then Paths[zone] = {} end
+                                        for pathName, pathData in pairs(paths) do
+                                            Paths[zone][pathName] = pathData
+                                            if currZone == zone then selectedPath = pathName end
+                                        end
+                                    end
+                                    importString = ''
+                                    SavePaths()
+                                end
+                            end
+                            ImGui.SeparatorText('Export Paths')
+                            if selectedPath ~= 'None' then
+                                ImGui.SameLine()
+                                if ImGui.Button('Export Current Path') then
+                                    local exportData = export_paths(currZone, selectedPath, Paths[currZone][selectedPath])
+                                    ImGui.LogToClipboard()
+                                    ImGui.LogText(exportData)
+                                    ImGui.LogFinish()
+                                    print('\ayPath data copied to clipboard!\ax')
+                                end
+                            end
+                            if ImGui.BeginCombo("Zone##SelectExportZone", exportZone) then
+                                if not Paths[exportZone] then Paths[exportZone] = {} end
+                                for name, data in pairs(Paths) do
+                                    local isSelected = name == exportZone
+                                    if ImGui.Selectable(name, isSelected) then
+                                        exportZone = name
                                     end
                                 end
-                                importString = ''
-                                SavePaths()
+                                ImGui.EndCombo()
+                            end
+                            if ImGui.BeginCombo("Path##SelectExportPath", exportPathName) then
+                                if not Paths[exportZone] then Paths[exportZone] = {} end
+                                for name, data in pairs(Paths[exportZone]) do
+                                    local isSelected = name == exportPathName
+                                    if ImGui.Selectable(name, isSelected) then
+                                        exportPathName = name
+                                    end
+                                end
+                                ImGui.EndCombo()
+                            end
+                            if exportZone ~= '' and exportPathName ~= '' then
+                                if ImGui.Button('Export Path') then
+                                    local exportData = export_paths(exportZone, exportPathName, Paths[exportZone][exportPathName])
+                                    ImGui.LogToClipboard()
+                                    ImGui.LogText(exportData)
+                                    ImGui.LogFinish()
+                                    print('\ayPath data copied to clipboard!\ax')
+                                end
                             end
                         end
-    
                     end
 
                     if selectedPath ~= 'None' then
@@ -1918,10 +1954,12 @@ local function Loop()
         if currZone ~= lastZone then
             selectedPath = 'None'
             controls.doNav = false
+            controls.doPause = false
             lastZone = currZone
             currentStepIndex = 1
             controls.autoRecord = false
             pauseTime = 0
+            loopCount = 0
             status = 'Idle'
             pauseStart = 0
             printf("\ay[\at%s\ax] \agZone Changed Last: \at%s Current: \ay%s", script, lastZone, currZone)
@@ -1941,6 +1979,7 @@ local function Loop()
             printf("\ay[\at%s\ax] \agZoning, \ayHiding GUI...", script)
             mq.delay(1)
             showMainGUI = true
+            loopCount = 0
             zoningHideGUI = false
             currentStepIndex = 1
             selectedPath = 'None'
@@ -1951,6 +1990,7 @@ local function Loop()
             if currZone ~= lastZone then
                 selectedPath = 'None'
                 controls.doNav = false
+                controls.doPause = false
                 lastZone = currZone
                 pauseTime = 0
                 pauseStart = 0
@@ -1962,6 +2002,14 @@ local function Loop()
             lastHP, lastMP = 0,0
         end
 
+        if selectedPath == 'None' then
+            controls.doNav = false
+            controls.doPause = false
+            loopCount = 0
+            currentStepIndex = 1
+            status = 'Idle'
+            PathStartClock, PathStartTime = nil, nil
+        end
         -- Make sure we are still in game or exit the script.
         if mq.TLO.EverQuest.GameState() ~= "INGAME" then
             printf("\aw[\at%s\ax] \arNot in game, \ayTry again later...", script)
@@ -2012,6 +2060,8 @@ local function Loop()
             end
         elseif not controls.doNav and not controls.autoRecord then
             -- Reset state when doNav is false
+            loopCount = 0
+            controls.doPause = false
             currentStepIndex = 1
             status = 'Idle'
             PathStartClock, PathStartTime = nil, nil
