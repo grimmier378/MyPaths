@@ -120,9 +120,8 @@ Command: list = Lists all Paths in the current Zone.
 Command: quit or exit = Exits the script.
 Command: hud = Toggles the HUD Display
 Command: pause = Pauses Current Path
-Command: resume = Resumes Current Path
+Command: resume = Resumes Current Path Accepts [back|next] arguments to resume back a step or forward a step.
 Command: help = Prints out this help list.
-
 
 Arguments: loop = Loops the path, rloop = Loop in reverse.
 Arguments: closest = start at closest wp, rclosest = start at closest wp and go in reverse.
