@@ -843,21 +843,6 @@ local function Draw_GUI()
             -- Set Window Font Scale
             ImGui.SetWindowFontScale(scale)
             if ImGui.BeginMenuBar() then
-                if selectedPath ~= 'None' then
-                    if ImGui.MenuItem("Export Path") then
-                        local exportData = export_paths(currZone, selectedPath, Paths[currZone][selectedPath])
-                        ImGui.LogToClipboard()
-                        ImGui.LogText(exportData)
-                        ImGui.LogFinish()
-                        print('\ayPath data copied to clipboard!\ax')
-                        
-                    end
-                    if ImGui.IsItemHovered() then
-                        ImGui.SetTooltip("Export the selected path to the clipboard.")
-                    end
-                end
-
-                
                 if ImGui.MenuItem(Icon.FA_COG) then
                     -- Toggle Config Window
                     showConfigGUI = not showConfigGUI
