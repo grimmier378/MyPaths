@@ -934,7 +934,7 @@ local function Draw_GUI()
                     if ImGui.Button('Start') then
                         pausedGM = false
                         controls.doNav = true
-                        PathStartClock,PathStartTime = os.date("%H:%M:%S %p"), os.time()
+                        PathStartClock,PathStartTime = os.date("%I:%M:%S %p"), os.time()
                     end
                     ImGui.PopStyleColor()
                     ImGui.SameLine()
@@ -1159,7 +1159,7 @@ local function Draw_GUI()
                                     mq.cmdf("/squelch /nav stop")
                                     PathStartClock,PathStartTime = nil, nil
                                 else
-                                    PathStartClock,PathStartTime = os.date("%H:%M:%S %p"), os.time()
+                                    PathStartClock,PathStartTime = os.date("%I:%M:%S %p"), os.time()
                                 end
                             end
                             ImGui.PopStyleColor()
@@ -1168,7 +1168,7 @@ local function Draw_GUI()
                                 currentStepIndex = closestWaypointIndex
                                 controls.doNav = true
                                 pausedGM = false
-                                PathStartClock, PathStartTime = os.date("%H:%M:%S %p"), os.time()
+                                PathStartClock, PathStartTime = os.date("%I:%M:%S %p"), os.time()
                             end
 
                             ImGui.SetNextItemWidth(100)
@@ -1263,7 +1263,7 @@ local function Draw_GUI()
                                                 controls.doNav = true
                                                 controls.doLoop = false
                                                 controls.doSingle = true
-                                                PathStartClock, PathStartTime = os.date("%H:%M:%S %p"), os.time()
+                                                PathStartClock, PathStartTime = os.date("%I:%M:%S %p"), os.time()
                                             end
                                             
                                             if ImGui.MenuItem('Start Path Here: WP ' .. tmpTable[i].step) then
@@ -1271,14 +1271,14 @@ local function Draw_GUI()
                                                 controls.doNav = true
                                                 controls.doLoop = false
                                                 controls.doSingle = false
-                                                PathStartClock, PathStartTime = os.date("%H:%M:%S %p"), os.time()
+                                                PathStartClock, PathStartTime = os.date("%I:%M:%S %p"), os.time()
                                             end
                                             if ImGui.MenuItem('Start Loop Here: WP ' .. tmpTable[i].step) then
                                                 currentStepIndex = i
                                                 controls.doNav = true
                                                 controls.doLoop = true
                                                 controls.doSingle = false
-                                                PathStartClock, PathStartTime = os.date("%H:%M:%S %p"), os.time()
+                                                PathStartClock, PathStartTime = os.date("%I:%M:%S %p"), os.time()
                                             end
                                         
                                             ImGui.EndPopup()
@@ -1855,40 +1855,47 @@ local function bind(...)
                 controls.doReverse = false
                 controls.doNav = true
                 controls.doLoop = true
+                PathStartClock,PathStartTime = os.date("%I:%M:%S %p"), os.time()
             end
             if action == 'rloop' then
                 selectedPath = path
                 controls.doReverse = true
                 controls.doNav = true
                 controls.doLoop = true
+                PathStartClock,PathStartTime = os.date("%I:%M:%S %p"), os.time()
             end
             if action == 'start' then
                 selectedPath = path
                 controls.doReverse = false
                 controls.doNav = true
                 controls.doLoop = false
+                PathStartClock,PathStartTime = os.date("%I:%M:%S %p"), os.time()
             end
             if action == 'reverse' then
                 selectedPath = path
                 controls.doReverse = true
                 controls.doNav = true
+                PathStartClock,PathStartTime = os.date("%I:%M:%S %p"), os.time()
             end
             if action == 'pingpong' then
                 selectedPath = path
                 controls.doPingPong = true
                 controls.doNav = true
+                PathStartClock,PathStartTime = os.date("%I:%M:%S %p"), os.time()
             end
             if action == 'closest' then
                 selectedPath = path
                 controls.doNav = true
                 controls.doReverse = false
                 currentStepIndex = FindIndexClosestWaypoint(Paths[zone][path])
+                PathStartClock,PathStartTime = os.date("%I:%M:%S %p"), os.time()
             end
             if action == 'rclosest' then
                 selectedPath = path
                 controls.doNav = true
                 controls.doReverse = true
                 currentStepIndex = FindIndexClosestWaypoint(Paths[zone][path])
+                PathStartClock,PathStartTime = os.date("%I:%M:%S %p"), os.time()
             end
         end
     else
