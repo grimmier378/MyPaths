@@ -25,7 +25,7 @@ local newPath = ''
 local curTime = os.time()
 local lastTime = curTime
 local controls = {}
-controls.ChainPath, controls.ChainStart, controls.ChainZone, controls.ChainPath = nil, false, '', ''
+controls.ChainPath, controls.ChainStart, controls.ChainZone, controls.ChainPath, controls.LastPath, controls.CurChain = nil, false, '', '', nil, 0
 controls.autoRecord, controls.doNav, controls.doSingle, controls.doLoop, controls.doReverse, controls.doPingPong, controls.doPause = false, false, false, false, false, false, false
 local recordDelay, stopDist, wpPause = 5, 30, 1
 local currentStepIndex, loopCount = 1, 0
@@ -280,9 +280,14 @@ local function loadSettings()
         newSetting = true
     end
 
+    if settings[script].Interrupts == nil then
+        settings[script].Interrupts = interrupts
+        newSetting = true
+    end
+
     -- Load the theme
     loadTheme()
-
+    interrupts = settings[script].Interrupts
     -- Set the settings to the variables
     hudTransparency = settings[script].HeadsUpTransparency
     stopDist = settings[script].StopDistance
@@ -916,17 +921,18 @@ local function Draw_GUI()
                 ImGui.TextColored(0,1,0,1,"%s", curWPTxt)
                 ImGui.Text("Distance to Waypoint: ")
                 ImGui.SameLine()
-                if tmpTable[currentStepIndex].loc ~= nil then
+                if tmpTable[currentStepIndex] ~= nil then
                     ImGui.TextColored(0,1,1,1,"%.2f", mq.TLO.Math.Distance(string.format("%s:%s", tmpTable[currentStepIndex].loc:gsub(",", " "), mq.TLO.Me.LocYXZ()))())
                 end
             end
             ImGui.Separator()
         end
-            if selectedPath ~= 'None' then
+            if selectedPath ~= 'None' or #Chain > 0 then
                 if controls.doNav then
                     ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1.0, 0.4, 0.4, 0.4))
                     if ImGui.Button('Stop') then
                         controls.doNav = false
+                        controls.ChainStart = false
                         mq.cmdf("/squelch /nav stop")
                         PathStartClock,PathStartTime = nil, nil
                     end
@@ -1225,8 +1231,10 @@ local function Draw_GUI()
                             if ImGui.Button(tmpLabel) then
                                 pausedGM = false
                                 controls.doNav = not controls.doNav
+                                controls.ChainStart = false
                                 if not controls.doNav then
                                     mq.cmdf("/squelch /nav stop")
+                                    controls.ChainStart = false
                                     PathStartClock,PathStartTime = nil, nil
                                 else
                                     PathStartClock,PathStartTime = os.date("%I:%M:%S %p"), os.time()
@@ -1699,6 +1707,7 @@ local function Draw_GUI()
                     settings[script].RecordMinDist = recordMinDist
                     settings[script].PauseStops = wpPause
                     settings[script].InterruptDelay = interruptDelay
+                    settings[script].Interrupts = interrupts
                     mq.pickle(configFile, settings)
                     showConfigGUI = false
                 end
@@ -1749,7 +1758,7 @@ local function Draw_GUI()
             ImGui.TextColored(1,1,0,1,"%s", mq.TLO.Me.LocYXZ())
             if controls.doNav then
                 local tmpTable = sortPathsTable(currZone, selectedPath) or {}
-                if tmpTable[currentStepIndex].step ~= nil then
+                if tmpTable[currentStepIndex] then
                     ImGui.Text("Current WP: ")
                     ImGui.SameLine()
                     ImGui.TextColored(1,1,0,1,"%s ",tmpTable[currentStepIndex].step or 0)
@@ -1879,6 +1888,7 @@ local function bind(...)
         if key == 'stop' then
             controls.doNav = false
             mq.cmdf("/squelch /nav stop")
+            controls.ChainStart = false
             selectedPath = 'None'
             loadPaths()
         elseif key == 'help' then
@@ -2035,42 +2045,10 @@ local function Loop()
         end
         -- if pauseStart > 0 then print("Pause Start: "..pauseStart) end
         if currZone ~= lastZone then
+            local flag = false
+            selectedPath = 'None'
+            controls.doNav = false
             
-            if #Chain > 0 then
-                for i = 1, #Chain do
-                    if Chain[i].Path == controls.ChainPath and controls.ChainStart then
-                        if Chain[i+1].Zone == currZone then
-                            selectedPath = Chain[i+1].Path
-                            if Chain[i+1].Type == 'Loop' then
-                                controls.doLoop = true
-                                controls.doReverse = false
-                                
-                            elseif Chain[i+1].Type == 'PingPong' then
-                                controls.doPingPong = true
-                                controls.doReverse = false
-                                
-                            elseif Chain[i+1].Type == 'Normal' then
-                                controls.doLoop = false
-                                controls.doReverse = false
-                                controls.doPingPong = false
-                                
-                            elseif Chain[i+1].Type == 'Reverse' then
-                                controls.doReverse = true
-                                controls.doLoop = false
-                                controls.doPingPong = false
-                            end
-                            mq.delay(5)
-                            break
-                        end
-                    end
-                end
-            else
-                selectedPath = 'None'
-                controls.doNav = false
-                controls.doPause = false
-                mq.delay(1)
-                Chain = {}
-            end
                 lastZone = currZone
                 currentStepIndex = 1
                 controls.autoRecord = false
@@ -2079,13 +2057,55 @@ local function Loop()
                 status = 'Idle'
                 pauseStart = 0
                 printf("\ay[\at%s\ax] \agZone Changed Last: \at%s Current: \ay%s", script, lastZone, currZone)
-            
+                
+        end
+
+        if controls.doNav and controls.ChainStart and not controls.doPause then controls.ChainPath = selectedPath end
+
+        if controls.ChainStart and controls.doPause then
+            for i = 1, #Chain do
+                if i == controls.CurChain then
+                    if Chain[i].Path == controls.ChainPath then
+                        if Chain[i].Zone == currZone then
+                            controls.doPause = false
+                            selectedPath = Chain[i].Path
+                            controls.ChainPath = selectedPath 
+                        end
+                    end
+                end
+            end
+        end
+
+        if controls.doNav and not controls.ChainStart and #Chain > 0 then
+            selectedPath = Chain[1].Path
+            if Chain[1].Type == 'Loop' then
+                controls.doLoop = true
+                controls.doReverse = false
+                
+            elseif Chain[1].Type == 'PingPong' then
+                controls.doPingPong = true
+                controls.doReverse = false
+                
+            elseif Chain[1].Type == 'Normal' then
+                controls.doLoop = false
+                controls.doReverse = false
+                controls.doPingPong = false
+                
+            elseif Chain[1].Type == 'Reverse' then
+                controls.doReverse = true
+                controls.doLoop = false
+                controls.doPingPong = false
+                
+            end
+            controls.CurChain = 1
+            mq.delay(5)
         end
 
         if mq.TLO.SpawnCount('gm')() > 0 and interrupts.stopForGM and not pausedGM then
             printf("\ay[\at%s\ax] \arGM Detected, \ayPausing Navigation...", script)
             controls.doNav = false
             mq.cmdf("/squelch /nav stop")
+            controls.ChainStart = false
             mq.cmd("/multiline ; /squelch /beep; /timed  3, /beep ; /timed 2, /beep ; /timed 1, /beep")
             mq.delay(1)
             status = 'Paused: GM Detected'
@@ -2120,8 +2140,19 @@ local function Loop()
         end
 
         if selectedPath == 'None' then
+            controls.LastPath = nil
             controls.doNav = false
             controls.doPause = false
+            loopCount = 0
+            currentStepIndex = 1
+            status = 'Idle'
+            PathStartClock, PathStartTime = nil, nil
+        elseif controls.LastPath == nil then
+            controls.LastPath = selectedPath
+        end
+
+        if selectedPath ~= controls.LastPath and controls.LastPath ~= nil then
+            controls.LastPath = selectedPath
             loopCount = 0
             currentStepIndex = 1
             status = 'Idle'
@@ -2138,29 +2169,7 @@ local function Loop()
             interrupts.interruptFound = CheckInterrupts()
         end
 
-        if controls.doNav and not controls.ChainStart and #Chain > 0 then
-            selectedPath = Chain[1].Path
-            if Chain[1].Type == 'Loop' then
-                controls.doLoop = true
-                controls.doReverse = false
-                
-            elseif Chain[1].Type == 'PingPong' then
-                controls.doPingPong = true
-                controls.doReverse = false
-                
-            elseif Chain[1].Type == 'Normal' then
-                controls.doLoop = false
-                controls.doReverse = false
-                controls.doPingPong = false
-                
-            elseif Chain[1].Type == 'Reverse' then
-                controls.doReverse = true
-                controls.doLoop = false
-                controls.doPingPong = false
-                
-            end
-            mq.delay(5)
-        end
+
         
         if controls.doNav and not interrupts.interruptFound and not controls.doPause then
 
@@ -2219,6 +2228,7 @@ local function Loop()
                     mq.delay(1)
                     controls.doNav = true
                     controls.doPause = false
+                    if Chain[i+1].Zone ~= currZone then controls.doPause = true else controls.doPause = false end
                     if Chain[i + 1].Type == 'Loop' then
                         controls.doLoop = true
                         controls.doReverse = false
@@ -2238,9 +2248,17 @@ local function Loop()
                         controls.doPingPong = false
                         break
                     end
+                    controls.CurChain = i + 1
                     mq.delay(1)            
                 elseif Chain[i].Path == controls.ChainPath and i == #Chain then
                     controls.ChainStart = false
+                    if Chain[i].Type == 'Normal' or Chain[i].Type == 'Reverse' then
+                        controls.doNav = false
+                        controls.doPause = false
+                        controls.ChainStart = false
+                        controls.ChainPath = ''
+                        Chain = {}
+                    end
                 end
             end
         end
