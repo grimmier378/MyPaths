@@ -19,12 +19,13 @@ local meName -- Character Name
 local themeName = 'Default'
 local themeID = 1
 local theme, defaults, settings, debugMessages = {}, {}, {}, {}
-local Paths = {}
+local Paths, Chain = {}, {}
 local selectedPath = 'None'
 local newPath = ''
 local curTime = os.time()
 local lastTime = curTime
 local controls = {}
+controls.ChainPath, controls.ChainStart = nil, false
 controls.autoRecord, controls.doNav, controls.doSingle, controls.doLoop, controls.doReverse, controls.doPingPong, controls.doPause = false, false, false, false, false, false, false
 local recordDelay, stopDist, wpPause = 5, 30, 1
 local currentStepIndex, loopCount = 1, 0
@@ -600,6 +601,7 @@ local function NavigatePath(name)
     if controls.doLoop then
         table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = zone, Path = name, WP = 'Loop Started', Status = 'Loop Started!'})
     end
+    if #Chain > 0 then controls.ChainPath = selectedPath controls.ChainStart = true end
     while controls.doNav do
         local tmp = sortPathsTable(zone, name)
         if tmp == nil then
@@ -1010,19 +1012,20 @@ local function Draw_GUI()
             -- Tabs
             if ImGui.BeginTabBar('MainTabBar') then
                 if ImGui.BeginTabItem('Controls') then
-                    if ImGui.CollapsingHeader("Paths##") then
-
-                        ImGui.SetNextItemWidth(150)
-                        if ImGui.BeginCombo("##SelectPath", selectedPath) then
-                            if not Paths[currZone] then Paths[currZone] = {} end
-                            for name, data in pairs(Paths[currZone]) do
-                                local isSelected = name == selectedPath
-                                if ImGui.Selectable(name, isSelected) then
-                                    selectedPath = name
-                                end
+                    ImGui.SeparatorText("Select a Path")
+                    ImGui.SetNextItemWidth(150)
+                    if ImGui.BeginCombo("##SelectPath", selectedPath) then
+                        if not Paths[currZone] then Paths[currZone] = {} end
+                        for name, data in pairs(Paths[currZone]) do
+                            local isSelected = name == selectedPath
+                            if ImGui.Selectable(name, isSelected) then
+                                selectedPath = name
                             end
-                            ImGui.EndCombo()
                         end
+                        ImGui.EndCombo()
+                    end
+                    ImGui.Dummy(10,5)
+                    if ImGui.CollapsingHeader("Manage Paths##") then
                         ImGui.SetNextItemWidth(150)
                         newPath = ImGui.InputText("##NewPathName", newPath)
                         ImGui.SameLine()
@@ -1052,6 +1055,7 @@ local function Draw_GUI()
                         if ImGui.Button('Save Paths') then
                             SavePaths()
                         end
+                        ImGui.Dummy(10,5)
                         if ImGui.CollapsingHeader("Share Paths##") then
                             importString   = ImGui.InputText("##ImportString", importString)
                             ImGui.SameLine()
@@ -1071,7 +1075,6 @@ local function Draw_GUI()
                             end
                             ImGui.SeparatorText('Export Paths')
                             if selectedPath ~= 'None' then
-                                ImGui.SameLine()
                                 if ImGui.Button('Export Current Path') then
                                     local exportData = export_paths(currZone, selectedPath, Paths[currZone][selectedPath])
                                     ImGui.LogToClipboard()
@@ -1111,7 +1114,46 @@ local function Draw_GUI()
                             end
                         end
                     end
-
+                    ImGui.Dummy(10,5)
+                    ImGui.Separator()
+                    if ImGui.CollapsingHeader("Chain Paths##") then
+                        if selectedPath ~= 'None' then
+                            ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
+                            if ImGui.Button("Add to Chain##") then
+                                if not Chain then Chain = {} end
+                                table.insert(Chain , {Zone = currZone, Path = selectedPath, Type = 'Normal'})
+                            end
+                            ImGui.PopStyleColor()
+                        end
+                        if #Chain > 0  then
+                            ImGui.SameLine()
+                            ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1, 0.4, 0.4, 0.4))
+                            if ImGui.Button("Clear Chain##") then
+                                Chain = {}
+                            end
+                            ImGui.PopStyleColor()
+                            ImGui.SeparatorText("Chain Paths:")
+                            for i = 1, #Chain do
+                                ImGui.SetNextItemWidth(100)
+                                local chainType = {'Normal', 'Loop', 'PingPong', 'Reverse'}
+                                if ImGui.BeginCombo("##PathType_"..i, Chain[i].Type) then
+                                    if not Paths[currZone] then Paths[currZone] = {} end
+                                    for k, v in pairs(chainType)  do
+                                        local isSelected = v == Chain[i].Type
+                                        if ImGui.Selectable(v, isSelected) then
+                                            Chain[i].Type = v
+                                        end
+                                    end
+                                    ImGui.EndCombo()
+                                end
+                                ImGui.SameLine()
+                                ImGui.TextColored(0.0,1,1,1,"%s", Chain[i].Zone)
+                                ImGui.SameLine()
+                                ImGui.TextColored(0.0,1,0,1,"%s", Chain[i].Path)
+                            end
+                        end
+                    end
+                    ImGui.Dummy(10,5)
                     if selectedPath ~= 'None' then
 
                         -- Navigation Controls
@@ -1215,6 +1257,7 @@ local function Draw_GUI()
                         end
                         ImGui.Separator()
                     end
+                    ImGui.Dummy(10,5)
                     if ImGui.CollapsingHeader("Waypoint Table##Header") then
                         -- Waypoint Table
                         if selectedPath ~= 'None' then
@@ -1967,6 +2010,8 @@ local function Loop()
             selectedPath = 'None'
             controls.doNav = false
             controls.doPause = false
+            mq.delay(1)
+            Chain = {}
             lastZone = currZone
             currentStepIndex = 1
             controls.autoRecord = false
@@ -2032,6 +2077,30 @@ local function Loop()
             mq.delay(5)
             interrupts.interruptFound = CheckInterrupts()
         end
+
+        if controls.doNav and not controls.ChainStart and #Chain > 0 then
+            selectedPath = Chain[1].Path
+            if Chain[1].Type == 'Loop' then
+                controls.doLoop = true
+                controls.doReverse = false
+                
+            elseif Chain[1].Type == 'PingPong' then
+                controls.doPingPong = true
+                controls.doReverse = false
+                
+            elseif Chain[1].Type == 'Normal' then
+                controls.doLoop = false
+                controls.doReverse = false
+                controls.doPingPong = false
+                
+            elseif Chain[1].Type == 'Reverse' then
+                controls.doReverse = true
+                controls.doLoop = false
+                controls.doPingPong = false
+                
+            end
+            mq.delay(5)
+        end
         
         if controls.doNav and not interrupts.interruptFound and not controls.doPause then
 
@@ -2081,6 +2150,40 @@ local function Loop()
 
         -- Update previousDoNav to the current state
         previousDoNav = controls.doNav
+
+        if #Chain > 0 and not controls.doNav and controls.ChainStart then
+            for i = 1, #Chain do
+                if Chain[i].Path == controls.ChainPath and i < #Chain then
+                    selectedPath = Chain[i + 1].Path
+                    currentStepIndex = 1
+                    mq.delay(1)
+                    controls.doNav = true
+                    controls.doPause = false
+                    if Chain[i + 1].Type == 'Loop' then
+                        controls.doLoop = true
+                        controls.doReverse = false
+                        break
+                    elseif Chain[i + 1].Type == 'PingPong' then
+                        controls.doPingPong = true
+                        controls.doLoop = true
+                        break
+                    elseif Chain[i + 1].Type == 'Normal' then
+                        controls.doLoop = false
+                        controls.doReverse = false
+                        controls.doPingPong = false
+                        break
+                    elseif Chain[i + 1].Type == 'Reverse' then
+                        controls.doReverse = true
+                        controls.doLoop = false
+                        controls.doPingPong = false
+                        break
+                    end
+                    mq.delay(1)            
+                elseif Chain[i].Path == controls.ChainPath and i == #Chain then
+                    controls.ChainStart = false
+                end
+            end
+        end
 
         if controls.autoRecord then
             AutoRecordPath(selectedPath)
