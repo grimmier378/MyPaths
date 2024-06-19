@@ -52,12 +52,15 @@ stopForAll = true,
 stopForGM = true,
 stopForSitting = true,
 stopForCombat = true,
+stopForGoupDist = 100,
+stopForDist = false,
 stopForXtar = true,
 stopForFear = true,
 stopForCharm = true,
 stopForMez = true,
 stopForRoot = true,
-stopForLoot = true}
+stopForLoot = true,
+}
 
 -- GUI Settings
 local winFlags = bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.MenuBar)
@@ -285,6 +288,15 @@ local function loadSettings()
         newSetting = true
     end
 
+    if settings[script].Interrupts.stopForGoupDist == nil then
+        settings[script].Interrupts.stopForGoupDist = 100
+        newSetting = true
+    end
+
+    if settings[script].Interrupts.stopForDist == nil then
+        settings[script].Interrupts.stopForDist = false
+        newSetting = true
+    end
     -- Load the theme
     loadTheme()
     interrupts = settings[script].Interrupts
@@ -401,6 +413,24 @@ local function AutoRecordPath(name)
     SavePaths()
 end
 
+local function groupDistance()
+    local member = mq.TLO.Group.Member
+    local gsize = mq.TLO.Me.GroupSize() or 0
+    if gsize == 0 then return false end
+    for i = 1, gsize - 1 do
+        if member(i).Present() then
+            if member(i).Distance() > interrupts.stopForGoupDist then
+                status = string.format('Paused for Group Distance. %s is %.2f units away.', member(i).Name(), member(i).Distance())
+                return true
+            end
+        else
+            status = string.format('Paused for Group Distance. %s is not in Zone!', member(i).Name())
+            return true
+        end
+    end
+    return false
+end
+
 local function groupWatch(type)
     if type == 'None' then return false end
     local myClass = mq.TLO.Me.Class.ShortName()
@@ -481,6 +511,7 @@ local function groupWatch(type)
                 end
             end
         mq.delay(1)
+    
     end
     return false
 end
@@ -540,9 +571,12 @@ local function CheckInterrupts()
     elseif mq.TLO.Me.Zoning() then
         if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
         status = 'Paused for Zoning.'
+        lastZone = ''
         flag = true
     elseif settings[script].GroupWatch == true then
         flag = groupWatch(settings[script].WatchType)
+    elseif interrupts.stopForDist == true then
+        flag = groupDistance()
     end
     if flag then
         pauseStart = os.time()
@@ -606,7 +640,7 @@ local function NavigatePath(name)
     if controls.doLoop then
         table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = zone, Path = name, WP = 'Loop Started', Status = 'Loop Started!'})
     end
-    if #Chain > 0 then controls.ChainPath = selectedPath controls.ChainStart = true end
+    if #Chain > 0 and not controls.ChainStart then controls.ChainPath = selectedPath controls.ChainStart = true end
     while controls.doNav do
         local tmp = sortPathsTable(zone, name)
         if tmp == nil then
@@ -710,9 +744,11 @@ local function NavigatePath(name)
         end
         -- Check if we need to loop
         if not controls.doLoop then
+            
             controls.doNav = false
             status = 'Idle - Arrived at Destination!'
             loopCount = 0
+
             break
         else
             loopCount = loopCount + 1
@@ -751,6 +787,7 @@ function ZoningPause()
         pauseTime = 0
         zoningHideGUI = true
         showMainGUI = false
+        lastZone = ''
         mq.delay(1000, function () return mq.TLO.Me.Zoning() == false end)
     end
 end
@@ -1131,9 +1168,15 @@ local function Draw_GUI()
                             end
                             ImGui.PopStyleColor()
                         end
+                        local tmpCZ, tmpCP = {}, {}
+                        for name, data in pairs(Paths) do
+                            table.insert(tmpCZ , name)
+                        end
+                        table.sort(tmpCZ)
+                        
                         if ImGui.BeginCombo("Zone##SelectChainZone", controls.ChainZone) then
                             if not Paths[controls.ChainZone] then Paths[controls.ChainZone] = {} end
-                            for name, data in pairs(Paths) do
+                            for k, name in pairs(tmpCZ) do
                                 local isSelected = name == controls.ChainZone
                                 if ImGui.Selectable(name, isSelected) then
                                     controls.ChainZone = name
@@ -1141,9 +1184,14 @@ local function Draw_GUI()
                             end
                             ImGui.EndCombo()
                         end
+
                         if ImGui.BeginCombo("Path##SelectChainPath", controls.ChainPath) then
                             if not Paths[controls.ChainZone] then Paths[controls.ChainZone] = {} end
-                            for name, data in pairs(Paths[controls.ChainZone]) do
+                            for k, data in pairs(Paths[controls.ChainZone]) do
+                                table.insert(tmpCP , k)
+                            end
+                            table.sort(tmpCP)
+                            for k, name in pairs(tmpCP) do
                                 local isSelected = name == controls.ChainPath
                                 if ImGui.Selectable(name, isSelected) then
                                     controls.ChainPath = name
@@ -1600,7 +1648,7 @@ local function Draw_GUI()
                 -- Set Interrupts we will stop for
                     interrupts.stopForAll = ImGui.Checkbox("Stop for All##"..script, interrupts.stopForAll)
                     if interrupts.stopForAll then
-                        
+                        interrupts.stopForDistance = true
                         interrupts.stopForCharm = true
                         interrupts.stopForCombat = true
                         interrupts.stopForFear = true
@@ -1648,7 +1696,14 @@ local function Draw_GUI()
                         ImGui.TableSetColumnIndex(0)
                         interrupts.stopForXtar = ImGui.Checkbox("Stop for Xtarget##"..script, interrupts.stopForXtar)
                         if not interrupts.stopForXtar then interrupts.stopForAll = false end
+                        ImGui.TableSetColumnIndex(1)
+                        interrupts.stopForDist = ImGui.Checkbox("Stop for Party Dist##"..script, interrupts.stopForDist)
+                        if not interrupts.stopForDist then interrupts.stopForAll = false end
                         ImGui.EndTable()
+                        if interrupts.stopForDist then
+                            ImGui.SetNextItemWidth(100)
+                            interrupts.stopForGoupDist = ImGui.InputInt("Party Distance##GroupDist", interrupts.stopForGoupDist, 1, 50)
+                        end
                     end
                     settings[script].GroupWatch = ImGui.Checkbox("Group Watch##"..script, settings[script].GroupWatch)
                     if settings[script].GroupWatch then
@@ -2038,27 +2093,90 @@ end
 local function Loop()
     -- Main Loop
     while RUNNING do
+        local justZoned = false
         currZone = mq.TLO.Zone.ShortName()
         if mq.TLO.Me.Zoning() == true then
             printf("\ay[\at%s\ax] \agZoning, \ayPausing Navigation...", script)
             ZoningPause()
         end
         -- if pauseStart > 0 then print("Pause Start: "..pauseStart) end
+        -- if currZone ~= lastZone then
+        --     local flag = false
+        --     selectedPath = 'None'
+        --     controls.ChainPath = Chain[controls.CurChain+1].Path or ''
+        --     controls.doNav = false
+        --     currentStepIndex = 1
+        --     controls.autoRecord = false
+        --     controls.LastPath = nil
+        --     pauseTime = 0
+        --     previousDoNav = false
+        --     loopCount = 0
+        --     status = 'Idle'
+        --     pauseStart = 0
+        --     printf("\ay[\at%s\ax] \agZone Changed Last: \at%s Current: \ay%s", script, lastZone, currZone)
+        --     mq.delay(500)
+        --     lastZone = currZone
+        -- end
         if currZone ~= lastZone then
-            local flag = false
+            ZoningPause()
+            printf("\\ay[\\at%s\\ax] \\agZone Changed Last: \\at%s Current: \\ay%s", script, lastZone, currZone)
+            lastZone = currZone
             selectedPath = 'None'
             controls.doNav = false
-            
+            controls.autoRecord = false
+            controls.doLoop = false
+            controls.doReverse = false
+            controls.doPingPong = false
+            pauseTime = 0
+            pauseStart = 0
+            previousDoNav = false
+            -- Reset navigation state for new zone
+            currentStepIndex = 1
+            status = 'Idle'
+            controls.CurChain = controls.CurChain + 1
+            if controls.ChainStart then
+                controls.doPause = false
+                interrupts.interruptFound = false
                 lastZone = currZone
-                currentStepIndex = 1
+                selectedPath = 'None'
+                controls.doNav = false
                 controls.autoRecord = false
                 pauseTime = 0
-                loopCount = 0
-                status = 'Idle'
                 pauseStart = 0
-                printf("\ay[\at%s\ax] \agZone Changed Last: \at%s Current: \ay%s", script, lastZone, currZone)
-                
-        end
+                previousDoNav = false
+                -- Reset navigation state for new zone
+                currentStepIndex = 1
+                status = 'Idle'
+            -- Start navigation for the new zone if a chain path exists
+                if controls.CurChain <= #Chain then
+                    if Chain[controls.CurChain].Zone == currZone then
+                        selectedPath = Chain[controls.CurChain].Path
+                        currentStepIndex = 1
+                        if Chain[controls.CurChain].Type == 'Loop' then
+                            controls.doLoop = true
+                            controls.doReverse = false
+                        elseif Chain[controls.CurChain].Type == 'PingPong' then
+                            controls.doPingPong = true
+                            controls.doLoop = true
+                        elseif Chain[controls.CurChain].Type == 'Normal' then
+                            controls.doLoop = false
+                            controls.doReverse = false
+                            controls.doPingPong = false
+                        elseif Chain[controls.CurChain].Type == 'Reverse' then
+                            controls.doReverse = true
+                            controls.doLoop = false
+                            controls.doPingPong = false
+                        end
+                        controls.doNav = true
+                        status = 'Navigating'
+                        printf("\\ay[\\at%s\\ax] \\agStarting navigation for path: \\ay%s \\agin zone: \\ay%s", script, selectedPath, currZone)
+                    end
+                else
+                    Chain = {}
+                end
+            end
+            justZoned = true
+        else justZoned = false end
 
         if controls.doNav and controls.ChainStart and not controls.doPause then controls.ChainPath = selectedPath end
 
@@ -2097,8 +2215,9 @@ local function Loop()
                 controls.doPingPong = false
                 
             end
+            controls.ChainStart = true
             controls.CurChain = 1
-            mq.delay(5)
+            mq.delay(500)
         end
 
         if mq.TLO.SpawnCount('gm')() > 0 and interrupts.stopForGM and not pausedGM then
@@ -2149,6 +2268,7 @@ local function Loop()
             PathStartClock, PathStartTime = nil, nil
         elseif controls.LastPath == nil then
             controls.LastPath = selectedPath
+            currentStepIndex = 1
         end
 
         if selectedPath ~= controls.LastPath and controls.LastPath ~= nil then
@@ -2164,12 +2284,10 @@ local function Loop()
             mq.exit()
         end
 
-        if controls.doNav and not controls.doPause then
+        if controls.doNav and not controls.doPause and not justZoned then
             mq.delay(5)
             interrupts.interruptFound = CheckInterrupts()
         end
-
-
         
         if controls.doNav and not interrupts.interruptFound and not controls.doPause then
 
@@ -2211,48 +2329,51 @@ local function Loop()
         elseif not controls.doNav and not controls.autoRecord then
             -- Reset state when doNav is false
             loopCount = 0
-            controls.doPause = false
+            if not controls.ChainStart then
+                controls.doPause = false
+            end
             currentStepIndex = 1
             status = 'Idle'
             PathStartClock, PathStartTime = nil, nil
+            mq.delay(100)
         end
 
         -- Update previousDoNav to the current state
         previousDoNav = controls.doNav
 
         if #Chain > 0 and not controls.doNav and controls.ChainStart then
-            for i = 1, #Chain do
-                if Chain[i].Path == controls.ChainPath and i < #Chain then
-                    selectedPath = Chain[i + 1].Path
-                    currentStepIndex = 1
-                    mq.delay(1)
-                    controls.doNav = true
-                    controls.doPause = false
-                    if Chain[i+1].Zone ~= currZone then controls.doPause = true else controls.doPause = false end
-                    if Chain[i + 1].Type == 'Loop' then
-                        controls.doLoop = true
-                        controls.doReverse = false
-                        break
-                    elseif Chain[i + 1].Type == 'PingPong' then
-                        controls.doPingPong = true
-                        controls.doLoop = true
-                        break
-                    elseif Chain[i + 1].Type == 'Normal' then
-                        controls.doLoop = false
-                        controls.doReverse = false
-                        controls.doPingPong = false
-                        break
-                    elseif Chain[i + 1].Type == 'Reverse' then
-                        controls.doReverse = true
-                        controls.doLoop = false
-                        controls.doPingPong = false
-                        break
+            -- for i = 1, #Chain do
+                if Chain[controls.CurChain].Path == controls.ChainPath and controls.CurChain < #Chain then
+                    if Chain[controls.CurChain+1].Zone ~= currZone then
+                        controls.doPause = true
+                    else
+                        selectedPath = Chain[controls.CurChain + 1].Path
+                        currentStepIndex = 1
+                        controls.ChainPath = selectedPath
+                        controls.doPause = false
+                        if Chain[controls.CurChain + 1].Type == 'Loop' then
+                            controls.doLoop = true
+                            controls.doReverse = false
+                        elseif Chain[controls.CurChain + 1].Type == 'PingPong' then
+                            controls.doPingPong = true
+                            controls.doLoop = true
+                        elseif Chain[controls.CurChain + 1].Type == 'Normal' then
+                            controls.doLoop = false
+                            controls.doReverse = false
+                            controls.doPingPong = false
+                        elseif Chain[controls.CurChain + 1].Type == 'Reverse' then
+                            controls.doReverse = true
+                            controls.doLoop = false
+                            controls.doPingPong = false
+                        end
+                        controls.CurChain = controls.CurChain + 1
+                        mq.delay(500)
+                        controls.doNav = true
                     end
-                    controls.CurChain = i + 1
-                    mq.delay(1)            
-                elseif Chain[i].Path == controls.ChainPath and i == #Chain then
+                    mq.delay(500)            
+                elseif Chain[controls.CurChain].Path == controls.ChainPath and controls.CurChain == #Chain then
                     controls.ChainStart = false
-                    if Chain[i].Type == 'Normal' or Chain[i].Type == 'Reverse' then
+                    if Chain[controls.CurChain].Type == 'Normal' or Chain[controls.CurChain].Type == 'Reverse' then
                         controls.doNav = false
                         controls.doPause = false
                         controls.ChainStart = false
@@ -2260,7 +2381,7 @@ local function Loop()
                         Chain = {}
                     end
                 end
-            end
+            -- end
         end
 
         if controls.autoRecord then
