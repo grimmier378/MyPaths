@@ -25,7 +25,7 @@ local newPath = ''
 local curTime = os.time()
 local lastTime = curTime
 local controls = {}
-controls.ChainPath, controls.ChainStart = nil, false
+controls.ChainPath, controls.ChainStart, controls.ChainZone, controls.ChainPath = nil, false, '', ''
 controls.autoRecord, controls.doNav, controls.doSingle, controls.doLoop, controls.doReverse, controls.doPingPong, controls.doPause = false, false, false, false, false, false, false
 local recordDelay, stopDist, wpPause = 5, 30, 1
 local currentStepIndex, loopCount = 1, 0
@@ -817,8 +817,8 @@ end
 local transFlag = false
 local importString = ''
 local tmpCmd = ''
-local exportZone = ''
-local exportPathName = ''
+local exportZone, exportPathName = '', ''
+
 local function Draw_GUI()
     -- Main Window
     if showMainGUI then
@@ -1119,12 +1119,38 @@ local function Draw_GUI()
                     if ImGui.CollapsingHeader("Chain Paths##") then
                         if selectedPath ~= 'None' then
                             ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
-                            if ImGui.Button("Add to Chain##") then
+                            if ImGui.Button("Add ["..selectedPath.."]##") then
                                 if not Chain then Chain = {} end
                                 table.insert(Chain , {Zone = currZone, Path = selectedPath, Type = 'Normal'})
                             end
                             ImGui.PopStyleColor()
                         end
+                        if ImGui.BeginCombo("Zone##SelectChainZone", controls.ChainZone) then
+                            if not Paths[controls.ChainZone] then Paths[controls.ChainZone] = {} end
+                            for name, data in pairs(Paths) do
+                                local isSelected = name == controls.ChainZone
+                                if ImGui.Selectable(name, isSelected) then
+                                    controls.ChainZone = name
+                                end
+                            end
+                            ImGui.EndCombo()
+                        end
+                        if ImGui.BeginCombo("Path##SelectChainPath", controls.ChainPath) then
+                            if not Paths[controls.ChainZone] then Paths[controls.ChainZone] = {} end
+                            for name, data in pairs(Paths[controls.ChainZone]) do
+                                local isSelected = name == controls.ChainPath
+                                if ImGui.Selectable(name, isSelected) then
+                                    controls.ChainPath = name
+                                end
+                            end
+                            ImGui.EndCombo()
+                        end
+                        ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
+                        if ImGui.Button("Add Path to Chain") then
+                            if not Chain then Chain = {} end
+                            table.insert(Chain , {Zone = controls.ChainZone, Path = controls.ChainPath, Type = 'Normal'})
+                        end
+                        ImGui.PopStyleColor()
                         if #Chain > 0  then
                             ImGui.SameLine()
                             ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1, 0.4, 0.4, 0.4))
@@ -1723,13 +1749,15 @@ local function Draw_GUI()
             ImGui.TextColored(1,1,0,1,"%s", mq.TLO.Me.LocYXZ())
             if controls.doNav then
                 local tmpTable = sortPathsTable(currZone, selectedPath) or {}
-                ImGui.Text("Current WP: ")
-                ImGui.SameLine()
-                ImGui.TextColored(1,1,0,1,"%s ",tmpTable[currentStepIndex].step or 0)
-                ImGui.SameLine()
-                ImGui.Text("Distance: ")
-                ImGui.SameLine()
-                ImGui.TextColored(0,1,1,1,"%.2f", mq.TLO.Math.Distance(string.format("%s:%s", tmpTable[currentStepIndex].loc:gsub(",", " "), mq.TLO.Me.LocYXZ()))())
+                if tmpTable[currentStepIndex].step ~= nil then
+                    ImGui.Text("Current WP: ")
+                    ImGui.SameLine()
+                    ImGui.TextColored(1,1,0,1,"%s ",tmpTable[currentStepIndex].step or 0)
+                    ImGui.SameLine()
+                    ImGui.Text("Distance: ")
+                    ImGui.SameLine()
+                    ImGui.TextColored(0,1,1,1,"%.2f", mq.TLO.Math.Distance(string.format("%s:%s", tmpTable[currentStepIndex].loc:gsub(",", " "), mq.TLO.Me.LocYXZ()))())
+                end
             end
 
             ImGui.Text("Nav Type: ")
@@ -2007,19 +2035,51 @@ local function Loop()
         end
         -- if pauseStart > 0 then print("Pause Start: "..pauseStart) end
         if currZone ~= lastZone then
-            selectedPath = 'None'
-            controls.doNav = false
-            controls.doPause = false
-            mq.delay(1)
-            Chain = {}
-            lastZone = currZone
-            currentStepIndex = 1
-            controls.autoRecord = false
-            pauseTime = 0
-            loopCount = 0
-            status = 'Idle'
-            pauseStart = 0
-            printf("\ay[\at%s\ax] \agZone Changed Last: \at%s Current: \ay%s", script, lastZone, currZone)
+            
+            if #Chain > 0 then
+                for i = 1, #Chain do
+                    if Chain[i].Path == controls.ChainPath and controls.ChainStart then
+                        if Chain[i+1].Zone == currZone then
+                            selectedPath = Chain[i+1].Path
+                            if Chain[i+1].Type == 'Loop' then
+                                controls.doLoop = true
+                                controls.doReverse = false
+                                
+                            elseif Chain[i+1].Type == 'PingPong' then
+                                controls.doPingPong = true
+                                controls.doReverse = false
+                                
+                            elseif Chain[i+1].Type == 'Normal' then
+                                controls.doLoop = false
+                                controls.doReverse = false
+                                controls.doPingPong = false
+                                
+                            elseif Chain[i+1].Type == 'Reverse' then
+                                controls.doReverse = true
+                                controls.doLoop = false
+                                controls.doPingPong = false
+                            end
+                            mq.delay(5)
+                            break
+                        end
+                    end
+                end
+            else
+                selectedPath = 'None'
+                controls.doNav = false
+                controls.doPause = false
+                mq.delay(1)
+                Chain = {}
+            end
+                lastZone = currZone
+                currentStepIndex = 1
+                controls.autoRecord = false
+                pauseTime = 0
+                loopCount = 0
+                status = 'Idle'
+                pauseStart = 0
+                printf("\ay[\at%s\ax] \agZone Changed Last: \at%s Current: \ay%s", script, lastZone, currZone)
+            
         end
 
         if mq.TLO.SpawnCount('gm')() > 0 and interrupts.stopForGM and not pausedGM then
