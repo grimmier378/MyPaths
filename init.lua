@@ -667,6 +667,7 @@ local function NavigatePath(name)
             if tmp[i].cmd ~= '' then
                 table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = zone, Path = name, WP = 'Command', Status = 'Executing Command: '..tmp[i].cmd})
                 if tmp[i].cmd:find("/mypaths stop") then controls.doNav = false end
+                mq.delay(1)
                 mq.cmdf(tmp[i].cmd)
                 mq.delay(1)
                 coroutine.yield()
@@ -1006,6 +1007,7 @@ local function Draw_GUI()
 
             end
             ImGui.Separator()
+            -- Tabs
             if ImGui.BeginTabBar('MainTabBar') then
                 if ImGui.BeginTabItem('Controls') then
                     if ImGui.CollapsingHeader("Paths##") then
@@ -1428,18 +1430,23 @@ local function Draw_GUI()
                             ImGui.TableSetupColumn('Status##', ImGuiTableColumnFlags.WidthFixed, 100)
                             ImGui.TableSetupScrollFreeze(0, 1)
                             ImGui.TableHeadersRow()
+                            local tmpDebug = {}
                             for i = 1, #debugMessages do
+                                table.insert(tmpDebug, debugMessages[i])
+                            end
+                            table.sort(tmpDebug, function(a, b) return a.Time > b.Time end)
+                            for i = 1, #tmpDebug do
                                 ImGui.TableNextRow()
                                 ImGui.TableSetColumnIndex(0)
-                                ImGui.Text(debugMessages[i].Time)
+                                ImGui.Text(tmpDebug[i].Time)
                                 ImGui.TableSetColumnIndex(1)
-                                ImGui.Text(debugMessages[i].Zone)
+                                ImGui.Text(tmpDebug[i].Zone)
                                 ImGui.TableSetColumnIndex(2)
-                                ImGui.Text(debugMessages[i].Path)
+                                ImGui.Text(tmpDebug[i].Path)
                                 ImGui.TableSetColumnIndex(3)
-                                ImGui.Text(debugMessages[i].WP)
+                                ImGui.Text(tmpDebug[i].WP)
                                 ImGui.TableSetColumnIndex(4)
-                                ImGui.Text(debugMessages[i].Status)
+                                ImGui.Text(tmpDebug[i].Status)
                             end
                             ImGui.EndTable()
                         end
