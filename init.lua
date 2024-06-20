@@ -1958,9 +1958,15 @@ local function bind(...)
         elseif key == 'pause' then
             controls.doPause = true
         elseif key == 'xtarg' then
-            controls.doXtar = not controls.doXtar
+            interrupts.stopForXtar = not interrupts.stopForXtar
+            if not interrupts.stopForXtar then
+                interrupts.stopForAll = false
+            end
         elseif key == 'combat' then
-            controls.doCombat = not controls.doCombat
+            interrupts.stopForCombat = not interrupts.stopForCombat
+            if not interrupts.stopForCombat then
+                interrupts.stopForAll = false
+            end
         elseif key == 'resume' then
             controls.doPause = false
         elseif key == 'quit' or key == 'exit' then
@@ -1993,15 +1999,17 @@ local function bind(...)
             end
         elseif key == 'xtarg' then
             if action == 'on' then
-                controls.doXtar = true
+                interrupts.stopForXtar = true
             elseif action == 'off' then
-                controls.doXtar = false
+                interrupts.stopForXtar = false
+                interrupts.stopForAll = false
             end
         elseif key == 'combat' then
             if action == 'on' then
-                controls.doCombat = true
+                interrupts.stopForCombat = true
             elseif action == 'off' then
-                controls.doCombat = false
+                interrupts.stopForCombat = false
+                interrupts.stopForAll = false
             end
         end
     elseif #args  == 3 then
