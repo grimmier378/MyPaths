@@ -111,6 +111,8 @@ The table is set with a 100 row buffer limit.
 Command Line Commands:
 
 	/mypaths [go|stop|list|show|quit|debug|hud|help] [loop|rloop|start|reverse|pingpong|closest|rclosest] [path]
+  /mypaths [combat|xtarg] [on|off] Toggles combat and xtarget interrupts on or off respectivly.
+  /mypaths [resume] [back|next] Resumes paused path, optional back and next arguments if blank we resume on same step where we left off.
 
 Command: go = REQUIRES arguments and Path name see below for Arguments.
 Command: stop = Stops the current Navigation.
@@ -145,3 +147,7 @@ https://vimeo.com/manage/videos/955375540
 https://github.com/grimmier378/MyPaths/assets/124466615/31f1fc97-75ba-46cf-87d2-c880a9b260d0
 
 https://www.youtube.com/watch?v=aWhSqgmPP6s
+
+https://www.youtube.com/watch?v=0Pkyd54W8yA&t=2s
+
+https://www.youtube.com/watch?v=HlgoaLkNPNo&t=6s

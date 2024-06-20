@@ -25,7 +25,7 @@ local newPath = ''
 local curTime = os.time()
 local lastTime = curTime
 local controls = {}
-controls.ChainPath, controls.ChainStart, controls.ChainZone, controls.ChainPath, controls.LastPath, controls.CurChain = nil, false, '', '', nil, 0
+controls.ChainPath, controls.ChainStart, controls.ChainZone, controls.LastPath, controls.CurChain = '', false,  '', nil, 0
 controls.autoRecord, controls.doNav, controls.doSingle, controls.doLoop, controls.doReverse, controls.doPingPong, controls.doPause = false, false, false, false, false, false, false
 local recordDelay, stopDist, wpPause = 5, 30, 1
 local currentStepIndex, loopCount = 1, 0
@@ -1930,6 +1930,7 @@ local function displayHelp()
     printf("\ay[\at%s\ax] \agArguments: \aypingpong \aw= \atstart in ping pong mode.", script)
     printf("\ay[\at%s\ax] \agExample: \ay/mypaths \aogo \ayloop \am\"Loop A\"", script)
     printf("\ay[\at%s\ax] \agExample: \ay/mypaths \aostop", script)
+    printf("\ay[\at%s\ax] \agCommands: \ay/mypaths [\atcombat\ax|\atxtarg\ax] [\aton\ax|\atoff\ax] \ay- \atToggle Combat or Xtarget.", script)
 end
 
 local function bind(...)
@@ -1956,6 +1957,10 @@ local function bind(...)
             showMainGUI = not showMainGUI
         elseif key == 'pause' then
             controls.doPause = true
+        elseif key == 'xtarg' then
+            controls.doXtar = not controls.doXtar
+        elseif key == 'combat' then
+            controls.doCombat = not controls.doCombat
         elseif key == 'resume' then
             controls.doPause = false
         elseif key == 'quit' or key == 'exit' then
@@ -1985,6 +1990,18 @@ local function bind(...)
             elseif action == 'back' then
                 currentStepIndex = currentStepIndex - 1
                 controls.doPause = false
+            end
+        elseif key == 'xtarg' then
+            if action == 'on' then
+                controls.doXtar = true
+            elseif action == 'off' then
+                controls.doXtar = false
+            end
+        elseif key == 'combat' then
+            if action == 'on' then
+                controls.doCombat = true
+            elseif action == 'off' then
+                controls.doCombat = false
             end
         end
     elseif #args  == 3 then
@@ -2127,6 +2144,7 @@ local function Loop()
             controls.doLoop = false
             controls.doReverse = false
             controls.doPingPong = false
+            controls.doPause = false
             pauseTime = 0
             pauseStart = 0
             previousDoNav = false
@@ -2135,18 +2153,7 @@ local function Loop()
             status = 'Idle'
             controls.CurChain = controls.CurChain + 1
             if controls.ChainStart then
-                controls.doPause = false
                 interrupts.interruptFound = false
-                lastZone = currZone
-                selectedPath = 'None'
-                controls.doNav = false
-                controls.autoRecord = false
-                pauseTime = 0
-                pauseStart = 0
-                previousDoNav = false
-                -- Reset navigation state for new zone
-                currentStepIndex = 1
-                status = 'Idle'
             -- Start navigation for the new zone if a chain path exists
                 if controls.CurChain <= #Chain then
                     if Chain[controls.CurChain].Zone == currZone then
@@ -2173,6 +2180,10 @@ local function Loop()
                     end
                 else
                     Chain = {}
+                    controls.CurChain = 0
+                    controls.ChainStart = false
+                    controls.ChainZone = ''
+                    controls.ChainPath = ''
                 end
             end
             justZoned = true
