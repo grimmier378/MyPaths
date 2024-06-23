@@ -75,6 +75,7 @@ local InterruptSet = {
     stopForMez = true,
     stopForRoot = true,
     stopForLoot = true,
+    interruptCheck = 0,
 }
 
 -- GUI Settings
@@ -694,7 +695,7 @@ local function NavigatePath(name)
 
                     return
                 end
-                if CheckInterrupts() then
+                if interruptInProcess then
                     coroutine.yield()
                 elseif mq.TLO.Me.Speed() == 0 then
                     mq.delay(1)
@@ -1247,7 +1248,11 @@ local function Draw_GUI()
                                 ImGui.SameLine()
                                 ImGui.TextColored(0.0,1,1,1,"%s", ChainedPaths[i].Zone)
                                 ImGui.SameLine()
-                                ImGui.TextColored(0.0,1,0,1,"%s", ChainedPaths[i].Path)
+                                if ChainedPaths[i].Path == NavSet.ChainPath then
+                                    ImGui.TextColored(1,1,0,1,"%s", ChainedPaths[i].Path)
+                                else
+                                    ImGui.TextColored(0.0,1,0,1,"%s", ChainedPaths[i].Path)
+                                end
                             end
                         end
                     end
@@ -2137,6 +2142,7 @@ local function Loop()
     -- Main Loop
     while RUNNING do
         local justZoned = false
+        local cTime = os.time()
         currZone = mq.TLO.Zone.ShortName()
         if mq.TLO.Me.Zoning() == true then
             printf("\ay[\at%s\ax] \agZoning, \ayPausing Navigation...", script)
@@ -2151,17 +2157,8 @@ local function Loop()
         end
 
         if currZone ~= lastZone then
-            if coroutine.status(co) ~= "dead" then
-                local success, message = coroutine.close(co)
-                if not success then
-                    print("Error: " .. message)
-                    break
-                end
-            else
-                -- If the coroutine is dead, create a new one
-                co = coroutine.create(NavigatePath)
-            end
-            printf("\\ay[\\at%s\\ax] \\agZone Changed Last: \\at%s Current: \\ay%s", script, lastZone, currZone)
+
+            printf("\ay[\at%s\ax] \agZone Changed Last: \at%s Current: \ay%s", script, lastZone, currZone)
             lastZone = currZone
             NavSet.SelectedPath = 'None'
             NavSet.doNav = false
@@ -2203,7 +2200,7 @@ local function Loop()
                         NavSet.doChainPause = false
                         NavSet.doNav = true
                         status = 'Navigating'
-                        printf("\\ay[\\at%s\\ax] \\agStarting navigation for path: \\ay%s \\agin zone: \\ay%s", script, NavSet.SelectedPath, currZone)
+                        printf('\ay[\at%s\ax] \agStarting navigation for path: \ay%s \agin zone: \ay%s', script, NavSet.SelectedPath, currZone)
                     end
                 else
                     ChainedPaths = {}
@@ -2258,17 +2255,6 @@ local function Loop()
             mq.delay(500)
         end
 
-        if mq.TLO.SpawnCount('gm')() > 0 and InterruptSet.stopForGM and not NavSet.PausedActiveGN then
-            printf("\ay[\at%s\ax] \arGM Detected, \ayPausing Navigation...", script)
-            NavSet.doNav = false
-            mq.cmdf("/squelch /nav stop")
-            NavSet.ChainStart = false
-            mq.cmd("/multiline ; /squelch /beep; /timed  3, /beep ; /timed 2, /beep ; /timed 1, /beep")
-            mq.delay(1)
-            status = 'Paused: GM Detected'
-            NavSet.PausedActiveGN = true
-        end
-
         if zoningHideGUI then
             printf("\ay[\at%s\ax] \agZoning, \ayHiding GUI...", script)
             mq.delay(1)
@@ -2288,7 +2274,7 @@ local function Loop()
                 lastZone = currZone
                 pauseTime = 0
                 InterruptSet.PauseStart = 0
-                printf("\ay[\at%s\ax] \agZone Changed Last: \at%s Current: \ay%s", script, lastZone, currZone)
+                printf('\ay[\at%s\ay]\ag Zone Changed Last:\at %s Current:\ay %s', script, lastZone, currZone)
             end
         end
         
@@ -2325,7 +2311,24 @@ local function Loop()
 
         if NavSet.doNav and not NavSet.doPause and not justZoned then
             mq.delay(1)
-            InterruptSet.interruptFound = CheckInterrupts()
+            cTime = os.time()
+            local checkTime = InterruptSet.interruptCheck or 1
+            -- printf("interrupt Checked: %s", checkTime)
+            if cTime - checkTime >= 1 then
+                InterruptSet.interruptFound = CheckInterrupts()
+                InterruptSet.interruptCheck = os.time()
+                if mq.TLO.SpawnCount('gm')() > 0 and InterruptSet.stopForGM and not NavSet.PausedActiveGN then
+                    printf("\ay[\at%s\ax] \arGM Detected, \ayPausing Navigation...", script)
+                    NavSet.doNav = false
+                    mq.cmdf("/squelch /nav stop")
+                    NavSet.ChainStart = false
+                    mq.cmd("/multiline ; /squelch /beep; /timed  3, /beep ; /timed 2, /beep ; /timed 1, /beep")
+                    mq.delay(1)
+                    status = 'Paused: GM Detected'
+                    NavSet.PausedActiveGN = true
+                end
+            end
+
         end
         
         if NavSet.doNav and not InterruptSet.interruptFound and not NavSet.doPause and not NavSet.doChainPause then
@@ -2384,7 +2387,8 @@ local function Loop()
             -- for i = 1, #Chain do
                 if ChainedPaths[NavSet.CurChain].Path == NavSet.ChainPath and NavSet.CurChain < #ChainedPaths then
                     if ChainedPaths[NavSet.CurChain+1].Zone ~= currZone then
-                        NavSet.doChainPause = true
+                        status = 'Next Path Waiting to Zone: '..ChainedPaths[NavSet.CurChain+1].Zone
+                        NavSet.doPause = true
                     else
                         NavSet.SelectedPath = ChainedPaths[NavSet.CurChain + 1].Path
                         NavSet.CurrentStepIndex = 1
