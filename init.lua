@@ -19,47 +19,61 @@ local meName -- Character Name
 local themeName = 'Default'
 local themeID = 1
 local theme, defaults, settings, debugMessages = {}, {}, {}, {}
-local Paths, Chain = {}, {}
-local selectedPath = 'None'
+local Paths, ChainedPaths = {}, {}
 local newPath = ''
 local curTime = os.time()
 local lastTime = curTime
-local controls = {}
-controls.ChainPath, controls.ChainStart, controls.ChainZone, controls.LastPath, controls.CurChain = '', false,  '', nil, 0
-controls.autoRecord, controls.doNav, controls.doSingle, controls.doLoop, controls.doReverse, controls.doPingPong, controls.doPause = false, false, false, false, false, false, false
-local recordDelay, stopDist, wpPause = 5, 30, 1
-local currentStepIndex, loopCount = 1, 0
 local deleteWP, deleteWPStep = false, 0
 local status, lastStatus = 'Idle', ''
 local wpLoc = ''
 local currZone, lastZone = '', ''
 local lastHP, lastMP, pauseTime = 0, 0, 0
-local pauseStart = 0
-local previousDoNav = false
 local zoningHideGUI = false
-local pausedGM = false
 local ZoningPause
-local interruptDelay = 2
 local lastRecordedWP = ''
-local recordMinDist = 25
-
 local PathStartClock,PathStartTime = nil, nil
-local interrupts = {
-interruptFound = false,
-reported = false,
-openDoor = false,
-stopForAll = true,
-stopForGM = true,
-stopForSitting = true,
-stopForCombat = true,
-stopForGoupDist = 100,
-stopForDist = false,
-stopForXtar = true,
-stopForFear = true,
-stopForCharm = true,
-stopForMez = true,
-stopForRoot = true,
-stopForLoot = true,
+local NavSet = {
+    ChainPath = '',
+    ChainStart = false,
+    SelectedPath = 'None',
+    ChainZone = '',
+    LastPath = nil,
+    CurChain = 0,
+    autoRecord = false,
+    doNav = false,
+    doSingle = false,
+    doLoop = false,
+    doReverse = false,
+    doPingPong = false,
+    doPause = false,
+    RecordDelay = 5,
+    StopDist = 30,
+    WpPause = 1,
+    CurrentStepIndex = 1,
+    LoopCount = 0,
+    RecordMinDist = 25,
+    PreviousDoNav = false,
+    PausedActiveGN = false,
+}
+
+local InterruptSet = {
+    interruptFound = false,
+    reported = false,
+    interruptDelay = 2,
+    PauseStart = 0,
+    openDoor = false,
+    stopForAll = true,
+    stopForGM = true,
+    stopForSitting = true,
+    stopForCombat = true,
+    stopForGoupDist = 100,
+    stopForDist = false,
+    stopForXtar = true,
+    stopForFear = true,
+    stopForCharm = true,
+    stopForMez = true,
+    stopForRoot = true,
+    stopForLoot = true,
 }
 
 -- GUI Settings
@@ -209,22 +223,22 @@ local function loadSettings()
     end
 
     if settings[script].InterruptDelay == nil then
-        settings[script].InterruptDelay = interruptDelay
+        settings[script].InterruptDelay = InterruptSet.interruptDelay
         newSetting = true
     end
 
     if settings[script].stopForGM == nil then
-        settings[script].stopForGM = interrupts.stopForGM
+        settings[script].stopForGM = InterruptSet.stopForGM
         newSetting = true
     end
 
     if settings[script].RecordMinDist == nil then
-        settings[script].RecordMinDist = recordMinDist
+        settings[script].RecordMinDist = NavSet.RecordMinDist
         newSetting = true
     end
 
     if settings[script].RecordDelay == nil then
-        settings[script].RecordDelay = recordDelay
+        settings[script].RecordDelay = NavSet.RecordDelay
         newSetting = true
     end
 
@@ -269,7 +283,7 @@ local function loadSettings()
     end
 
     if settings[script].PauseStops == nil then
-        settings[script].PauseStops = wpPause
+        settings[script].PauseStops = NavSet.WpPause
         newSetting = true
     end
 
@@ -279,12 +293,12 @@ local function loadSettings()
     end
 
     if settings[script].StopDistance == nil then
-        settings[script].StopDistance = stopDist
+        settings[script].StopDistance = NavSet.StopDist
         newSetting = true
     end
 
     if settings[script].Interrupts == nil then
-        settings[script].Interrupts = interrupts
+        settings[script].Interrupts = InterruptSet
         newSetting = true
     end
 
@@ -299,20 +313,22 @@ local function loadSettings()
     end
     -- Load the theme
     loadTheme()
-    interrupts = settings[script].Interrupts
+    InterruptSet = settings[script].Interrupts
     -- Set the settings to the variables
+    NavSet.StopDist = settings[script].StopDistance
+    NavSet.WpPause = settings[script].PauseStops
+    NavSet.RecordMinDist = settings[script].RecordMinDist
+    InterruptSet.stopForGM = settings[script].stopForGM
+    InterruptSet.stopForDist = settings[script].Interrupts.stopForDist
+    InterruptSet.interruptDelay = settings[script].InterruptDelay
     hudTransparency = settings[script].HeadsUpTransparency
-    stopDist = settings[script].StopDistance
-    wpPause = settings[script].PauseStops
     aSize = settings[script].AutoSize
     hudMouse = settings[script].MouseHUD
-    recordMinDist = settings[script].RecordMinDist
-    interrupts.stopForGM = settings[script].stopForGM
     locked = settings[script].locked
     scale = settings[script].Scale
     themeName = settings[script].LoadTheme
-    recordDelay = settings[script].RecordDelay
-    interruptDelay = settings[script].InterruptDelay
+    NavSet.RecordDelay = settings[script].RecordDelay
+    
 
     -- Save the settings if new settings were added
     if newSetting then mq.pickle(configFile, settings) end
@@ -331,11 +347,11 @@ local function RecordWaypoint(name)
     local distToLast = 0
     if lastRecordedWP ~= loc and lastRecordedWP ~= '' then
         distToLast = mq.TLO.Math.Distance(string.format("%s:%s", lastRecordedWP, loc))()
-        if distToLast < recordMinDist and controls.autoRecord then
-            status = "Recording: Distance to Last WP is less than "..recordMinDist.."!"
-            if DEBUG and not interrupts.reported then
-                table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = zone, Path = name, WP = 'Record WP', Status = 'Distance to Last WP is less than '..recordMinDist..' units!'})
-                interrupts.reported = true
+        if distToLast < NavSet.RecordMinDist and NavSet.autoRecord then
+            status = "Recording: Distance to Last WP is less than "..NavSet.RecordMinDist.."!"
+            if DEBUG and not InterruptSet.reported then
+                table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = zone, Path = name, WP = 'Record WP', Status = 'Distance to Last WP is less than '..NavSet.RecordMinDist..' units!'})
+                InterruptSet.reported = true
             end
             return
         end
@@ -345,15 +361,15 @@ local function RecordWaypoint(name)
         table.insert(tmp, {step = index + 1, loc = loc, delay = 0, cmd = ''})
         lastRecordedWP = loc
         index = index + 1
-        interrupts.reported = false
+        InterruptSet.reported = false
     else
         table.insert(tmp, {step = 1, loc = loc, delay = 0, cmd = ''})
         index = 1
         lastRecordedWP = loc
-        interrupts.reported = false
+        InterruptSet.reported = false
     end
     Paths[zone][name] = tmp
-    if controls.autoRecord then
+    if NavSet.autoRecord then
         status = "Recording: Waypoint #"..index.." Added!"
     end
     if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = zone, Path = name, WP = "Add WP#"..index, Status = 'Waypoint #'..index..' Added Successfully!'}) end
@@ -406,7 +422,7 @@ end
 
 local function AutoRecordPath(name)
     curTime = os.time()
-    if curTime - lastTime > recordDelay then
+    if curTime - lastTime > NavSet.RecordDelay then
         RecordWaypoint(name)
         lastTime = curTime
     end
@@ -419,7 +435,7 @@ local function groupDistance()
     if gsize == 0 then return false end
     for i = 1, gsize - 1 do
         if member(i).Present() then
-            if member(i).Distance() > interrupts.stopForGoupDist then
+            if member(i).Distance() > InterruptSet.stopForGoupDist then
                 status = string.format('Paused for Group Distance. %s is %.2f units away.', member(i).Name(), member(i).Distance())
                 return true
             end
@@ -518,22 +534,22 @@ end
 
 local interruptInProcess = false
 local function CheckInterrupts()
-    if not controls.doNav then return false end
+    if not NavSet.doNav then return false end
     local xCount = mq.TLO.Me.XTarget() or 0
     local flag = false
-    if mq.TLO.Window('LootWnd').Open() and interrupts.stopForLoot then
+    if mq.TLO.Window('LootWnd').Open() and InterruptSet.stopForLoot then
         if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
         status = 'Paused for Looting.'
         flag = true
-    elseif mq.TLO.Window('AdvancedLootWnd').Open() and interrupts.stopForLoot then
+    elseif mq.TLO.Window('AdvancedLootWnd').Open() and InterruptSet.stopForLoot then
         if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
         status = 'Paused for Looting.'
         flag = true
-    elseif mq.TLO.Me.Combat() and interrupts.stopForCombat then
+    elseif mq.TLO.Me.Combat() and InterruptSet.stopForCombat then
         if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
         status = 'Paused for Combat.'
         flag = true
-    elseif xCount > 0 and interrupts.stopForXtar then
+    elseif xCount > 0 and InterruptSet.stopForXtar then
         for i = 1, mq.TLO.Me.XTargetSlots() do
             if mq.TLO.Me.XTarget(i) ~= nil then
                 if (mq.TLO.Me.XTarget(i).ID() ~= 0 and mq.TLO.Me.XTarget(i).Type() ~= 'PC' and mq.TLO.Me.XTarget(i).Master.Type() ~= "PC") then
@@ -543,7 +559,7 @@ local function CheckInterrupts()
                 end
             end
         end
-    elseif mq.TLO.Me.Sitting() == true and interrupts.stopForSitting then
+    elseif mq.TLO.Me.Sitting() == true and InterruptSet.stopForSitting then
         if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
         mq.delay(30)
         local curHP, curMP = mq.TLO.Me.PctHPs(), mq.TLO.Me.PctMana() or 0
@@ -552,19 +568,19 @@ local function CheckInterrupts()
             status = string.format('Paused for Sitting. HP %s MP %s', curHP, curMP)
         end
         flag = true
-    elseif mq.TLO.Me.Rooted() and interrupts.stopForRoot then
+    elseif mq.TLO.Me.Rooted() and InterruptSet.stopForRoot then
         if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
         status = 'Paused for Rooted.'
         flag = true
-    elseif mq.TLO.Me.Feared() and interrupts.stopForFear then
+    elseif mq.TLO.Me.Feared() and InterruptSet.stopForFear then
         if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
         status = 'Paused for Feared.'
         flag = true
-    elseif mq.TLO.Me.Mezzed() and interrupts.stopForMez then
+    elseif mq.TLO.Me.Mezzed() and InterruptSet.stopForMez then
         if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
         status = 'Paused for Mezzed.'
         flag = true
-    elseif mq.TLO.Me.Charmed() and interrupts.stopForCharm then
+    elseif mq.TLO.Me.Charmed() and InterruptSet.stopForCharm then
         if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
         status = 'Paused for Charmed.'
         flag = true
@@ -574,13 +590,19 @@ local function CheckInterrupts()
         lastZone = ''
         flag = true
     elseif settings[script].GroupWatch == true then
-        flag = groupWatch(settings[script].WatchType)
-    elseif interrupts.stopForDist == true then
-        flag = groupDistance()
+        if groupWatch(settings[script].WatchType) then
+            flag =  true
+        end
+        if flag and not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
+    elseif InterruptSet.stopForDist == true then
+        if groupDistance() then
+            flag = true
+        end
+        if flag and not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
     end
     if flag then
-        pauseStart = os.time()
-        pauseTime = interruptDelay
+        InterruptSet.PauseStart = os.time()
+        pauseTime = InterruptSet.interruptDelay
     else
         interruptInProcess = false
     end
@@ -593,7 +615,7 @@ end
 local function ToggleSwitches()
     mq.cmdf("/squelch /multiline ; /doortarget; /timed 15, /click left door; /timed 25, /doortarget clear")
     mq.delay(750)
-    interrupts.openDoor = not interrupts.openDoor
+    InterruptSet.openDoor = not InterruptSet.openDoor
 end
 
 local function FindIndexClosestWaypoint(table)
@@ -621,57 +643,57 @@ local function sortPathsTable(zone, path)
         table.insert(tmp, data)
     end
     
-    if controls.doReverse then
+    if NavSet.doReverse then
         table.sort(tmp, function(a, b) return a.step > b.step end)
     else table.sort(tmp, function(a, b) return a.step < b.step end) end
     return tmp
 end
 
 local function NavigatePath(name)
-    if not controls.doNav then
+    if not NavSet.doNav then
         return
     end
     local zone = mq.TLO.Zone.ShortName()
     local startNum = 1
-    if currentStepIndex ~= 1 then
-        startNum = currentStepIndex
+    if NavSet.CurrentStepIndex ~= 1 then
+        startNum = NavSet.CurrentStepIndex
     end
-    if controls.doSingle then controls.doNav = true end
-    if controls.doLoop then
+    if NavSet.doSingle then NavSet.doNav = true end
+    if NavSet.doLoop then
         table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = zone, Path = name, WP = 'Loop Started', Status = 'Loop Started!'})
     end
-    if #Chain > 0 and not controls.ChainStart then controls.ChainPath = selectedPath controls.ChainStart = true end
-    while controls.doNav do
+    if #ChainedPaths > 0 and not NavSet.ChainStart then NavSet.ChainPath = NavSet.SelectedPath NavSet.ChainStart = true end
+    while NavSet.doNav do
         local tmp = sortPathsTable(zone, name)
         if tmp == nil then
-            controls.doNav = false
+            NavSet.doNav = false
             status = 'Idle'
             return
         end
         for i = startNum , #tmp do
-            if controls.doSingle then i = currentStepIndex end
-            currentStepIndex = i
-            if not controls.doNav then
+            if NavSet.doSingle then i = NavSet.CurrentStepIndex end
+            NavSet.CurrentStepIndex = i
+            if not NavSet.doNav then
                 return
             end
             local tmpLoc = string.format("%s:%s", tmp[i].loc, mq.TLO.Me.LocYXZ())
             wpLoc = tmp[i].loc
             tmpLoc = tmpLoc:gsub(",", " ")
             local tmpDist = mq.TLO.Math.Distance(tmpLoc)() or 0
-            mq.cmdf("/squelch /nav locyxz %s | distance %s", tmpLoc, stopDist)
+            mq.cmdf("/squelch /nav locyxz %s | distance %s", tmpLoc, NavSet.StopDist)
             status = "Nav to WP #: "..tmp[i].step.." Distance: "..string.format("%.2f",tmpDist)
             mq.delay(1)
             -- mq.delay(3000, function () return mq.TLO.Me.Speed() > 0 end)
             -- coroutine.yield()  -- Yield here to allow updates
-            while mq.TLO.Math.Distance(tmpLoc)() > stopDist do
-                if not controls.doNav then
+            while mq.TLO.Math.Distance(tmpLoc)() > NavSet.StopDist do
+                if not NavSet.doNav then
                     return
                 end
                 if currZone ~= lastZone then
-                    selectedPath = 'None'
-                    controls.doNav = false
+                    NavSet.SelectedPath = 'None'
+                    NavSet.doNav = false
                     pauseTime = 0
-                    pauseStart = 0
+                    InterruptSet.PauseStart = 0
 
                     return
                 end
@@ -679,9 +701,9 @@ local function NavigatePath(name)
                     coroutine.yield()
                 end
                 if mq.TLO.Me.Speed() == 0 and not CheckInterrupts() then
-                    mq.delay(20)
+                    mq.delay(1)
                     if not mq.TLO.Me.Sitting() then
-                        mq.cmdf("/squelch /nav locyxz %s | distance %s", tmpLoc, stopDist)
+                        mq.cmdf("/squelch /nav locyxz %s | distance %s", tmpLoc, NavSet.StopDist)
                         tmpLoc = string.format("%s:%s", tmp[i].loc, mq.TLO.Me.LocYXZ())
                         tmpLoc = tmpLoc:gsub(",", " ")
                         tmpDist = mq.TLO.Math.Distance(tmpLoc)() or 0
@@ -697,66 +719,66 @@ local function NavigatePath(name)
             mq.cmdf("/squelch /nav stop")
             -- status = "Arrived at WP #: "..tmp[i].step
 
-            if controls.doSingle then
-                controls.doNav = false
-                controls.doSingle = false
+            if NavSet.doSingle then
+                NavSet.doNav = false
+                NavSet.doSingle = false
                 status = 'Idle - Arrived at Destination!'
-                loopCount = 0
+                NavSet.LoopCount = 0
                 return
             end
             -- Check for Commands to execute at Waypoint
             if tmp[i].cmd ~= '' then
                 table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = zone, Path = name, WP = 'Command', Status = 'Executing Command: '..tmp[i].cmd})
-                if tmp[i].cmd:find("/mypaths stop") then controls.doNav = false end
+                if tmp[i].cmd:find("/mypaths stop") then NavSet.doNav = false end
                 mq.delay(1)
                 mq.cmdf(tmp[i].cmd)
                 mq.delay(1)
                 coroutine.yield()
             end
             -- Door Check
-            if tmp[i].door and not controls.doReverse then
-                interrupts.openDoor = true
+            if tmp[i].door and not NavSet.doReverse then
+                InterruptSet.openDoor = true
                 ToggleSwitches()
-            elseif tmp[i].doorRev and controls.doReverse then
-                interrupts.openDoor = true
+            elseif tmp[i].doorRev and NavSet.doReverse then
+                InterruptSet.openDoor = true
                 ToggleSwitches()
             end
             -- Check for Delay at Waypoint
             if tmp[i].delay > 0 then
                 status = string.format("Paused %s seconds at WP #: %s", tmp[i].delay, tmp[i].step)
                 pauseTime = tmp[i].delay
-                pauseStart = os.time()
+                InterruptSet.PauseStart = os.time()
                 coroutine.yield()
                 -- coroutine.yield()  -- Yield here to allow updates
-            elseif wpPause > 0 then
-                status = string.format("Global Paused %s seconds at WP #: %s", wpPause, tmp[i].step)
-                pauseTime = wpPause
-                pauseStart = os.time()
+            elseif NavSet.WpPause > 0 then
+                status = string.format("Global Paused %s seconds at WP #: %s", NavSet.WpPause, tmp[i].step)
+                pauseTime = NavSet.WpPause
+                InterruptSet.PauseStart = os.time()
                 coroutine.yield()
                 -- coroutine.yield()  -- Yield here to allow updates
             else
-                if not interrupts.interruptFound then
+                if not InterruptSet.interruptFound then
                     pauseTime = 0
-                    pauseStart = 0
+                    InterruptSet.PauseStart = 0
                 end
             end
 
         end
         -- Check if we need to loop
-        if not controls.doLoop then
+        if not NavSet.doLoop then
             
-            controls.doNav = false
+            NavSet.doNav = false
             status = 'Idle - Arrived at Destination!'
-            loopCount = 0
+            NavSet.LoopCount = 0
 
             break
         else
-            loopCount = loopCount + 1
-            table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = zone, Path = name, WP = 'Loop #'..loopCount, Status = 'Loop #'..loopCount..' Completed!'})
-            currentStepIndex = 1
+            NavSet.LoopCount = NavSet.LoopCount + 1
+            table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = zone, Path = name, WP = 'Loop #'..NavSet.LoopCount, Status = 'Loop #'..NavSet.LoopCount..' Completed!'})
+            NavSet.CurrentStepIndex = 1
             startNum = 1
-            if controls.doPingPong then
-                controls.doReverse = not controls.doReverse
+            if NavSet.doPingPong then
+                NavSet.doReverse = not NavSet.doReverse
             end
         end
     end
@@ -770,7 +792,7 @@ function ZoningPause()
     table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = 'Zoning', Path = "Zoning", WP = 'Zoning', Status = 'Zoning'})
     mq.delay(1)
     while mq.TLO.Me.Zoning() == true do
-        controls.doNav = false
+        NavSet.doNav = false
         if coroutine.status(co) ~= "dead" then
             local success, message = coroutine.close(co)
             if not success then
@@ -781,9 +803,9 @@ function ZoningPause()
             -- If the coroutine is dead, create a new one
             co = coroutine.create(NavigatePath)
         end
-        selectedPath = 'None'
-        currentStepIndex = 1
-        pauseStart = 0
+        NavSet.SelectedPath = 'None'
+        NavSet.CurrentStepIndex = 1
+        InterruptSet.PauseStart = 0
         pauseTime = 0
         zoningHideGUI = true
         showMainGUI = false
@@ -878,11 +900,11 @@ local function Draw_GUI()
         end
         -- Check if the window is showing
         if showMain then
-            local tmpTable = sortPathsTable(currZone, selectedPath) or {}
+            local tmpTable = sortPathsTable(currZone, NavSet.SelectedPath) or {}
             local closestWaypointIndex = FindIndexClosestWaypoint(tmpTable)
             local curWPTxt = 1
-            if tmpTable[currentStepIndex] ~= nil then
-                curWPTxt = tmpTable[currentStepIndex].step or 0
+            if tmpTable[NavSet.CurrentStepIndex] ~= nil then
+                curWPTxt = tmpTable[NavSet.CurrentStepIndex].step or 0
             end
             -- Set Window Font Scale
             ImGui.SetWindowFontScale(scale)
@@ -934,7 +956,7 @@ local function Draw_GUI()
                 end
                 ImGui.EndMenuBar()
             end
-            if pausedGM then
+            if NavSet.PausedActiveGN then
                 if mq.TLO.SpawnCount('gm')() > 0 then
                 ImGui.TextColored(1,0,0,1,"!!%s GM in Zone %s!!", Icon.FA_BELL,Icon.FA_BELL)
                 end
@@ -947,29 +969,29 @@ local function Draw_GUI()
             ImGui.SameLine()
             ImGui.Text("Selected Path: ")
             ImGui.SameLine()
-            ImGui.TextColored(0,1,1,1,"%s", selectedPath)
+            ImGui.TextColored(0,1,1,1,"%s", NavSet.SelectedPath)
             
             ImGui.Text("Current Loc: ")
             ImGui.SameLine()
             ImGui.TextColored(1,1,0,1,"%s", mq.TLO.Me.LocYXZ())
-            if controls.doNav then
+            if NavSet.doNav then
                 ImGui.Text("Current Destination Waypoint: ")
                 ImGui.SameLine()
                 ImGui.TextColored(0,1,0,1,"%s", curWPTxt)
                 ImGui.Text("Distance to Waypoint: ")
                 ImGui.SameLine()
-                if tmpTable[currentStepIndex] ~= nil then
-                    ImGui.TextColored(0,1,1,1,"%.2f", mq.TLO.Math.Distance(string.format("%s:%s", tmpTable[currentStepIndex].loc:gsub(",", " "), mq.TLO.Me.LocYXZ()))())
+                if tmpTable[NavSet.CurrentStepIndex] ~= nil then
+                    ImGui.TextColored(0,1,1,1,"%.2f", mq.TLO.Math.Distance(string.format("%s:%s", tmpTable[NavSet.CurrentStepIndex].loc:gsub(",", " "), mq.TLO.Me.LocYXZ()))())
                 end
             end
             ImGui.Separator()
         end
-            if selectedPath ~= 'None' or #Chain > 0 then
-                if controls.doNav then
+            if NavSet.SelectedPath ~= 'None' or #ChainedPaths > 0 then
+                if NavSet.doNav then
                     ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1.0, 0.4, 0.4, 0.4))
                     if ImGui.Button('Stop') then
-                        controls.doNav = false
-                        controls.ChainStart = false
+                        NavSet.doNav = false
+                        NavSet.ChainStart = false
                         mq.cmdf("/squelch /nav stop")
                         PathStartClock,PathStartTime = nil, nil
                     end
@@ -978,28 +1000,28 @@ local function Draw_GUI()
                 else
                     ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
                     if ImGui.Button('Start') then
-                        pausedGM = false
-                        controls.doNav = true
+                        NavSet.PausedActiveGN = false
+                        NavSet.doNav = true
                         PathStartClock,PathStartTime = os.date("%I:%M:%S %p"), os.time()
                     end
                     ImGui.PopStyleColor()
                     ImGui.SameLine()
                 end
-                if controls.doPause and controls.doNav then
+                if NavSet.doPause and NavSet.doNav then
                     ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
                     if ImGui.Button('Resume') then
-                        controls.doPause = false
-                        pausedGM = false
-                        table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = currZone, Path = selectedPath, WP = 'Resume', Status = 'Resumed Navigation!'})
+                        NavSet.doPause = false
+                        NavSet.PausedActiveGN = false
+                        table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = currZone, Path = NavSet.SelectedPath, WP = 'Resume', Status = 'Resumed Navigation!'})
                     end
                     ImGui.PopStyleColor()
                     ImGui.SameLine()
-                elseif not controls.doPause and controls.doNav then
+                elseif not NavSet.doPause and NavSet.doNav then
                     ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1, 0.4, 0.4, 0.4))
                     if ImGui.Button('Pause') then
-                        controls.doPause = true
+                        NavSet.doPause = true
                         mq.cmd("/squelch /nav stop")
-                        table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = currZone, Path = selectedPath, WP = 'Pause', Status = 'Paused Navigation!'})
+                        table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = currZone, Path = NavSet.SelectedPath, WP = 'Pause', Status = 'Paused Navigation!'})
                     end
                     ImGui.PopStyleColor()
                     ImGui.SameLine()
@@ -1057,12 +1079,12 @@ local function Draw_GUI()
                 if ImGui.BeginTabItem('Controls') then
                     ImGui.SeparatorText("Select a Path")
                     ImGui.SetNextItemWidth(150)
-                    if ImGui.BeginCombo("##SelectPath", selectedPath) then
+                    if ImGui.BeginCombo("##SelectPath", NavSet.SelectedPath) then
                         if not Paths[currZone] then Paths[currZone] = {} end
                         for name, data in pairs(Paths[currZone]) do
-                            local isSelected = name == selectedPath
+                            local isSelected = name == NavSet.SelectedPath
                             if ImGui.Selectable(name, isSelected) then
-                                selectedPath = name
+                                NavSet.SelectedPath = name
                             end
                         end
                         ImGui.EndCombo()
@@ -1074,25 +1096,25 @@ local function Draw_GUI()
                         ImGui.SameLine()
                         if ImGui.Button('Create Path') then
                             CreatePath(newPath)
-                            selectedPath = newPath
+                            NavSet.SelectedPath = newPath
                             newPath = ''
                         end
-                        if selectedPath ~= 'None' then
+                        if NavSet.SelectedPath ~= 'None' then
                             ImGui.SameLine()
                             if ImGui.Button('Copy Path') then
                                 CreatePath(newPath)
-                                for i = 1, #Paths[currZone][selectedPath] do
-                                    table.insert(Paths[currZone][newPath], Paths[currZone][selectedPath][i])
+                                for i = 1, #Paths[currZone][NavSet.SelectedPath] do
+                                    table.insert(Paths[currZone][newPath], Paths[currZone][NavSet.SelectedPath][i])
                                 end
                                 SavePaths()
-                                selectedPath = newPath
+                                NavSet.SelectedPath = newPath
                                 newPath = ''
                             end
                         end
 
                         if ImGui.Button('Delete Path') then
-                            DeletePath(selectedPath)
-                            selectedPath = 'None'
+                            DeletePath(NavSet.SelectedPath)
+                            NavSet.SelectedPath = 'None'
                         end
                         ImGui.SameLine()
                         if ImGui.Button('Save Paths') then
@@ -1109,7 +1131,7 @@ local function Draw_GUI()
                                         if not Paths[zone] then Paths[zone] = {} end
                                         for pathName, pathData in pairs(paths) do
                                             Paths[zone][pathName] = pathData
-                                            if currZone == zone then selectedPath = pathName end
+                                            if currZone == zone then NavSet.SelectedPath = pathName end
                                         end
                                     end
                                     importString = ''
@@ -1117,9 +1139,9 @@ local function Draw_GUI()
                                 end
                             end
                             ImGui.SeparatorText('Export Paths')
-                            if selectedPath ~= 'None' then
+                            if NavSet.SelectedPath ~= 'None' then
                                 if ImGui.Button('Export Current Path') then
-                                    local exportData = export_paths(currZone, selectedPath, Paths[currZone][selectedPath])
+                                    local exportData = export_paths(currZone, NavSet.SelectedPath, Paths[currZone][NavSet.SelectedPath])
                                     ImGui.LogToClipboard()
                                     ImGui.LogText(exportData)
                                     ImGui.LogFinish()
@@ -1160,11 +1182,11 @@ local function Draw_GUI()
                     ImGui.Dummy(10,5)
                     ImGui.Separator()
                     if ImGui.CollapsingHeader("Chain Paths##") then
-                        if selectedPath ~= 'None' then
+                        if NavSet.SelectedPath ~= 'None' then
                             ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
-                            if ImGui.Button("Add ["..selectedPath.."]##") then
-                                if not Chain then Chain = {} end
-                                table.insert(Chain , {Zone = currZone, Path = selectedPath, Type = 'Normal'})
+                            if ImGui.Button("Add ["..NavSet.SelectedPath.."]##") then
+                                if not ChainedPaths then ChainedPaths = {} end
+                                table.insert(ChainedPaths , {Zone = currZone, Path = NavSet.SelectedPath, Type = 'Normal'})
                             end
                             ImGui.PopStyleColor()
                         end
@@ -1174,115 +1196,115 @@ local function Draw_GUI()
                         end
                         table.sort(tmpCZ)
                         
-                        if ImGui.BeginCombo("Zone##SelectChainZone", controls.ChainZone) then
-                            if not Paths[controls.ChainZone] then Paths[controls.ChainZone] = {} end
+                        if ImGui.BeginCombo("Zone##SelectChainZone", NavSet.ChainZone) then
+                            if not Paths[NavSet.ChainZone] then Paths[NavSet.ChainZone] = {} end
                             for k, name in pairs(tmpCZ) do
-                                local isSelected = name == controls.ChainZone
+                                local isSelected = name == NavSet.ChainZone
                                 if ImGui.Selectable(name, isSelected) then
-                                    controls.ChainZone = name
+                                    NavSet.ChainZone = name
                                 end
                             end
                             ImGui.EndCombo()
                         end
 
-                        if ImGui.BeginCombo("Path##SelectChainPath", controls.ChainPath) then
-                            if not Paths[controls.ChainZone] then Paths[controls.ChainZone] = {} end
-                            for k, data in pairs(Paths[controls.ChainZone]) do
+                        if ImGui.BeginCombo("Path##SelectChainPath", NavSet.ChainPath) then
+                            if not Paths[NavSet.ChainZone] then Paths[NavSet.ChainZone] = {} end
+                            for k, data in pairs(Paths[NavSet.ChainZone]) do
                                 table.insert(tmpCP , k)
                             end
                             table.sort(tmpCP)
                             for k, name in pairs(tmpCP) do
-                                local isSelected = name == controls.ChainPath
+                                local isSelected = name == NavSet.ChainPath
                                 if ImGui.Selectable(name, isSelected) then
-                                    controls.ChainPath = name
+                                    NavSet.ChainPath = name
                                 end
                             end
                             ImGui.EndCombo()
                         end
                         ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
                         if ImGui.Button("Add Path to Chain") then
-                            if not Chain then Chain = {} end
-                            table.insert(Chain , {Zone = controls.ChainZone, Path = controls.ChainPath, Type = 'Normal'})
+                            if not ChainedPaths then ChainedPaths = {} end
+                            table.insert(ChainedPaths , {Zone = NavSet.ChainZone, Path = NavSet.ChainPath, Type = 'Normal'})
                         end
                         ImGui.PopStyleColor()
-                        if #Chain > 0  then
+                        if #ChainedPaths > 0  then
                             ImGui.SameLine()
                             ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1, 0.4, 0.4, 0.4))
                             if ImGui.Button("Clear Chain##") then
-                                Chain = {}
+                                ChainedPaths = {}
                             end
                             ImGui.PopStyleColor()
                             ImGui.SeparatorText("Chain Paths:")
-                            for i = 1, #Chain do
+                            for i = 1, #ChainedPaths do
                                 ImGui.SetNextItemWidth(100)
                                 local chainType = {'Normal', 'Loop', 'PingPong', 'Reverse'}
-                                if ImGui.BeginCombo("##PathType_"..i, Chain[i].Type) then
+                                if ImGui.BeginCombo("##PathType_"..i, ChainedPaths[i].Type) then
                                     if not Paths[currZone] then Paths[currZone] = {} end
                                     for k, v in pairs(chainType)  do
-                                        local isSelected = v == Chain[i].Type
+                                        local isSelected = v == ChainedPaths[i].Type
                                         if ImGui.Selectable(v, isSelected) then
-                                            Chain[i].Type = v
+                                            ChainedPaths[i].Type = v
                                         end
                                     end
                                     ImGui.EndCombo()
                                 end
                                 ImGui.SameLine()
-                                ImGui.TextColored(0.0,1,1,1,"%s", Chain[i].Zone)
+                                ImGui.TextColored(0.0,1,1,1,"%s", ChainedPaths[i].Zone)
                                 ImGui.SameLine()
-                                ImGui.TextColored(0.0,1,0,1,"%s", Chain[i].Path)
+                                ImGui.TextColored(0.0,1,0,1,"%s", ChainedPaths[i].Path)
                             end
                         end
                     end
                     ImGui.Dummy(10,5)
-                    if selectedPath ~= 'None' then
+                    if NavSet.SelectedPath ~= 'None' or #ChainedPaths > 0 then
 
                         -- Navigation Controls
 
                         if ImGui.CollapsingHeader("Navigation##") then
-                            if not controls.doNav then controls.doReverse = ImGui.Checkbox('Reverse Order', controls.doReverse) ImGui.SameLine() end
+                            if not NavSet.doNav then NavSet.doReverse = ImGui.Checkbox('Reverse Order', NavSet.doReverse) ImGui.SameLine() end
                             
-                            controls.doLoop = ImGui.Checkbox('Loop Path', controls.doLoop)
+                            NavSet.doLoop = ImGui.Checkbox('Loop Path', NavSet.doLoop)
                             ImGui.SameLine()
-                            controls.doPingPong = ImGui.Checkbox('Ping Pong', controls.doPingPong)
-                            if controls.doPingPong then
-                                controls.doLoop = true
+                            NavSet.doPingPong = ImGui.Checkbox('Ping Pong', NavSet.doPingPong)
+                            if NavSet.doPingPong then
+                                NavSet.doLoop = true
                             end
                             ImGui.Separator()
                             if not Paths[currZone] then Paths[currZone] = {} end
-                            if controls.doPause and controls.doNav then
+                            if NavSet.doPause and NavSet.doNav then
                                 ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
                                 
                                 if ImGui.Button('Resume') then
-                                    controls.doPause = false
-                                    pausedGM = false
-                                    table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = currZone, Path = selectedPath, WP = 'Resume', Status = 'Resumed Navigation!'})
+                                    NavSet.doPause = false
+                                    NavSet.PausedActiveGN = false
+                                    table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = currZone, Path = NavSet.SelectedPath, WP = 'Resume', Status = 'Resumed Navigation!'})
                                 end
                                 ImGui.PopStyleColor()
                                 ImGui.SameLine()
-                            elseif not controls.doPause and controls.doNav then
+                            elseif not NavSet.doPause and NavSet.doNav then
                                 ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1, 0.4, 0.4, 0.4))
                                 
                                 if ImGui.Button('Pause') then
-                                    controls.doPause = true
+                                    NavSet.doPause = true
                                     mq.cmd("/squelch /nav stop")
-                                    table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = currZone, Path = selectedPath, WP = 'Pause', Status = 'Paused Navigation!'})
+                                    table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = currZone, Path = NavSet.SelectedPath, WP = 'Pause', Status = 'Paused Navigation!'})
                                 end
                                 ImGui.PopStyleColor()
                                 ImGui.SameLine()
                             end
-                            local tmpLabel = controls.doNav and 'Stop Navigation' or 'Start Navigation'
-                            if controls.doNav then
+                            local tmpLabel = NavSet.doNav and 'Stop Navigation' or 'Start Navigation'
+                            if NavSet.doNav then
                                 ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1.0, 0.4, 0.4, 0.4))
                             else
                                 ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1.0, 0.4, 0.4))
                             end
                             if ImGui.Button(tmpLabel) then
-                                pausedGM = false
-                                controls.doNav = not controls.doNav
-                                controls.ChainStart = false
-                                if not controls.doNav then
+                                NavSet.PausedActiveGN = false
+                                NavSet.doNav = not NavSet.doNav
+                                NavSet.ChainStart = false
+                                if not NavSet.doNav then
                                     mq.cmdf("/squelch /nav stop")
-                                    controls.ChainStart = false
+                                    NavSet.ChainStart = false
                                     PathStartClock,PathStartTime = nil, nil
                                 else
                                     PathStartClock,PathStartTime = os.date("%I:%M:%S %p"), os.time()
@@ -1291,58 +1313,58 @@ local function Draw_GUI()
                             ImGui.PopStyleColor()
                             ImGui.SameLine()
                             if ImGui.Button("Start at Closest") then
-                                currentStepIndex = closestWaypointIndex
-                                controls.doNav = true
-                                pausedGM = false
+                                NavSet.CurrentStepIndex = closestWaypointIndex
+                                NavSet.doNav = true
+                                NavSet.PausedActiveGN = false
                                 PathStartClock, PathStartTime = os.date("%I:%M:%S %p"), os.time()
                             end
 
                             ImGui.SetNextItemWidth(100)
-                            stopDist = ImGui.InputInt("Stop Distance##"..script, stopDist, 1, 50)
+                            NavSet.StopDist = ImGui.InputInt("Stop Distance##"..script, NavSet.StopDist, 1, 50)
                             ImGui.SetNextItemWidth(100)
-                            wpPause = ImGui.InputInt("Global Pause##"..script, wpPause, 1,5 )
+                            NavSet.WpPause = ImGui.InputInt("Global Pause##"..script, NavSet.WpPause, 1,5 )
                         end
 
                     end
                     ImGui.EndTabItem()
                 end
                 if ImGui.BeginTabItem('Path Data') then
-                    if selectedPath ~= 'None' then
+                    if NavSet.SelectedPath ~= 'None' then
                         if ImGui.CollapsingHeader("Manage Waypoints##") then
                                     
                             if ImGui.Button('Add Waypoint') then
-                                RecordWaypoint(selectedPath)
+                                RecordWaypoint(NavSet.SelectedPath)
                             end
                             ImGui.SameLine()
                             if ImGui.Button('Clear Waypoints') then
-                                ClearWaypoints(selectedPath)
+                                ClearWaypoints(NavSet.SelectedPath)
                             end
                             
-                            local label = controls.autoRecord and 'Stop Recording' or 'Start Recording'
-                            if controls.autoRecord then
+                            local label = NavSet.autoRecord and 'Stop Recording' or 'Start Recording'
+                            if NavSet.autoRecord then
                                 ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1.0, 0.4, 0.4, 0.4))
                             else
                                 ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1.0, 0.4, 0.4))
                             end
                             if ImGui.Button(label) then
-                                controls.autoRecord = not controls.autoRecord
-                                if controls.autoRecord then 
-                                    if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = mq.TLO.Zone.ShortName(), Path = selectedPath, WP = 'Start Recording', Status = 'Start Recording Waypoints!'}) end
+                                NavSet.autoRecord = not NavSet.autoRecord
+                                if NavSet.autoRecord then 
+                                    if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = mq.TLO.Zone.ShortName(), Path = NavSet.SelectedPath, WP = 'Start Recording', Status = 'Start Recording Waypoints!'}) end
                                 else
-                                    if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = mq.TLO.Zone.ShortName(), Path = selectedPath, WP = 'Stop Recording', Status = 'Stop Recording Waypoints!'}) end
+                                    if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = mq.TLO.Zone.ShortName(), Path = NavSet.SelectedPath, WP = 'Stop Recording', Status = 'Stop Recording Waypoints!'}) end
                                 end
                             end
                             ImGui.PopStyleColor()
                             ImGui.SameLine()
                             ImGui.SetNextItemWidth(100)
-                            recordDelay = ImGui.InputInt("Auto Record Delay##"..script, recordDelay, 1, 10)
+                            NavSet.RecordDelay = ImGui.InputInt("Auto Record Delay##"..script, NavSet.RecordDelay, 1, 10)
                         end
                         ImGui.Separator()
                     end
                     ImGui.Dummy(10,5)
                     if ImGui.CollapsingHeader("Waypoint Table##Header") then
                         -- Waypoint Table
-                        if selectedPath ~= 'None' then
+                        if NavSet.SelectedPath ~= 'None' then
 
                             if ImGui.BeginTable('PathTable', 6, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), -1, -1) then
                                 ImGui.TableSetupColumn('WP#', ImGuiTableColumnFlags.WidthFixed, -1)
@@ -1357,7 +1379,7 @@ local function Draw_GUI()
                                 for i = 1, #tmpTable do
                                     ImGui.TableNextRow()
                                     ImGui.TableSetColumnIndex(0)
-                                    if tmpTable[i].step == tmpTable[currentStepIndex].step then
+                                    if tmpTable[i].step == tmpTable[NavSet.CurrentStepIndex].step then
                                         ImGui.TextColored(ImVec4(0, 1, 0, 1),"%s", tmpTable[i].step)
                                         if ImGui.IsItemHovered() then
                                             ImGui.SetTooltip("Current Waypoint")
@@ -1382,29 +1404,29 @@ local function Draw_GUI()
                                     -- end
                                     ImGui.TableSetColumnIndex(1)
                                     ImGui.Text(tmpTable[i].loc)
-                                    if not controls.doNav then
+                                    if not NavSet.doNav then
                                         if ImGui.BeginPopupContextItem("WP_" .. tmpTable[i].step) then
                                             
                                             if ImGui.MenuItem('Nav to WP ' .. tmpTable[i].step) then
-                                                currentStepIndex = i
-                                                controls.doNav = true
-                                                controls.doLoop = false
-                                                controls.doSingle = true
+                                                NavSet.CurrentStepIndex = i
+                                                NavSet.doNav = true
+                                                NavSet.doLoop = false
+                                                NavSet.doSingle = true
                                                 PathStartClock, PathStartTime = os.date("%I:%M:%S %p"), os.time()
                                             end
                                             
                                             if ImGui.MenuItem('Start Path Here: WP ' .. tmpTable[i].step) then
-                                                currentStepIndex = i
-                                                controls.doNav = true
-                                                controls.doLoop = false
-                                                controls.doSingle = false
+                                                NavSet.CurrentStepIndex = i
+                                                NavSet.doNav = true
+                                                NavSet.doLoop = false
+                                                NavSet.doSingle = false
                                                 PathStartClock, PathStartTime = os.date("%I:%M:%S %p"), os.time()
                                             end
                                             if ImGui.MenuItem('Start Loop Here: WP ' .. tmpTable[i].step) then
-                                                currentStepIndex = i
-                                                controls.doNav = true
-                                                controls.doLoop = true
-                                                controls.doSingle = false
+                                                NavSet.CurrentStepIndex = i
+                                                NavSet.doNav = true
+                                                NavSet.doLoop = true
+                                                NavSet.doSingle = false
                                                 PathStartClock, PathStartTime = os.date("%I:%M:%S %p"), os.time()
                                             end
                                         
@@ -1415,9 +1437,9 @@ local function Draw_GUI()
                                     ImGui.SetNextItemWidth(90)
                                     tmpTable[i].delay, changed = ImGui.InputInt("##delay_" .. i, tmpTable[i].delay, 1, 1)
                                     if changed then
-                                        for k, v in pairs(Paths[currZone][selectedPath]) do
+                                        for k, v in pairs(Paths[currZone][NavSet.SelectedPath]) do
                                             if v.step == tmpTable[i].step then
-                                                Paths[currZone][selectedPath][k].delay = tmpTable[i].delay
+                                                Paths[currZone][NavSet.SelectedPath][k].delay = tmpTable[i].delay
                                                 SavePaths()
                                             end
                                         end
@@ -1429,9 +1451,9 @@ local function Draw_GUI()
                                     ImGui.SetNextItemWidth(-1)
                                     tmpTable[i].cmd, changedCmd = ImGui.InputText("##cmd_" .. i, tmpTable[i].cmd)
                                     if changedCmd then
-                                        for k, v in pairs(Paths[currZone][selectedPath]) do
+                                        for k, v in pairs(Paths[currZone][NavSet.SelectedPath]) do
                                             if v.step == tmpTable[i].step then
-                                                Paths[currZone][selectedPath][k].cmd = tmpTable[i].cmd
+                                                Paths[currZone][NavSet.SelectedPath][k].cmd = tmpTable[i].cmd
                                                 SavePaths()
                                             end
                                         end
@@ -1442,9 +1464,9 @@ local function Draw_GUI()
                                     ImGui.TableSetColumnIndex(4)
                                     tmpTable[i].door, changedDoor = ImGui.Checkbox(Icon.FA_FORWARD.."##door_" .. i, tmpTable[i].door)
                                     if changedDoor then
-                                        for k, v in pairs(Paths[currZone][selectedPath]) do
+                                        for k, v in pairs(Paths[currZone][NavSet.SelectedPath]) do
                                             if v.step == tmpTable[i].step then
-                                                Paths[currZone][selectedPath][k].door = tmpTable[i].door
+                                                Paths[currZone][NavSet.SelectedPath][k].door = tmpTable[i].door
                                                 SavePaths()
                                             end
                                         end
@@ -1455,9 +1477,9 @@ local function Draw_GUI()
                                     ImGui.SameLine(0,0)
                                     tmpTable[i].doorRev, changedDoorRev = ImGui.Checkbox(Icon.FA_BACKWARD.."##doorRev_" .. i, tmpTable[i].doorRev)
                                     if changedDoorRev then
-                                        for k, v in pairs(Paths[currZone][selectedPath]) do
+                                        for k, v in pairs(Paths[currZone][NavSet.SelectedPath]) do
                                             if v.step == tmpTable[i].step then
-                                                Paths[currZone][selectedPath][k].doorRev = tmpTable[i].doorRev
+                                                Paths[currZone][NavSet.SelectedPath][k].doorRev = tmpTable[i].doorRev
                                                 SavePaths()
                                             end
                                         end
@@ -1466,7 +1488,7 @@ local function Draw_GUI()
                                         ImGui.SetTooltip("Door Reverse")
                                     end
                                     ImGui.TableSetColumnIndex(5)
-                                    if not controls.doNav then
+                                    if not NavSet.doNav then
                                         if ImGui.Button(Icon.FA_TRASH .. "##_" .. i) then
                                             deleteWP = true
                                             deleteWPStep = tmpTable[i].step
@@ -1479,9 +1501,9 @@ local function Draw_GUI()
                                         if ImGui.Button(Icon.MD_UPDATE..'##Update_'..i) then
                                             tmpTable[i].loc = mq.TLO.Me.LocYXZ()
                                             -- Update Paths table
-                                            for k, v in pairs(Paths[currZone][selectedPath]) do
+                                            for k, v in pairs(Paths[currZone][NavSet.SelectedPath]) do
                                                 if v.step == tmpTable[i].step then
-                                                    Paths[currZone][selectedPath][k] = tmpTable[i]
+                                                    Paths[currZone][NavSet.SelectedPath][k] = tmpTable[i]
                                                 end
                                             end
                                             -- Paths[currZone][selectedPath][tmpTable[i].step].loc = mq.TLO.Me.LocYXZ()
@@ -1502,11 +1524,11 @@ local function Draw_GUI()
                                             tmpTable[i].step, tmpTable[i - 1].step = tmpTable[i - 1].step, tmpTable[i].step
                     
                                             -- Update Paths table
-                                            for k, v in pairs(Paths[currZone][selectedPath]) do
+                                            for k, v in pairs(Paths[currZone][NavSet.SelectedPath]) do
                                                 if v.step == tmpTable[i].step then
-                                                    Paths[currZone][selectedPath][k] = tmpTable[i]
+                                                    Paths[currZone][NavSet.SelectedPath][k] = tmpTable[i]
                                                 elseif v.step == tmpTable[i - 1].step then
-                                                    Paths[currZone][selectedPath][k] = tmpTable[i - 1]
+                                                    Paths[currZone][NavSet.SelectedPath][k] = tmpTable[i - 1]
                                                 end
                                             end
                                             SavePaths()
@@ -1522,11 +1544,11 @@ local function Draw_GUI()
                                             tmpTable[i].step, tmpTable[i + 1].step = tmpTable[i + 1].step, tmpTable[i].step
                     
                                             -- Update Paths table
-                                            for k, v in pairs(Paths[currZone][selectedPath]) do
+                                            for k, v in pairs(Paths[currZone][NavSet.SelectedPath]) do
                                                 if v.step == tmpTable[i].step then
-                                                    Paths[currZone][selectedPath][k] = tmpTable[i]
+                                                    Paths[currZone][NavSet.SelectedPath][k] = tmpTable[i]
                                                 elseif v.step == tmpTable[i + 1].step then
-                                                    Paths[currZone][selectedPath][k] = tmpTable[i + 1]
+                                                    Paths[currZone][NavSet.SelectedPath][k] = tmpTable[i + 1]
                                                 end
                                             end
                                             SavePaths()
@@ -1646,63 +1668,63 @@ local function Draw_GUI()
                 hudMouse = ImGui.Checkbox("On Mouseover##"..script, hudMouse)
                 if ImGui.CollapsingHeader("Interrupt Settings##"..script) then
                 -- Set Interrupts we will stop for
-                    interrupts.stopForAll = ImGui.Checkbox("Stop for All##"..script, interrupts.stopForAll)
-                    if interrupts.stopForAll then
-                        interrupts.stopForDistance = true
-                        interrupts.stopForCharm = true
-                        interrupts.stopForCombat = true
-                        interrupts.stopForFear = true
-                        interrupts.stopForGM = true
-                        interrupts.stopForLoot = true
-                        interrupts.stopForMez = true
-                        interrupts.stopForRoot = true
-                        interrupts.stopForSitting = true
-                        interrupts.stopForXtar = true
+                    InterruptSet.stopForAll = ImGui.Checkbox("Stop for All##"..script, InterruptSet.stopForAll)
+                    if InterruptSet.stopForAll then
+                        InterruptSet.stopForDist = true
+                        InterruptSet.stopForCharm = true
+                        InterruptSet.stopForCombat = true
+                        InterruptSet.stopForFear = true
+                        InterruptSet.stopForGM = true
+                        InterruptSet.stopForLoot = true
+                        InterruptSet.stopForMez = true
+                        InterruptSet.stopForRoot = true
+                        InterruptSet.stopForSitting = true
+                        InterruptSet.stopForXtar = true
                     end
                     if ImGui.BeginTable("##Interrupts", 2, bit32.bor(ImGuiTableFlags.Borders), -1,0) then
                         ImGui.TableNextRow()
                         ImGui.TableSetColumnIndex(0)
-                        interrupts.stopForCharm = ImGui.Checkbox("Stop for Charmed##"..script, interrupts.stopForCharm)
-                        if not interrupts.stopForCharm then interrupts.stopForAll = false end
+                        InterruptSet.stopForCharm = ImGui.Checkbox("Stop for Charmed##"..script, InterruptSet.stopForCharm)
+                        if not InterruptSet.stopForCharm then InterruptSet.stopForAll = false end
                         ImGui.TableSetColumnIndex(1)
-                        interrupts.stopForCombat = ImGui.Checkbox("Stop for Combat##"..script, interrupts.stopForCombat)
-                        if not interrupts.stopForCombat then interrupts.stopForAll = false end
+                        InterruptSet.stopForCombat = ImGui.Checkbox("Stop for Combat##"..script, InterruptSet.stopForCombat)
+                        if not InterruptSet.stopForCombat then InterruptSet.stopForAll = false end
                         ImGui.TableNextRow()
 
                         ImGui.TableSetColumnIndex(0)
-                        interrupts.stopForFear = ImGui.Checkbox("Stop for Fear##"..script, interrupts.stopForFear)
-                        if not interrupts.stopForFear then interrupts.stopForAll = false end
+                        InterruptSet.stopForFear = ImGui.Checkbox("Stop for Fear##"..script, InterruptSet.stopForFear)
+                        if not InterruptSet.stopForFear then InterruptSet.stopForAll = false end
                         ImGui.TableSetColumnIndex(1)
-                        interrupts.stopForGM = ImGui.Checkbox("Stop for GM##"..script, interrupts.stopForGM)
-                        if not interrupts.stopForGM then interrupts.stopForAll = false end
+                        InterruptSet.stopForGM = ImGui.Checkbox("Stop for GM##"..script, InterruptSet.stopForGM)
+                        if not InterruptSet.stopForGM then InterruptSet.stopForAll = false end
                         ImGui.TableNextRow()
 
                         ImGui.TableSetColumnIndex(0)
-                        interrupts.stopForLoot = ImGui.Checkbox("Stop for Loot##"..script, interrupts.stopForLoot)
-                        if not interrupts.stopForLoot then interrupts.stopForAll = false end
+                        InterruptSet.stopForLoot = ImGui.Checkbox("Stop for Loot##"..script, InterruptSet.stopForLoot)
+                        if not InterruptSet.stopForLoot then InterruptSet.stopForAll = false end
                         ImGui.TableSetColumnIndex(1)
-                        interrupts.stopForMez = ImGui.Checkbox("Stop for Mez##"..script, interrupts.stopForMez)
-                        if not interrupts.stopForMez then interrupts.stopForAll = false end
+                        InterruptSet.stopForMez = ImGui.Checkbox("Stop for Mez##"..script, InterruptSet.stopForMez)
+                        if not InterruptSet.stopForMez then InterruptSet.stopForAll = false end
                         ImGui.TableNextRow()
 
                         ImGui.TableSetColumnIndex(0)
-                        interrupts.stopForRoot = ImGui.Checkbox("Stop for Root##"..script, interrupts.stopForRoot)
-                        if not interrupts.stopForRoot then interrupts.stopForAll = false end
+                        InterruptSet.stopForRoot = ImGui.Checkbox("Stop for Root##"..script, InterruptSet.stopForRoot)
+                        if not InterruptSet.stopForRoot then InterruptSet.stopForAll = false end
                         ImGui.TableSetColumnIndex(1)
-                        interrupts.stopForSitting = ImGui.Checkbox("Stop for Sitting##"..script, interrupts.stopForSitting)
-                        if not interrupts.stopForSitting then interrupts.stopForAll = false end
+                        InterruptSet.stopForSitting = ImGui.Checkbox("Stop for Sitting##"..script, InterruptSet.stopForSitting)
+                        if not InterruptSet.stopForSitting then InterruptSet.stopForAll = false end
                         ImGui.TableNextRow()
 
                         ImGui.TableSetColumnIndex(0)
-                        interrupts.stopForXtar = ImGui.Checkbox("Stop for Xtarget##"..script, interrupts.stopForXtar)
-                        if not interrupts.stopForXtar then interrupts.stopForAll = false end
+                        InterruptSet.stopForXtar = ImGui.Checkbox("Stop for Xtarget##"..script, InterruptSet.stopForXtar)
+                        if not InterruptSet.stopForXtar then InterruptSet.stopForAll = false end
                         ImGui.TableSetColumnIndex(1)
-                        interrupts.stopForDist = ImGui.Checkbox("Stop for Party Dist##"..script, interrupts.stopForDist)
-                        if not interrupts.stopForDist then interrupts.stopForAll = false end
+                        InterruptSet.stopForDist = ImGui.Checkbox("Stop for Party Dist##"..script, InterruptSet.stopForDist)
+                        if not InterruptSet.stopForDist then InterruptSet.stopForAll = false end
                         ImGui.EndTable()
-                        if interrupts.stopForDist then
+                        if InterruptSet.stopForDist then
                             ImGui.SetNextItemWidth(100)
-                            interrupts.stopForGoupDist = ImGui.InputInt("Party Distance##GroupDist", interrupts.stopForGoupDist, 1, 50)
+                            InterruptSet.stopForGoupDist = ImGui.InputInt("Party Distance##GroupDist", InterruptSet.stopForGoupDist, 1, 50)
                         end
                     end
                     settings[script].GroupWatch = ImGui.Checkbox("Group Watch##"..script, settings[script].GroupWatch)
@@ -1732,21 +1754,21 @@ local function Draw_GUI()
                 ImGui.SeparatorText("Recording Settings##"..script)
                 -- Set RecordDley
                 ImGui.SetNextItemWidth(100)
-                recordDelay = ImGui.InputInt("Record Delay##"..script, recordDelay, 1, 5)
+                NavSet.RecordDelay = ImGui.InputInt("Record Delay##"..script, NavSet.RecordDelay, 1, 5)
                 -- Minimum Distance Between Waypoints
                 ImGui.SetNextItemWidth(100)
-                recordMinDist = ImGui.InputInt("Min Dist. Between WP##"..script, recordMinDist, 1, 50)
+                NavSet.RecordMinDist = ImGui.InputInt("Min Dist. Between WP##"..script, NavSet.RecordMinDist, 1, 50)
 
                 ImGui.SeparatorText("Navigation Settings##"..script)
                 -- Set Stop Distance
                 ImGui.SetNextItemWidth(100)
-                stopDist = ImGui.InputInt("Stop Distance##"..script, stopDist, 1, 50)
+                NavSet.StopDist = ImGui.InputInt("Stop Distance##"..script, NavSet.StopDist, 1, 50)
                 -- Set Waypoint Pause time
                 ImGui.SetNextItemWidth(100)
-                wpPause = ImGui.InputInt("Waypoint Pause##"..script, wpPause, 1, 5)
+                NavSet.WpPause = ImGui.InputInt("Waypoint Pause##"..script, NavSet.WpPause, 1, 5)
                 -- Set Interrupt Delay
                 ImGui.SetNextItemWidth(100)
-                interruptDelay = ImGui.InputInt("Interrupt Delay##"..script, interruptDelay, 1, 5)
+                InterruptSet.interruptDelay = ImGui.InputInt("Interrupt Delay##"..script, InterruptSet.interruptDelay, 1, 5)
 
                 -- Save & Close Button --
                 if ImGui.Button("Save & Close") then
@@ -1756,13 +1778,13 @@ local function Draw_GUI()
                     settings[script].locked = locked
                     settings[script].AutoSize = aSize
                     settings[script].MouseHUD = hudMouse
-                    settings[script].RecordDelay = recordDelay
-                    settings[script].StopForGM = interrupts.stopForGM
-                    settings[script].StopDistance = stopDist
-                    settings[script].RecordMinDist = recordMinDist
-                    settings[script].PauseStops = wpPause
-                    settings[script].InterruptDelay = interruptDelay
-                    settings[script].Interrupts = interrupts
+                    settings[script].RecordDelay = NavSet.RecordDelay
+                    settings[script].StopForGM = InterruptSet.stopForGM
+                    settings[script].StopDistance = NavSet.StopDist
+                    settings[script].RecordMinDist = NavSet.RecordMinDist
+                    settings[script].PauseStops = NavSet.WpPause
+                    settings[script].InterruptDelay = InterruptSet.interruptDelay
+                    settings[script].Interrupts = InterruptSet
                     mq.pickle(configFile, settings)
                     showConfigGUI = false
                 end
@@ -1796,7 +1818,7 @@ local function Draw_GUI()
             else
                 transFlag = false
             end
-            if pausedGM then
+            if NavSet.PausedActiveGN then
                 if mq.TLO.SpawnCount('gm')() > 0 then
                 ImGui.TextColored(1,0,0,1,"!!%s GM in Zone %s!!", Icon.FA_BELL,Icon.FA_BELL)
                 end
@@ -1807,35 +1829,35 @@ local function Draw_GUI()
             ImGui.SameLine()
             ImGui.Text("Selected Path: ")
             ImGui.SameLine()
-            ImGui.TextColored(0,1,1,1,"%s", selectedPath)
+            ImGui.TextColored(0,1,1,1,"%s", NavSet.SelectedPath)
             ImGui.Text("Current Loc: ")
             ImGui.SameLine()
             ImGui.TextColored(1,1,0,1,"%s", mq.TLO.Me.LocYXZ())
-            if controls.doNav then
-                local tmpTable = sortPathsTable(currZone, selectedPath) or {}
-                if tmpTable[currentStepIndex] then
+            if NavSet.doNav then
+                local tmpTable = sortPathsTable(currZone, NavSet.SelectedPath) or {}
+                if tmpTable[NavSet.CurrentStepIndex] then
                     ImGui.Text("Current WP: ")
                     ImGui.SameLine()
-                    ImGui.TextColored(1,1,0,1,"%s ",tmpTable[currentStepIndex].step or 0)
+                    ImGui.TextColored(1,1,0,1,"%s ",tmpTable[NavSet.CurrentStepIndex].step or 0)
                     ImGui.SameLine()
                     ImGui.Text("Distance: ")
                     ImGui.SameLine()
-                    ImGui.TextColored(0,1,1,1,"%.2f", mq.TLO.Math.Distance(string.format("%s:%s", tmpTable[currentStepIndex].loc:gsub(",", " "), mq.TLO.Me.LocYXZ()))())
+                    ImGui.TextColored(0,1,1,1,"%.2f", mq.TLO.Math.Distance(string.format("%s:%s", tmpTable[NavSet.CurrentStepIndex].loc:gsub(",", " "), mq.TLO.Me.LocYXZ()))())
                 end
             end
 
             ImGui.Text("Nav Type: ")
             ImGui.SameLine()
-            if not controls.doNav then
+            if not NavSet.doNav then
                 ImGui.TextColored(ImVec4(0, 1, 0, 1), "None")
             else
-                if controls.doPingPong then
+                if NavSet.doPingPong then
                     ImGui.TextColored(ImVec4(0, 1, 0, 1), "Ping Pong")
-                elseif controls.doLoop then
+                elseif NavSet.doLoop then
                     ImGui.TextColored(ImVec4(0, 1, 0, 1), "Loop ")
                     ImGui.SameLine()
-                    ImGui.TextColored(ImVec4(0, 1, 1, 1), "(%s)", loopCount)
-                elseif controls.doSingle then
+                    ImGui.TextColored(ImVec4(0, 1, 1, 1), "(%s)", NavSet.LoopCount)
+                elseif NavSet.doSingle then
                     ImGui.TextColored(ImVec4(0, 1, 0, 1), "Single")
                 else 
                     ImGui.TextColored(ImVec4(0, 1, 0, 1), "Normal")
@@ -1843,7 +1865,7 @@ local function Draw_GUI()
                 ImGui.SameLine()
                 ImGui.Text("Reverse: ")
                 ImGui.SameLine()
-                if controls.doReverse then
+                if NavSet.doReverse then
                     ImGui.TextColored(ImVec4(0, 1, 0, 1), "Yes")
                 else
                     ImGui.TextColored(ImVec4(0, 1, 0, 1), "No")
@@ -1903,7 +1925,7 @@ local function Draw_GUI()
         if importData ~= "" then
             local importedPaths = import_paths(importData)
             if importedPaths then
-                Paths[currZone][selectedPath] = importedPaths
+                Paths[currZone][NavSet.SelectedPath] = importedPaths
                 SavePaths()
                 print('\ayPath imported successfully!\ax')
             else
@@ -1942,10 +1964,10 @@ local function bind(...)
 
     if #args == 1 then
         if key == 'stop' then
-            controls.doNav = false
+            NavSet.doNav = false
             mq.cmdf("/squelch /nav stop")
-            controls.ChainStart = false
-            selectedPath = 'None'
+            NavSet.ChainStart = false
+            NavSet.SelectedPath = 'None'
             loadPaths()
         elseif key == 'help' then
             displayHelp()
@@ -1956,25 +1978,25 @@ local function bind(...)
         elseif key == 'show' then
             showMainGUI = not showMainGUI
         elseif key == 'pause' then
-            controls.doPause = true
+            NavSet.doPause = true
         elseif key == 'xtarg' then
-            interrupts.stopForXtar = not interrupts.stopForXtar
-            if not interrupts.stopForXtar then
-                interrupts.stopForAll = false
+            InterruptSet.stopForXtar = not InterruptSet.stopForXtar
+            if not InterruptSet.stopForXtar then
+                InterruptSet.stopForAll = false
             end
         elseif key == 'combat' then
-            interrupts.stopForCombat = not interrupts.stopForCombat
-            if not interrupts.stopForCombat then
-                interrupts.stopForAll = false
+            InterruptSet.stopForCombat = not InterruptSet.stopForCombat
+            if not InterruptSet.stopForCombat then
+                InterruptSet.stopForAll = false
             end
         elseif key == 'resume' then
-            controls.doPause = false
+            NavSet.doPause = false
         elseif key == 'quit' or key == 'exit' then
             -- mq.exit()
             mq.cmd("/squelch /nav stop")
             mq.TLO.Me.Stand()
             mq.delay(1)
-            controls.doNav = false
+            NavSet.doNav = false
             RUNNING = false
         elseif key == 'list' then
             if Paths[zone] == nil then 
@@ -1991,25 +2013,25 @@ local function bind(...)
     elseif #args == 2 then
         if key == 'resume' then
             if action == 'next' then
-                currentStepIndex = currentStepIndex + 1
-                controls.doPause = false
+                NavSet.CurrentStepIndex = NavSet.CurrentStepIndex + 1
+                NavSet.doPause = false
             elseif action == 'back' then
-                currentStepIndex = currentStepIndex - 1
-                controls.doPause = false
+                NavSet.CurrentStepIndex = NavSet.CurrentStepIndex - 1
+                NavSet.doPause = false
             end
         elseif key == 'xtarg' then
             if action == 'on' then
-                interrupts.stopForXtar = true
+                InterruptSet.stopForXtar = true
             elseif action == 'off' then
-                interrupts.stopForXtar = false
-                interrupts.stopForAll = false
+                InterruptSet.stopForXtar = false
+                InterruptSet.stopForAll = false
             end
         elseif key == 'combat' then
             if action == 'on' then
-                interrupts.stopForCombat = true
+                InterruptSet.stopForCombat = true
             elseif action == 'off' then
-                interrupts.stopForCombat = false
-                interrupts.stopForAll = false
+                InterruptSet.stopForCombat = false
+                InterruptSet.stopForAll = false
             end
         end
     elseif #args  == 3 then
@@ -2019,50 +2041,50 @@ local function bind(...)
         end
         if key == 'go' then
             if action == 'loop' then
-                selectedPath = path
-                controls.doReverse = false
-                controls.doNav = true
-                controls.doLoop = true
+                NavSet.SelectedPath = path
+                NavSet.doReverse = false
+                NavSet.doNav = true
+                NavSet.doLoop = true
                 PathStartClock,PathStartTime = os.date("%I:%M:%S %p"), os.time()
             end
             if action == 'rloop' then
-                selectedPath = path
-                controls.doReverse = true
-                controls.doNav = true
-                controls.doLoop = true
+                NavSet.SelectedPath = path
+                NavSet.doReverse = true
+                NavSet.doNav = true
+                NavSet.doLoop = true
                 PathStartClock,PathStartTime = os.date("%I:%M:%S %p"), os.time()
             end
             if action == 'start' then
-                selectedPath = path
-                controls.doReverse = false
-                controls.doNav = true
-                controls.doLoop = false
+                NavSet.SelectedPath = path
+                NavSet.doReverse = false
+                NavSet.doNav = true
+                NavSet.doLoop = false
                 PathStartClock,PathStartTime = os.date("%I:%M:%S %p"), os.time()
             end
             if action == 'reverse' then
-                selectedPath = path
-                controls.doReverse = true
-                controls.doNav = true
+                NavSet.SelectedPath = path
+                NavSet.doReverse = true
+                NavSet.doNav = true
                 PathStartClock,PathStartTime = os.date("%I:%M:%S %p"), os.time()
             end
             if action == 'pingpong' then
-                selectedPath = path
-                controls.doPingPong = true
-                controls.doNav = true
+                NavSet.SelectedPath = path
+                NavSet.doPingPong = true
+                NavSet.doNav = true
                 PathStartClock,PathStartTime = os.date("%I:%M:%S %p"), os.time()
             end
             if action == 'closest' then
-                selectedPath = path
-                controls.doNav = true
-                controls.doReverse = false
-                currentStepIndex = FindIndexClosestWaypoint(Paths[zone][path])
+                NavSet.SelectedPath = path
+                NavSet.doNav = true
+                NavSet.doReverse = false
+                NavSet.CurrentStepIndex = FindIndexClosestWaypoint(Paths[zone][path])
                 PathStartClock,PathStartTime = os.date("%I:%M:%S %p"), os.time()
             end
             if action == 'rclosest' then
-                selectedPath = path
-                controls.doNav = true
-                controls.doReverse = true
-                currentStepIndex = FindIndexClosestWaypoint(Paths[zone][path])
+                NavSet.SelectedPath = path
+                NavSet.doNav = true
+                NavSet.doReverse = true
+                NavSet.CurrentStepIndex = FindIndexClosestWaypoint(Paths[zone][path])
                 PathStartClock,PathStartTime = os.date("%I:%M:%S %p"), os.time()
             end
         end
@@ -2124,151 +2146,141 @@ local function Loop()
             printf("\ay[\at%s\ax] \agZoning, \ayPausing Navigation...", script)
             ZoningPause()
         end
-        -- if pauseStart > 0 then print("Pause Start: "..pauseStart) end
-        -- if currZone ~= lastZone then
-        --     local flag = false
-        --     selectedPath = 'None'
-        --     controls.ChainPath = Chain[controls.CurChain+1].Path or ''
-        --     controls.doNav = false
-        --     currentStepIndex = 1
-        --     controls.autoRecord = false
-        --     controls.LastPath = nil
-        --     pauseTime = 0
-        --     previousDoNav = false
-        --     loopCount = 0
-        --     status = 'Idle'
-        --     pauseStart = 0
-        --     printf("\ay[\at%s\ax] \agZone Changed Last: \at%s Current: \ay%s", script, lastZone, currZone)
-        --     mq.delay(500)
-        --     lastZone = currZone
-        -- end
+
+        if (InterruptSet.stopForDist and InterruptSet.stopForCharm and InterruptSet.stopForCombat and InterruptSet.stopForFear and InterruptSet.stopForGM and
+            InterruptSet.stopForLoot and InterruptSet.stopForMez and InterruptSet.stopForRoot and InterruptSet.stopForSitting and InterruptSet.stopForXtar) then
+            InterruptSet.stopForAll = true
+        else
+            InterruptSet.stopForAll = false
+        end
+
         if currZone ~= lastZone then
             ZoningPause()
             printf("\\ay[\\at%s\\ax] \\agZone Changed Last: \\at%s Current: \\ay%s", script, lastZone, currZone)
             lastZone = currZone
-            selectedPath = 'None'
-            controls.doNav = false
-            controls.autoRecord = false
-            controls.doLoop = false
-            controls.doReverse = false
-            controls.doPingPong = false
-            controls.doPause = false
+            NavSet.SelectedPath = 'None'
+            NavSet.doNav = false
+            NavSet.autoRecord = false
+            NavSet.doLoop = false
+            NavSet.doReverse = false
+            NavSet.doPingPong = false
+            NavSet.doPause = false
             pauseTime = 0
-            pauseStart = 0
-            previousDoNav = false
+            InterruptSet.PauseStart = 0
+            NavSet.PreviousDoNav = false
             -- Reset navigation state for new zone
-            currentStepIndex = 1
+            NavSet.CurrentStepIndex = 1
             status = 'Idle'
-            controls.CurChain = controls.CurChain + 1
-            if controls.ChainStart then
-                interrupts.interruptFound = false
+            NavSet.CurChain = NavSet.CurChain + 1
+            if NavSet.ChainStart then
+                InterruptSet.interruptFound = false
             -- Start navigation for the new zone if a chain path exists
-                if controls.CurChain <= #Chain then
-                    if Chain[controls.CurChain].Zone == currZone then
-                        selectedPath = Chain[controls.CurChain].Path
-                        currentStepIndex = 1
-                        if Chain[controls.CurChain].Type == 'Loop' then
-                            controls.doLoop = true
-                            controls.doReverse = false
-                        elseif Chain[controls.CurChain].Type == 'PingPong' then
-                            controls.doPingPong = true
-                            controls.doLoop = true
-                        elseif Chain[controls.CurChain].Type == 'Normal' then
-                            controls.doLoop = false
-                            controls.doReverse = false
-                            controls.doPingPong = false
-                        elseif Chain[controls.CurChain].Type == 'Reverse' then
-                            controls.doReverse = true
-                            controls.doLoop = false
-                            controls.doPingPong = false
+                if NavSet.CurChain <= #ChainedPaths then
+                    if ChainedPaths[NavSet.CurChain].Zone == currZone then
+                        NavSet.SelectedPath = ChainedPaths[NavSet.CurChain].Path
+                        NavSet.CurrentStepIndex = 1
+                        if ChainedPaths[NavSet.CurChain].Type == 'Loop' then
+                            NavSet.doLoop = true
+                            NavSet.doReverse = false
+                        elseif ChainedPaths[NavSet.CurChain].Type == 'PingPong' then
+                            NavSet.doPingPong = true
+                            NavSet.doLoop = true
+                        elseif ChainedPaths[NavSet.CurChain].Type == 'Normal' then
+                            NavSet.doLoop = false
+                            NavSet.doReverse = false
+                            NavSet.doPingPong = false
+                        elseif ChainedPaths[NavSet.CurChain].Type == 'Reverse' then
+                            NavSet.doReverse = true
+                            NavSet.doLoop = false
+                            NavSet.doPingPong = false
                         end
-                        controls.doNav = true
+                        NavSet.doNav = true
                         status = 'Navigating'
-                        printf("\\ay[\\at%s\\ax] \\agStarting navigation for path: \\ay%s \\agin zone: \\ay%s", script, selectedPath, currZone)
+                        printf("\\ay[\\at%s\\ax] \\agStarting navigation for path: \\ay%s \\agin zone: \\ay%s", script, NavSet.SelectedPath, currZone)
                     end
                 else
-                    Chain = {}
-                    controls.CurChain = 0
-                    controls.ChainStart = false
-                    controls.ChainZone = ''
-                    controls.ChainPath = ''
+                    ChainedPaths = {}
+                    NavSet.CurChain = 0
+                    NavSet.ChainStart = false
+                    NavSet.ChainZone = ''
+                    NavSet.ChainPath = ''
                 end
             end
             justZoned = true
         else justZoned = false end
 
-        if controls.doNav and controls.ChainStart and not controls.doPause then controls.ChainPath = selectedPath end
+        if NavSet.doNav and NavSet.ChainStart and not NavSet.doPause then NavSet.ChainPath = NavSet.SelectedPath end
 
-        if controls.ChainStart and controls.doPause then
-            for i = 1, #Chain do
-                if i == controls.CurChain then
-                    if Chain[i].Path == controls.ChainPath then
-                        if Chain[i].Zone == currZone then
-                            controls.doPause = false
-                            selectedPath = Chain[i].Path
-                            controls.ChainPath = selectedPath 
+        if NavSet.ChainStart and NavSet.doPause then
+            for i = 1, #ChainedPaths do
+                if i == NavSet.CurChain then
+                    if ChainedPaths[i].Path == NavSet.ChainPath then
+                        if ChainedPaths[i].Zone == currZone then
+                            NavSet.doPause = false
+                            NavSet.SelectedPath = ChainedPaths[i].Path
+                            NavSet.ChainPath = NavSet.SelectedPath 
                         end
                     end
                 end
             end
         end
 
-        if controls.doNav and not controls.ChainStart and #Chain > 0 then
-            selectedPath = Chain[1].Path
-            if Chain[1].Type == 'Loop' then
-                controls.doLoop = true
-                controls.doReverse = false
+        if NavSet.doNav and not NavSet.ChainStart and #ChainedPaths > 0 then
+            NavSet.SelectedPath = ChainedPaths[1].Path
+            if ChainedPaths[1].Type == 'Loop' then
+                NavSet.doLoop = true
+                NavSet.doReverse = false
                 
-            elseif Chain[1].Type == 'PingPong' then
-                controls.doPingPong = true
-                controls.doReverse = false
+            elseif ChainedPaths[1].Type == 'PingPong' then
+                NavSet.doPingPong = true
+                NavSet.doReverse = false
                 
-            elseif Chain[1].Type == 'Normal' then
-                controls.doLoop = false
-                controls.doReverse = false
-                controls.doPingPong = false
+            elseif ChainedPaths[1].Type == 'Normal' then
+                NavSet.doLoop = false
+                NavSet.doReverse = false
+                NavSet.doPingPong = false
                 
-            elseif Chain[1].Type == 'Reverse' then
-                controls.doReverse = true
-                controls.doLoop = false
-                controls.doPingPong = false
+            elseif ChainedPaths[1].Type == 'Reverse' then
+                NavSet.doReverse = true
+                NavSet.doLoop = false
+                NavSet.doPingPong = false
                 
             end
-            controls.ChainStart = true
-            controls.CurChain = 1
+            NavSet.ChainStart = true
+            NavSet.CurChain = 1
             mq.delay(500)
         end
 
-        if mq.TLO.SpawnCount('gm')() > 0 and interrupts.stopForGM and not pausedGM then
+        if mq.TLO.SpawnCount('gm')() > 0 and InterruptSet.stopForGM and not NavSet.PausedActiveGN then
             printf("\ay[\at%s\ax] \arGM Detected, \ayPausing Navigation...", script)
-            controls.doNav = false
+            NavSet.doNav = false
             mq.cmdf("/squelch /nav stop")
-            controls.ChainStart = false
+            NavSet.ChainStart = false
             mq.cmd("/multiline ; /squelch /beep; /timed  3, /beep ; /timed 2, /beep ; /timed 1, /beep")
             mq.delay(1)
             status = 'Paused: GM Detected'
-            pausedGM = true
+            NavSet.PausedActiveGN = true
         end
 
         if zoningHideGUI then
             printf("\ay[\at%s\ax] \agZoning, \ayHiding GUI...", script)
             mq.delay(1)
             showMainGUI = true
-            loopCount = 0
+            NavSet.LoopCount = 0
             zoningHideGUI = false
-            currentStepIndex = 1
-            selectedPath = 'None'
-            controls.doNav = false
-            table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = mq.TLO.Zone.ShortName(), Path = selectedPath, WP = 1, Status = 'Finished Zoning'})
+            NavSet.CurrentStepIndex = 1
+            NavSet.SelectedPath = 'None'
+            NavSet.doNav = false
+            table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = mq.TLO.Zone.ShortName(), Path = NavSet.SelectedPath, WP = 1, Status = 'Finished Zoning'})
             mq.delay(1)
             status = 'Idle'
             if currZone ~= lastZone then
-                selectedPath = 'None'
-                controls.doNav = false
-                controls.doPause = false
+                NavSet.SelectedPath = 'None'
+                NavSet.doNav = false
+                NavSet.doPause = false
                 lastZone = currZone
                 pauseTime = 0
-                pauseStart = 0
+                InterruptSet.PauseStart = 0
                 printf("\ay[\at%s\ax] \agZone Changed Last: \at%s Current: \ay%s", script, lastZone, currZone)
             end
         end
@@ -2277,23 +2289,23 @@ local function Loop()
             lastHP, lastMP = 0,0
         end
 
-        if selectedPath == 'None' then
-            controls.LastPath = nil
-            controls.doNav = false
-            controls.doPause = false
-            loopCount = 0
-            currentStepIndex = 1
+        if NavSet.SelectedPath == 'None' then
+            NavSet.LastPath = nil
+            NavSet.doNav = false
+            NavSet.doPause = false
+            NavSet.LoopCount = 0
+            NavSet.CurrentStepIndex = 1
             status = 'Idle'
             PathStartClock, PathStartTime = nil, nil
-        elseif controls.LastPath == nil then
-            controls.LastPath = selectedPath
-            currentStepIndex = 1
+        elseif NavSet.LastPath == nil then
+            NavSet.LastPath = NavSet.SelectedPath
+            NavSet.CurrentStepIndex = 1
         end
 
-        if selectedPath ~= controls.LastPath and controls.LastPath ~= nil then
-            controls.LastPath = selectedPath
-            loopCount = 0
-            currentStepIndex = 1
+        if NavSet.SelectedPath ~= NavSet.LastPath and NavSet.LastPath ~= nil then
+            NavSet.LastPath = NavSet.SelectedPath
+            NavSet.LoopCount = 0
+            NavSet.CurrentStepIndex = 1
             status = 'Idle'
             PathStartClock, PathStartTime = nil, nil
         end
@@ -2303,14 +2315,14 @@ local function Loop()
             mq.exit()
         end
 
-        if controls.doNav and not controls.doPause and not justZoned then
-            mq.delay(5)
-            interrupts.interruptFound = CheckInterrupts()
+        if NavSet.doNav and not NavSet.doPause and not justZoned then
+            mq.delay(1)
+            InterruptSet.interruptFound = CheckInterrupts()
         end
         
-        if controls.doNav and not interrupts.interruptFound and not controls.doPause then
+        if NavSet.doNav and not InterruptSet.interruptFound and not NavSet.doPause then
 
-            if previousDoNav ~= controls.doNav then
+            if NavSet.PreviousDoNav ~= NavSet.doNav then
                 -- Reset the coroutine since doNav changed from false to true
                 co = coroutine.create(NavigatePath)
             end
@@ -2320,12 +2332,12 @@ local function Loop()
             -- If the coroutine is not dead, resume it
             if coroutine.status(co) ~= "dead" then
                 -- Check if we need to pause
-                if pauseStart > 0 then
-                    if curTime - pauseStart > pauseTime then
+                if InterruptSet.PauseStart > 0 then
+                    if curTime - InterruptSet.PauseStart > pauseTime then
                         -- Time is up, resume the coroutine and reset the timer values
                         pauseTime = 0
-                        pauseStart = 0
-                        local success, message = coroutine.resume(co, selectedPath)
+                        InterruptSet.PauseStart = 0
+                        local success, message = coroutine.resume(co, NavSet.SelectedPath)
                         if not success then
                             print("Error: " .. message)
                             -- Reset coroutine on error
@@ -2334,7 +2346,7 @@ local function Loop()
                     end
                 else
                     -- Resume the coroutine we are do not need to pause
-                    local success, message = coroutine.resume(co, selectedPath)
+                    local success, message = coroutine.resume(co, NavSet.SelectedPath)
                     if not success then
                         print("Error: " .. message)
                         -- Reset coroutine on error
@@ -2345,71 +2357,71 @@ local function Loop()
                 -- If the coroutine is dead, create a new one
                 co = coroutine.create(NavigatePath)
             end
-        elseif not controls.doNav and not controls.autoRecord then
+        elseif not NavSet.doNav and not NavSet.autoRecord then
             -- Reset state when doNav is false
-            loopCount = 0
-            if not controls.ChainStart then
-                controls.doPause = false
+            NavSet.LoopCount = 0
+            if not NavSet.ChainStart then
+                NavSet.doPause = false
             end
-            currentStepIndex = 1
+            NavSet.CurrentStepIndex = 1
             status = 'Idle'
             PathStartClock, PathStartTime = nil, nil
             mq.delay(100)
         end
 
         -- Update previousDoNav to the current state
-        previousDoNav = controls.doNav
+        NavSet.PreviousDoNav = NavSet.doNav
 
-        if #Chain > 0 and not controls.doNav and controls.ChainStart then
+        if #ChainedPaths > 0 and not NavSet.doNav and NavSet.ChainStart then
             -- for i = 1, #Chain do
-                if Chain[controls.CurChain].Path == controls.ChainPath and controls.CurChain < #Chain then
-                    if Chain[controls.CurChain+1].Zone ~= currZone then
-                        controls.doPause = true
+                if ChainedPaths[NavSet.CurChain].Path == NavSet.ChainPath and NavSet.CurChain < #ChainedPaths then
+                    if ChainedPaths[NavSet.CurChain+1].Zone ~= currZone then
+                        NavSet.doPause = true
                     else
-                        selectedPath = Chain[controls.CurChain + 1].Path
-                        currentStepIndex = 1
-                        controls.ChainPath = selectedPath
-                        controls.doPause = false
-                        if Chain[controls.CurChain + 1].Type == 'Loop' then
-                            controls.doLoop = true
-                            controls.doReverse = false
-                        elseif Chain[controls.CurChain + 1].Type == 'PingPong' then
-                            controls.doPingPong = true
-                            controls.doLoop = true
-                        elseif Chain[controls.CurChain + 1].Type == 'Normal' then
-                            controls.doLoop = false
-                            controls.doReverse = false
-                            controls.doPingPong = false
-                        elseif Chain[controls.CurChain + 1].Type == 'Reverse' then
-                            controls.doReverse = true
-                            controls.doLoop = false
-                            controls.doPingPong = false
+                        NavSet.SelectedPath = ChainedPaths[NavSet.CurChain + 1].Path
+                        NavSet.CurrentStepIndex = 1
+                        NavSet.ChainPath = NavSet.SelectedPath
+                        NavSet.doPause = false
+                        if ChainedPaths[NavSet.CurChain + 1].Type == 'Loop' then
+                            NavSet.doLoop = true
+                            NavSet.doReverse = false
+                        elseif ChainedPaths[NavSet.CurChain + 1].Type == 'PingPong' then
+                            NavSet.doPingPong = true
+                            NavSet.doLoop = true
+                        elseif ChainedPaths[NavSet.CurChain + 1].Type == 'Normal' then
+                            NavSet.doLoop = false
+                            NavSet.doReverse = false
+                            NavSet.doPingPong = false
+                        elseif ChainedPaths[NavSet.CurChain + 1].Type == 'Reverse' then
+                            NavSet.doReverse = true
+                            NavSet.doLoop = false
+                            NavSet.doPingPong = false
                         end
-                        controls.CurChain = controls.CurChain + 1
+                        NavSet.CurChain = NavSet.CurChain + 1
                         mq.delay(500)
-                        controls.doNav = true
+                        NavSet.doNav = true
                     end
                     mq.delay(500)            
-                elseif Chain[controls.CurChain].Path == controls.ChainPath and controls.CurChain == #Chain then
-                    controls.ChainStart = false
-                    if Chain[controls.CurChain].Type == 'Normal' or Chain[controls.CurChain].Type == 'Reverse' then
-                        controls.doNav = false
-                        controls.doPause = false
-                        controls.ChainStart = false
-                        controls.ChainPath = ''
-                        Chain = {}
+                elseif ChainedPaths[NavSet.CurChain].Path == NavSet.ChainPath and NavSet.CurChain == #ChainedPaths then
+                    NavSet.ChainStart = false
+                    if ChainedPaths[NavSet.CurChain].Type == 'Normal' or ChainedPaths[NavSet.CurChain].Type == 'Reverse' then
+                        NavSet.doNav = false
+                        NavSet.doPause = false
+                        NavSet.ChainStart = false
+                        NavSet.ChainPath = ''
+                        ChainedPaths = {}
                     end
                 end
             -- end
         end
 
-        if controls.autoRecord then
-            AutoRecordPath(selectedPath)
+        if NavSet.autoRecord then
+            AutoRecordPath(NavSet.SelectedPath)
         end
 
         if deleteWP then
-            RemoveWaypoint(selectedPath, deleteWPStep)
-            if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = mq.TLO.Zone.ShortName(), Path = selectedPath, WP = 'Delete  #'..deleteWPStep, Status = 'Waypoint #'..deleteWPStep..' Removed Successfully!'}) end
+            RemoveWaypoint(NavSet.SelectedPath, deleteWPStep)
+            if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = mq.TLO.Zone.ShortName(), Path = NavSet.SelectedPath, WP = 'Delete  #'..deleteWPStep, Status = 'Waypoint #'..deleteWPStep..' Removed Successfully!'}) end
             deleteWPStep = 0
             deleteWP = false
         end
@@ -2420,7 +2432,7 @@ local function Loop()
                 if status:find("Distance") then
                     statTxt = statTxt:gsub("Distance:", "Dist:")
                 end
-                table.insert(debugMessages, {Time = os.date("%H:%M:%S"), WP = currentStepIndex, Status = statTxt, Path = selectedPath, Zone = mq.TLO.Zone.ShortName()})
+                table.insert(debugMessages, {Time = os.date("%H:%M:%S"), WP = NavSet.CurrentStepIndex, Status = statTxt, Path = NavSet.SelectedPath, Zone = mq.TLO.Zone.ShortName()})
                 lastStatus = status
             end
             while #debugMessages > 100 do
