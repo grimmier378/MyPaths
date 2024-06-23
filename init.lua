@@ -39,6 +39,7 @@ local NavSet = {
     ChainZone = '',
     LastPath = nil,
     CurChain = 0,
+    doChainPause = false,
     autoRecord = false,
     doNav = false,
     doSingle = false,
@@ -589,15 +590,11 @@ local function CheckInterrupts()
         status = 'Paused for Zoning.'
         lastZone = ''
         flag = true
-    elseif settings[script].GroupWatch == true then
-        if groupWatch(settings[script].WatchType) then
-            flag =  true
-        end
+    elseif settings[script].GroupWatch == true and groupWatch(settings[script].WatchType) then
+        flag =  true
         if flag and not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
-    elseif InterruptSet.stopForDist == true then
-        if groupDistance() then
-            flag = true
-        end
+    elseif InterruptSet.stopForDist == true and groupDistance() then
+        flag = true
         if flag and not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
     end
     if flag then
@@ -699,8 +696,7 @@ local function NavigatePath(name)
                 end
                 if CheckInterrupts() then
                     coroutine.yield()
-                end
-                if mq.TLO.Me.Speed() == 0 and not CheckInterrupts() then
+                elseif mq.TLO.Me.Speed() == 0 then
                     mq.delay(1)
                     if not mq.TLO.Me.Sitting() then
                         mq.cmdf("/squelch /nav locyxz %s | distance %s", tmpLoc, NavSet.StopDist)
@@ -2155,7 +2151,16 @@ local function Loop()
         end
 
         if currZone ~= lastZone then
-            ZoningPause()
+            if coroutine.status(co) ~= "dead" then
+                local success, message = coroutine.close(co)
+                if not success then
+                    print("Error: " .. message)
+                    break
+                end
+            else
+                -- If the coroutine is dead, create a new one
+                co = coroutine.create(NavigatePath)
+            end
             printf("\\ay[\\at%s\\ax] \\agZone Changed Last: \\at%s Current: \\ay%s", script, lastZone, currZone)
             lastZone = currZone
             NavSet.SelectedPath = 'None'
@@ -2165,6 +2170,7 @@ local function Loop()
             NavSet.doReverse = false
             NavSet.doPingPong = false
             NavSet.doPause = false
+            
             pauseTime = 0
             InterruptSet.PauseStart = 0
             NavSet.PreviousDoNav = false
@@ -2194,6 +2200,7 @@ local function Loop()
                             NavSet.doLoop = false
                             NavSet.doPingPong = false
                         end
+                        NavSet.doChainPause = false
                         NavSet.doNav = true
                         status = 'Navigating'
                         printf("\\ay[\\at%s\\ax] \\agStarting navigation for path: \\ay%s \\agin zone: \\ay%s", script, NavSet.SelectedPath, currZone)
@@ -2209,14 +2216,14 @@ local function Loop()
             justZoned = true
         else justZoned = false end
 
-        if NavSet.doNav and NavSet.ChainStart and not NavSet.doPause then NavSet.ChainPath = NavSet.SelectedPath end
+        if NavSet.doNav and NavSet.ChainStart and not NavSet.doChainPause then NavSet.ChainPath = NavSet.SelectedPath end
 
-        if NavSet.ChainStart and NavSet.doPause then
+        if NavSet.ChainStart and NavSet.doChainPause then
             for i = 1, #ChainedPaths do
                 if i == NavSet.CurChain then
                     if ChainedPaths[i].Path == NavSet.ChainPath then
                         if ChainedPaths[i].Zone == currZone then
-                            NavSet.doPause = false
+                            NavSet.doChainPause = false
                             NavSet.SelectedPath = ChainedPaths[i].Path
                             NavSet.ChainPath = NavSet.SelectedPath 
                         end
@@ -2292,6 +2299,7 @@ local function Loop()
         if NavSet.SelectedPath == 'None' then
             NavSet.LastPath = nil
             NavSet.doNav = false
+            NavSet.doChainPause = false
             NavSet.doPause = false
             NavSet.LoopCount = 0
             NavSet.CurrentStepIndex = 1
@@ -2320,7 +2328,7 @@ local function Loop()
             InterruptSet.interruptFound = CheckInterrupts()
         end
         
-        if NavSet.doNav and not InterruptSet.interruptFound and not NavSet.doPause then
+        if NavSet.doNav and not InterruptSet.interruptFound and not NavSet.doPause and not NavSet.doChainPause then
 
             if NavSet.PreviousDoNav ~= NavSet.doNav then
                 -- Reset the coroutine since doNav changed from false to true
@@ -2376,12 +2384,12 @@ local function Loop()
             -- for i = 1, #Chain do
                 if ChainedPaths[NavSet.CurChain].Path == NavSet.ChainPath and NavSet.CurChain < #ChainedPaths then
                     if ChainedPaths[NavSet.CurChain+1].Zone ~= currZone then
-                        NavSet.doPause = true
+                        NavSet.doChainPause = true
                     else
                         NavSet.SelectedPath = ChainedPaths[NavSet.CurChain + 1].Path
                         NavSet.CurrentStepIndex = 1
                         NavSet.ChainPath = NavSet.SelectedPath
-                        NavSet.doPause = false
+                        NavSet.doChainPause = false
                         if ChainedPaths[NavSet.CurChain + 1].Type == 'Loop' then
                             NavSet.doLoop = true
                             NavSet.doReverse = false
@@ -2406,7 +2414,7 @@ local function Loop()
                     NavSet.ChainStart = false
                     if ChainedPaths[NavSet.CurChain].Type == 'Normal' or ChainedPaths[NavSet.CurChain].Type == 'Reverse' then
                         NavSet.doNav = false
-                        NavSet.doPause = false
+                        NavSet.doChainPause = false
                         NavSet.ChainStart = false
                         NavSet.ChainPath = ''
                         ChainedPaths = {}
