@@ -677,8 +677,15 @@ local function NavigatePath(name)
             local tmpLoc = string.format("%s:%s", tmp[i].loc, mq.TLO.Me.LocYXZ())
             wpLoc = tmp[i].loc
             tmpLoc = tmpLoc:gsub(",", " ")
+            -- Find the position of the last comma
+            local comma_pos = tmpLoc:match(".*(),") 
+
+            -- Extract the substring up to the last comma
+            if comma_pos then
+                tmpLoc = tmpLoc:sub(1, comma_pos - 1)
+            end
             local tmpDist = mq.TLO.Math.Distance(tmpLoc)() or 0
-            mq.cmdf("/squelch /nav locyxz %s | distance %s", tmpLoc, NavSet.StopDist)
+            mq.cmdf("/squelch /nav locyx %s | distance %s", tmpLoc, NavSet.StopDist)
             status = "Nav to WP #: "..tmp[i].step.." Distance: "..string.format("%.2f",tmpDist)
             mq.delay(1)
             -- mq.delay(3000, function () return mq.TLO.Me.Speed() > 0 end)
@@ -700,7 +707,7 @@ local function NavigatePath(name)
                 elseif mq.TLO.Me.Speed() == 0 then
                     mq.delay(1)
                     if not mq.TLO.Me.Sitting() then
-                        mq.cmdf("/squelch /nav locyxz %s | distance %s", tmpLoc, NavSet.StopDist)
+                        mq.cmdf("/squelch /nav locyx %s | distance %s", tmpLoc, NavSet.StopDist)
                         tmpLoc = string.format("%s:%s", tmp[i].loc, mq.TLO.Me.LocYXZ())
                         tmpLoc = tmpLoc:gsub(",", " ")
                         tmpDist = mq.TLO.Math.Distance(tmpLoc)() or 0
@@ -984,26 +991,6 @@ local function Draw_GUI()
             ImGui.Separator()
         end
             if NavSet.SelectedPath ~= 'None' or #ChainedPaths > 0 then
-                if NavSet.doNav then
-                    ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1.0, 0.4, 0.4, 0.4))
-                    if ImGui.Button('Stop') then
-                        NavSet.doNav = false
-                        NavSet.ChainStart = false
-                        mq.cmdf("/squelch /nav stop")
-                        PathStartClock,PathStartTime = nil, nil
-                    end
-                    ImGui.PopStyleColor()
-                    ImGui.SameLine()
-                else
-                    ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
-                    if ImGui.Button('Start') then
-                        NavSet.PausedActiveGN = false
-                        NavSet.doNav = true
-                        PathStartClock,PathStartTime = os.date("%I:%M:%S %p"), os.time()
-                    end
-                    ImGui.PopStyleColor()
-                    ImGui.SameLine()
-                end
                 if NavSet.doPause and NavSet.doNav then
                     ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
                     if ImGui.Button('Resume') then
@@ -1012,17 +999,52 @@ local function Draw_GUI()
                         table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = currZone, Path = NavSet.SelectedPath, WP = 'Resume', Status = 'Resumed Navigation!'})
                     end
                     ImGui.PopStyleColor()
+                    if ImGui.IsItemHovered() then
+                        ImGui.SetTooltip("Resume Navigation")
+                    end
                     ImGui.SameLine()
                 elseif not NavSet.doPause and NavSet.doNav then
                     ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1, 0.4, 0.4, 0.4))
-                    if ImGui.Button('Pause') then
+                    if ImGui.Button(Icon.FA_PAUSE) then
                         NavSet.doPause = true
                         mq.cmd("/squelch /nav stop")
                         table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = currZone, Path = NavSet.SelectedPath, WP = 'Pause', Status = 'Paused Navigation!'})
                     end
                     ImGui.PopStyleColor()
+                    if ImGui.IsItemHovered() then
+                        ImGui.SetTooltip("Pause Navigation")
+                    end
+                    
                     ImGui.SameLine()
                 end
+                if NavSet.doNav then
+                    ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1.0, 0.4, 0.4, 0.4))
+                    if ImGui.Button(Icon.FA_STOP) then
+                        NavSet.doNav = false
+                        NavSet.ChainStart = false
+                        mq.cmdf("/squelch /nav stop")
+                        PathStartClock,PathStartTime = nil, nil
+                    end
+                    ImGui.PopStyleColor()
+
+                    if ImGui.IsItemHovered() then
+                        ImGui.SetTooltip("Stop Navigation")
+                    end
+                    ImGui.SameLine()
+                else
+                    ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
+                    if ImGui.Button(Icon.FA_PLAY) then
+                        NavSet.PausedActiveGN = false
+                        NavSet.doNav = true
+                        PathStartClock,PathStartTime = os.date("%I:%M:%S %p"), os.time()
+                    end
+                    ImGui.PopStyleColor()
+                    if ImGui.IsItemHovered() then
+                        ImGui.SetTooltip("Start Navigation")
+                    end
+                    ImGui.SameLine()
+                end
+
             end
         
             ImGui.Text("Status: ")
@@ -1091,14 +1113,17 @@ local function Draw_GUI()
                         ImGui.SetNextItemWidth(150)
                         newPath = ImGui.InputText("##NewPathName", newPath)
                         ImGui.SameLine()
-                        if ImGui.Button('Create Path') then
+                        if ImGui.Button(Icon.MD_CREATE) then
                             CreatePath(newPath)
                             NavSet.SelectedPath = newPath
                             newPath = ''
                         end
+                        if ImGui.IsItemHovered() then
+                            ImGui.SetTooltip("Create New Path")
+                        end
                         if NavSet.SelectedPath ~= 'None' then
                             ImGui.SameLine()
-                            if ImGui.Button('Copy Path') then
+                            if ImGui.Button(Icon.MD_CONTENT_COPY) then
                                 CreatePath(newPath)
                                 for i = 1, #Paths[currZone][NavSet.SelectedPath] do
                                     table.insert(Paths[currZone][newPath], Paths[currZone][NavSet.SelectedPath][i])
@@ -1107,21 +1132,33 @@ local function Draw_GUI()
                                 NavSet.SelectedPath = newPath
                                 newPath = ''
                             end
+                            if ImGui.IsItemHovered() then
+                                ImGui.SetTooltip("Copy Path")
+                            end
                         end
-
-                        if ImGui.Button('Delete Path') then
+                        ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1, 0.4, 0.4, 0.4))
+                        if ImGui.Button(Icon.MD_DELETE) then
                             DeletePath(NavSet.SelectedPath)
                             NavSet.SelectedPath = 'None'
                         end
+                        ImGui.PopStyleColor()
+                        if ImGui.IsItemHovered() then
+                            ImGui.SetTooltip("Delete Path")
+                        end
                         ImGui.SameLine()
-                        if ImGui.Button('Save Paths') then
+                        ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
+                        if ImGui.Button(Icon.MD_SAVE) then
                             SavePaths()
+                        end
+                        ImGui.PopStyleColor()
+                        if ImGui.IsItemHovered() then
+                            ImGui.SetTooltip("Save Path")
                         end
                         ImGui.Dummy(10,5)
                         if ImGui.CollapsingHeader("Share Paths##") then
                             importString   = ImGui.InputText("##ImportString", importString)
                             ImGui.SameLine()
-                            if ImGui.Button('Import Path') then
+                            if ImGui.Button(Icon.FA_DOWNLOAD) then
                                 local imported = import_paths(importString)
                                 if imported then
                                     for zone, paths in pairs(imported) do
@@ -1134,6 +1171,9 @@ local function Draw_GUI()
                                     importString = ''
                                     SavePaths()
                                 end
+                            end
+                            if ImGui.IsItemHovered() then
+                                ImGui.SetTooltip("Import Path")
                             end
                             ImGui.SeparatorText('Export Paths')
                             if NavSet.SelectedPath ~= 'None' then
@@ -1166,12 +1206,15 @@ local function Draw_GUI()
                                 ImGui.EndCombo()
                             end
                             if exportZone ~= '' and exportPathName ~= '' then
-                                if ImGui.Button('Export Path') then
+                                if ImGui.Button(Icon.FA_SHARE) then
                                     local exportData = export_paths(exportZone, exportPathName, Paths[exportZone][exportPathName])
                                     ImGui.LogToClipboard()
                                     ImGui.LogText(exportData)
                                     ImGui.LogFinish()
                                     print('\ayPath data copied to clipboard!\ax')
+                                end
+                                if ImGui.IsItemHovered() then
+                                    ImGui.SetTooltip("Export Path")
                                 end
                             end
                         end
@@ -1181,11 +1224,15 @@ local function Draw_GUI()
                     if ImGui.CollapsingHeader("Chain Paths##") then
                         if NavSet.SelectedPath ~= 'None' then
                             ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
-                            if ImGui.Button("Add ["..NavSet.SelectedPath.."]##") then
+                            if ImGui.Button(Icon.MD_PLAYLIST_ADD.." ["..NavSet.SelectedPath.."]##") then
                                 if not ChainedPaths then ChainedPaths = {} end
                                 table.insert(ChainedPaths , {Zone = currZone, Path = NavSet.SelectedPath, Type = 'Normal'})
                             end
                             ImGui.PopStyleColor()
+                            if ImGui.IsItemHovered() then
+                                ImGui.SetTooltip("Add Selected Path to Chain")
+                            end
+                            
                         end
                         local tmpCZ, tmpCP = {}, {}
                         for name, data in pairs(Paths) do
@@ -1219,18 +1266,25 @@ local function Draw_GUI()
                             ImGui.EndCombo()
                         end
                         ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
-                        if ImGui.Button("Add Path to Chain") then
+                        if ImGui.Button(Icon.MD_PLAYLIST_ADD.." ["..NavSet.ChainPath .."]##") then
                             if not ChainedPaths then ChainedPaths = {} end
                             table.insert(ChainedPaths , {Zone = NavSet.ChainZone, Path = NavSet.ChainPath, Type = 'Normal'})
                         end
                         ImGui.PopStyleColor()
+                        if ImGui.IsItemHovered() then
+                            ImGui.SetTooltip("Add Path to Chain")
+                        end
                         if #ChainedPaths > 0  then
                             ImGui.SameLine()
                             ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1, 0.4, 0.4, 0.4))
-                            if ImGui.Button("Clear Chain##") then
+                            if ImGui.Button(Icon.MD_DELETE_SWEEP.."##") then
                                 ChainedPaths = {}
                             end
                             ImGui.PopStyleColor()
+
+                            if ImGui.IsItemHovered() then
+                                ImGui.SetTooltip("Clear Chain")
+                            end
                             ImGui.SeparatorText("Chain Paths:")
                             for i = 1, #ChainedPaths do
                                 ImGui.SetNextItemWidth(100)
@@ -1275,25 +1329,33 @@ local function Draw_GUI()
                             if NavSet.doPause and NavSet.doNav then
                                 ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
                                 
-                                if ImGui.Button('Resume') then
+                                if ImGui.Button(Icon.FA_PLAY_CIRCLE_O) then
                                     NavSet.doPause = false
                                     NavSet.PausedActiveGN = false
                                     table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = currZone, Path = NavSet.SelectedPath, WP = 'Resume', Status = 'Resumed Navigation!'})
                                 end
                                 ImGui.PopStyleColor()
+
+                                if ImGui.IsItemHovered() then
+                                    ImGui.SetTooltip("Resume Navigation")
+                                end
                                 ImGui.SameLine()
                             elseif not NavSet.doPause and NavSet.doNav then
                                 ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1, 0.4, 0.4, 0.4))
                                 
-                                if ImGui.Button('Pause') then
+                                if ImGui.Button(Icon.FA_PAUSE) then
                                     NavSet.doPause = true
                                     mq.cmd("/squelch /nav stop")
                                     table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = currZone, Path = NavSet.SelectedPath, WP = 'Pause', Status = 'Paused Navigation!'})
                                 end
                                 ImGui.PopStyleColor()
+
+                                if ImGui.IsItemHovered() then
+                                    ImGui.SetTooltip("Pause Navigation")
+                                end
                                 ImGui.SameLine()
                             end
-                            local tmpLabel = NavSet.doNav and 'Stop Navigation' or 'Start Navigation'
+                            local tmpLabel = NavSet.doNav and Icon.FA_STOP or Icon.FA_PLAY
                             if NavSet.doNav then
                                 ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1.0, 0.4, 0.4, 0.4))
                             else
@@ -1312,6 +1374,14 @@ local function Draw_GUI()
                                 end
                             end
                             ImGui.PopStyleColor()
+
+                            if ImGui.IsItemHovered() then
+                                if NavSet.doNav then
+                                    ImGui.SetTooltip("Stop Navigation")
+                                else
+                                    ImGui.SetTooltip("Start Navigation")
+                                end
+                            end
                             ImGui.SameLine()
                             if ImGui.Button("Start at Closest") then
                                 NavSet.CurrentStepIndex = closestWaypointIndex
@@ -1319,7 +1389,9 @@ local function Draw_GUI()
                                 NavSet.PausedActiveGN = false
                                 PathStartClock, PathStartTime = os.date("%I:%M:%S %p"), os.time()
                             end
-
+                            if ImGui.IsItemHovered() then
+                                ImGui.SetTooltip("Start Navigation at Closest Waypoint")
+                            end
                             ImGui.SetNextItemWidth(100)
                             NavSet.StopDist = ImGui.InputInt("Stop Distance##"..script, NavSet.StopDist, 1, 50)
                             ImGui.SetNextItemWidth(100)
@@ -1332,17 +1404,26 @@ local function Draw_GUI()
                 if ImGui.BeginTabItem('Path Data') then
                     if NavSet.SelectedPath ~= 'None' then
                         if ImGui.CollapsingHeader("Manage Waypoints##") then
-                                    
-                            if ImGui.Button('Add Waypoint') then
+                            ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
+                            if ImGui.Button(Icon.MD_ADD_LOCATION) then
                                 RecordWaypoint(NavSet.SelectedPath)
                             end
+                            ImGui.PopStyleColor()
+                            if ImGui.IsItemHovered() then
+                                ImGui.SetTooltip("Record Waypoint")
+                            end
                             ImGui.SameLine()
-                            if ImGui.Button('Clear Waypoints') then
+                            ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1.0, 0.4, 0.4, 0.4))
+                            if ImGui.Button(Icon.MD_DELETE_SWEEP) then
                                 ClearWaypoints(NavSet.SelectedPath)
                             end
-                            
-                            local label = NavSet.autoRecord and 'Stop Recording' or 'Start Recording'
+                            ImGui.PopStyleColor()
+                            if ImGui.IsItemHovered() then
+                                ImGui.SetTooltip("Clear Waypoints")
+                            end
+                            local label = Icon.MD_FIBER_MANUAL_RECORD
                             if NavSet.autoRecord then
+                                label = Icon.FA_STOP_CIRCLE
                                 ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1.0, 0.4, 0.4, 0.4))
                             else
                                 ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1.0, 0.4, 0.4))
@@ -1356,6 +1437,10 @@ local function Draw_GUI()
                                 end
                             end
                             ImGui.PopStyleColor()
+
+                            if ImGui.IsItemHovered() then
+                                ImGui.SetTooltip("Auto Record Waypoints")
+                            end
                             ImGui.SameLine()
                             ImGui.SetNextItemWidth(100)
                             NavSet.RecordDelay = ImGui.InputInt("Auto Record Delay##"..script, NavSet.RecordDelay, 1, 10)
@@ -1569,6 +1654,9 @@ local function Draw_GUI()
                         if ImGui.Button('Clear Debug Messages') then
                             debugMessages = {}
                         end
+                        if ImGui.IsItemHovered() then
+                            ImGui.SetTooltip("Clear Debug Messages")
+                        end
                         ImGui.Separator()
                         if ImGui.BeginTable('DebugTable', 5, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), ImVec2(0.0, 0.0)) then
                             ImGui.TableSetupColumn('Time##', ImGuiTableColumnFlags.WidthFixed, 100)
@@ -1594,7 +1682,7 @@ local function Draw_GUI()
                                 ImGui.TableSetColumnIndex(3)
                                 ImGui.Text(tmpDebug[i].WP)
                                 ImGui.TableSetColumnIndex(4)
-                                ImGui.Text(tmpDebug[i].Status)
+                                ImGui.TextWrapped(tmpDebug[i].Status)
                             end
                             ImGui.EndTable()
                         end
@@ -1898,6 +1986,10 @@ local function Draw_GUI()
                 ImGui.Text("Status: ")
                 ImGui.SameLine()
                 ImGui.TextColored(ImVec4(1,1,0,1), status)
+            else
+                ImGui.Text("Status: ")
+                ImGui.SameLine()
+                ImGui.TextColored(ImVec4(1,1,1,1), status)
             end
             if PathStartClock ~= nil then
                 ImGui.Text("Start Time: ")
@@ -2373,9 +2465,10 @@ local function Loop()
             NavSet.LoopCount = 0
             if not NavSet.ChainStart then
                 NavSet.doPause = false
+                status = 'Idle'
             end
             NavSet.CurrentStepIndex = 1
-            status = 'Idle'
+            
             PathStartClock, PathStartTime = nil, nil
             mq.delay(100)
         end
