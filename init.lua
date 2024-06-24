@@ -81,7 +81,7 @@ local InterruptSet = {
 -- GUI Settings
 local winFlags = bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.MenuBar)
 local RUNNING, DEBUG = true, false
-local showMainGUI, showConfigGUI, showDebugTab, showHUD = true, false, false, false
+local showMainGUI, showConfigGUI, showDebugTab, showHUD = true, false, true, false
 local scale = 1
 local aSize, locked, hasThemeZ = false, false, false
 local hudTransparency = 0.5
@@ -910,8 +910,7 @@ local function Draw_GUI()
             if tmpTable[NavSet.CurrentStepIndex] ~= nil then
                 curWPTxt = tmpTable[NavSet.CurrentStepIndex].step or 0
             end
-            -- Set Window Font Scale
-            ImGui.SetWindowFontScale(scale)
+
             if ImGui.BeginMenuBar() then
                 if ImGui.MenuItem(Icon.FA_COG) then
                     -- Toggle Config Window
@@ -960,6 +959,8 @@ local function Draw_GUI()
                 end
                 ImGui.EndMenuBar()
             end
+            -- Set Window Font Scale
+            ImGui.SetWindowFontScale(scale)
             if NavSet.PausedActiveGN then
                 if mq.TLO.SpawnCount('gm')() > 0 then
                 ImGui.TextColored(1,0,0,1,"!!%s GM in Zone %s!!", Icon.FA_BELL,Icon.FA_BELL)
@@ -1701,7 +1702,7 @@ local function Draw_GUI()
                 end
                 ImGui.EndTabItem()
                 end
-                if showDebugTab then
+                if showDebugTab and DEBUG then
                     if ImGui.BeginTabItem('Debug Messages') then
                         if ImGui.BeginChild("Tabs##DebugTab", -1, -1,ImGuiChildFlags.AutoResizeX) then
                         if ImGui.Button('Clear Debug Messages') then
