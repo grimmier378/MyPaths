@@ -1111,21 +1111,34 @@ local function Draw_GUI()
                         end
                         ImGui.EndCombo()
                     end
+                    ImGui.SameLine()
+                    ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1, 0.4, 0.4, 0.4))
+                    if ImGui.Button(Icon.MD_DELETE) then
+                        DeletePath(NavSet.SelectedPath)
+                        NavSet.SelectedPath = 'None'
+                    end
+                    ImGui.PopStyleColor()
+                    if ImGui.IsItemHovered() then
+                        ImGui.SetTooltip("Delete Path")
+                    end
                     ImGui.Dummy(10,5)
                     if ImGui.CollapsingHeader("Manage Paths##") then
                         ImGui.SetNextItemWidth(150)
                         newPath = ImGui.InputText("##NewPathName", newPath)
                         ImGui.SameLine()
+                        ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
                         if ImGui.Button(Icon.MD_CREATE) then
                             CreatePath(newPath)
                             NavSet.SelectedPath = newPath
                             newPath = ''
                         end
+                        ImGui.PopStyleColor()
                         if ImGui.IsItemHovered() then
                             ImGui.SetTooltip("Create New Path")
                         end
                         if NavSet.SelectedPath ~= 'None' then
                             ImGui.SameLine()
+                            ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.911, 0.461, 0.085, 1.000))
                             if ImGui.Button(Icon.MD_CONTENT_COPY) then
                                 CreatePath(newPath)
                                 for i = 1, #Paths[currZone][NavSet.SelectedPath] do
@@ -1135,32 +1148,24 @@ local function Draw_GUI()
                                 NavSet.SelectedPath = newPath
                                 newPath = ''
                             end
+                            ImGui.PopStyleColor()
                             if ImGui.IsItemHovered() then
                                 ImGui.SetTooltip("Copy Path")
                             end
                         end
-                        ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1, 0.4, 0.4, 0.4))
-                        if ImGui.Button(Icon.MD_DELETE) then
-                            DeletePath(NavSet.SelectedPath)
-                            NavSet.SelectedPath = 'None'
-                        end
-                        ImGui.PopStyleColor()
-                        if ImGui.IsItemHovered() then
-                            ImGui.SetTooltip("Delete Path")
-                        end
-                        ImGui.SameLine()
-                        ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
-                        if ImGui.Button(Icon.MD_SAVE) then
-                            SavePaths()
-                        end
-                        ImGui.PopStyleColor()
-                        if ImGui.IsItemHovered() then
-                            ImGui.SetTooltip("Save Path")
-                        end
+                        -- ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
+                        -- if ImGui.Button(Icon.MD_SAVE) then
+                        --     SavePaths()
+                        -- end
+                        -- ImGui.PopStyleColor()
+                        -- if ImGui.IsItemHovered() then
+                        --     ImGui.SetTooltip("Save Path")
+                        -- end
                         ImGui.Dummy(10,5)
                         if ImGui.CollapsingHeader("Share Paths##") then
                             importString   = ImGui.InputText("##ImportString", importString)
                             ImGui.SameLine()
+                            ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
                             if ImGui.Button(Icon.FA_DOWNLOAD) then
                                 local imported = import_paths(importString)
                                 if imported then
@@ -1175,17 +1180,23 @@ local function Draw_GUI()
                                     SavePaths()
                                 end
                             end
+                            ImGui.PopStyleColor()
                             if ImGui.IsItemHovered() then
                                 ImGui.SetTooltip("Import Path")
                             end
                             ImGui.SeparatorText('Export Paths')
                             if NavSet.SelectedPath ~= 'None' then
-                                if ImGui.Button('Export Current Path') then
+                                ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.911, 0.461, 0.085, 1.000))
+                                if ImGui.Button(Icon.FA_SHARE..' '..NavSet.SelectedPath) then
                                     local exportData = export_paths(currZone, NavSet.SelectedPath, Paths[currZone][NavSet.SelectedPath])
                                     ImGui.LogToClipboard()
                                     ImGui.LogText(exportData)
                                     ImGui.LogFinish()
                                     print('\ayPath data copied to clipboard!\ax')
+                                end
+                                ImGui.PopStyleColor()
+                                if ImGui.IsItemHovered() then
+                                    ImGui.SetTooltip("Export Path"..NavSet.SelectedPath)
                                 end
                             end
                             if ImGui.BeginCombo("Zone##SelectExportZone", exportZone) then
@@ -1209,15 +1220,17 @@ local function Draw_GUI()
                                 ImGui.EndCombo()
                             end
                             if exportZone ~= '' and exportPathName ~= '' then
-                                if ImGui.Button(Icon.FA_SHARE) then
+                                ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.911, 0.461, 0.085, 1.000))
+                                if ImGui.Button(Icon.FA_SHARE.." "..exportZone..":"..exportPathName) then
                                     local exportData = export_paths(exportZone, exportPathName, Paths[exportZone][exportPathName])
                                     ImGui.LogToClipboard()
                                     ImGui.LogText(exportData)
                                     ImGui.LogFinish()
                                     print('\ayPath data copied to clipboard!\ax')
                                 end
+                                ImGui.PopStyleColor()
                                 if ImGui.IsItemHovered() then
-                                    ImGui.SetTooltip("Export Path")
+                                    ImGui.SetTooltip("Export Path "..exportZone..":"..exportPathName)
                                 end
                             end
                         end
@@ -1315,12 +1328,9 @@ local function Draw_GUI()
                     end
                     ImGui.Dummy(10,5)
                     if NavSet.SelectedPath ~= 'None' or #ChainedPaths > 0 then
-
                         -- Navigation Controls
-
                         if ImGui.CollapsingHeader("Navigation##") then
                             if not NavSet.doNav then NavSet.doReverse = ImGui.Checkbox('Reverse Order', NavSet.doReverse) ImGui.SameLine() end
-                            
                             NavSet.doLoop = ImGui.Checkbox('Loop Path', NavSet.doLoop)
                             ImGui.SameLine()
                             NavSet.doPingPong = ImGui.Checkbox('Ping Pong', NavSet.doPingPong)
@@ -1386,12 +1396,14 @@ local function Draw_GUI()
                                 end
                             end
                             ImGui.SameLine()
-                            if ImGui.Button("Start at Closest") then
+                            ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1.0, 0.4, 0.4))
+                            if ImGui.Button(Icon.FA_PLAY.." Closest WP") then
                                 NavSet.CurrentStepIndex = closestWaypointIndex
                                 NavSet.doNav = true
                                 NavSet.PausedActiveGN = false
                                 PathStartClock, PathStartTime = os.date("%I:%M:%S %p"), os.time()
                             end
+                            ImGui.PopStyleColor()
                             if ImGui.IsItemHovered() then
                                 ImGui.SetTooltip("Start Navigation at Closest Waypoint")
                             end
@@ -1400,9 +1412,7 @@ local function Draw_GUI()
                             ImGui.SetNextItemWidth(100)
                             NavSet.WpPause = ImGui.InputInt("Global Pause##"..script, NavSet.WpPause, 1,5 )
                         end
-
                     end
-                   
                     ImGui.EndChild()
                 end
                 ImGui.EndTabItem()
@@ -1417,17 +1427,10 @@ local function Draw_GUI()
                             end
                             ImGui.PopStyleColor()
                             if ImGui.IsItemHovered() then
-                                ImGui.SetTooltip("Record Waypoint")
+                                ImGui.SetTooltip("Add Waypoint")
                             end
+
                             ImGui.SameLine()
-                            ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1.0, 0.4, 0.4, 0.4))
-                            if ImGui.Button(Icon.MD_DELETE_SWEEP) then
-                                ClearWaypoints(NavSet.SelectedPath)
-                            end
-                            ImGui.PopStyleColor()
-                            if ImGui.IsItemHovered() then
-                                ImGui.SetTooltip("Clear Waypoints")
-                            end
                             local label = Icon.MD_FIBER_MANUAL_RECORD
                             if NavSet.autoRecord then
                                 label = Icon.FA_STOP_CIRCLE
@@ -1449,8 +1452,17 @@ local function Draw_GUI()
                                 ImGui.SetTooltip("Auto Record Waypoints")
                             end
                             ImGui.SameLine()
-                            ImGui.SetNextItemWidth(100)
-                            NavSet.RecordDelay = ImGui.InputInt("Auto Record Delay##"..script, NavSet.RecordDelay, 1, 10)
+                            ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1.0, 0.4, 0.4, 0.4))
+                            if ImGui.Button(Icon.MD_DELETE_SWEEP) then
+                                ClearWaypoints(NavSet.SelectedPath)
+                            end
+                            ImGui.PopStyleColor()
+                            if ImGui.IsItemHovered() then
+                                ImGui.SetTooltip("Clear Waypoints")
+                            end
+                            ImGui.SameLine()
+                            ImGui.SetNextItemWidth(80)
+                            NavSet.RecordDelay = ImGui.InputInt("Record Delay##"..script, NavSet.RecordDelay, 1, 10)
                         end
                         ImGui.Separator()
                     end
