@@ -1136,8 +1136,9 @@ local function Draw_GUI()
                         if ImGui.IsItemHovered() then
                             ImGui.SetTooltip("Create New Path")
                         end
+                        ImGui.SameLine()
                         if NavSet.SelectedPath ~= 'None' then
-                            ImGui.SameLine()
+                            
                             ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.911, 0.461, 0.085, 1.000))
                             if ImGui.Button(Icon.MD_CONTENT_COPY) then
                                 CreatePath(newPath)
@@ -1152,6 +1153,30 @@ local function Draw_GUI()
                             if ImGui.IsItemHovered() then
                                 ImGui.SetTooltip("Copy Path")
                             end
+                        else
+                            ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.500, 0.500, 0.500, 1.000))
+                            ImGui.Button(Icon.MD_CONTENT_COPY.."##Dummy")
+                            ImGui.PopStyleColor()
+                        end
+                        ImGui.SameLine()
+                        if NavSet.SelectedPath ~= 'None' then
+                            ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.911, 0.461, 0.085, 1.000))
+                            if ImGui.Button(Icon.FA_SHARE.."##ExportSelected") then
+                                local exportData = export_paths(currZone, NavSet.SelectedPath, Paths[currZone][NavSet.SelectedPath])
+                                ImGui.LogToClipboard()
+                                ImGui.LogText(exportData)
+                                ImGui.LogFinish()
+                                print('\ayPath data copied to clipboard!\ax')
+                            end
+                            ImGui.PopStyleColor()
+          
+                        else
+                            ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.500, 0.500, 0.500, 1.000))
+                            ImGui.Button(Icon.FA_SHARE.."##Dummy")
+                            ImGui.PopStyleColor()
+                        end
+                        if ImGui.IsItemHovered() then
+                            ImGui.SetTooltip("Export Path"..NavSet.SelectedPath)
                         end
                         -- ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
                         -- if ImGui.Button(Icon.MD_SAVE) then
@@ -1166,7 +1191,7 @@ local function Draw_GUI()
                             importString   = ImGui.InputText("##ImportString", importString)
                             ImGui.SameLine()
                             ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
-                            if ImGui.Button(Icon.FA_DOWNLOAD) then
+                            if ImGui.Button(Icon.FA_DOWNLOAD.."##ImportPath") then
                                 local imported = import_paths(importString)
                                 if imported then
                                     for zone, paths in pairs(imported) do
@@ -1185,20 +1210,7 @@ local function Draw_GUI()
                                 ImGui.SetTooltip("Import Path")
                             end
                             ImGui.SeparatorText('Export Paths')
-                            if NavSet.SelectedPath ~= 'None' then
-                                ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.911, 0.461, 0.085, 1.000))
-                                if ImGui.Button(Icon.FA_SHARE..' '..NavSet.SelectedPath) then
-                                    local exportData = export_paths(currZone, NavSet.SelectedPath, Paths[currZone][NavSet.SelectedPath])
-                                    ImGui.LogToClipboard()
-                                    ImGui.LogText(exportData)
-                                    ImGui.LogFinish()
-                                    print('\ayPath data copied to clipboard!\ax')
-                                end
-                                ImGui.PopStyleColor()
-                                if ImGui.IsItemHovered() then
-                                    ImGui.SetTooltip("Export Path"..NavSet.SelectedPath)
-                                end
-                            end
+
                             if ImGui.BeginCombo("Zone##SelectExportZone", exportZone) then
                                 if not Paths[exportZone] then Paths[exportZone] = {} end
                                 for name, data in pairs(Paths) do
@@ -1221,7 +1233,7 @@ local function Draw_GUI()
                             end
                             if exportZone ~= '' and exportPathName ~= '' then
                                 ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.911, 0.461, 0.085, 1.000))
-                                if ImGui.Button(Icon.FA_SHARE.." "..exportZone..":"..exportPathName) then
+                                if ImGui.Button(Icon.FA_SHARE.."##ExportZonePath") then
                                     local exportData = export_paths(exportZone, exportPathName, Paths[exportZone][exportPathName])
                                     ImGui.LogToClipboard()
                                     ImGui.LogText(exportData)
@@ -1229,9 +1241,13 @@ local function Draw_GUI()
                                     print('\ayPath data copied to clipboard!\ax')
                                 end
                                 ImGui.PopStyleColor()
-                                if ImGui.IsItemHovered() then
-                                    ImGui.SetTooltip("Export Path "..exportZone..":"..exportPathName)
-                                end
+                            else
+                                ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.500, 0.500, 0.500, 1.000))
+                                ImGui.Button(Icon.FA_SHARE.."##Dummy2")
+                                ImGui.PopStyleColor()
+                            end
+                            if ImGui.IsItemHovered() then
+                                ImGui.SetTooltip("Export Path "..exportZone..":"..exportPathName)
                             end
                         end
                     end
@@ -1249,6 +1265,10 @@ local function Draw_GUI()
                                 ImGui.SetTooltip("Add Selected Path to Chain")
                             end
                             
+                        else
+                            ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.500, 0.500, 0.500, 1.000))
+                            ImGui.Button(Icon.MD_PLAYLIST_ADD.."##Dummy")
+                            ImGui.PopStyleColor()
                         end
                         local tmpCZ, tmpCP = {}, {}
                         for name, data in pairs(Paths) do
@@ -1266,27 +1286,34 @@ local function Draw_GUI()
                             end
                             ImGui.EndCombo()
                         end
-
-                        if ImGui.BeginCombo("Path##SelectChainPath", NavSet.ChainPath) then
-                            if not Paths[NavSet.ChainZone] then Paths[NavSet.ChainZone] = {} end
-                            for k, data in pairs(Paths[NavSet.ChainZone]) do
-                                table.insert(tmpCP , k)
-                            end
-                            table.sort(tmpCP)
-                            for k, name in pairs(tmpCP) do
-                                local isSelected = name == NavSet.ChainPath
-                                if ImGui.Selectable(name, isSelected) then
-                                    NavSet.ChainPath = name
+                        if NavSet.ChainZone ~= '' then
+                            if ImGui.BeginCombo("Path##SelectChainPath", NavSet.ChainPath) then
+                                if not Paths[NavSet.ChainZone] then Paths[NavSet.ChainZone] = {} end
+                                for k, data in pairs(Paths[NavSet.ChainZone]) do
+                                    table.insert(tmpCP , k)
                                 end
+                                table.sort(tmpCP)
+                                for k, name in pairs(tmpCP) do
+                                    local isSelected = name == NavSet.ChainPath
+                                    if ImGui.Selectable(name, isSelected) then
+                                        NavSet.ChainPath = name
+                                    end
+                                end
+                                ImGui.EndCombo()
                             end
-                            ImGui.EndCombo()
                         end
                         ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
-                        if ImGui.Button(Icon.MD_PLAYLIST_ADD.." ["..NavSet.ChainPath .."]##") then
-                            if not ChainedPaths then ChainedPaths = {} end
-                            table.insert(ChainedPaths , {Zone = NavSet.ChainZone, Path = NavSet.ChainPath, Type = 'Normal'})
+                        if NavSet.ChainZone ~= '' and NavSet.ChainPath ~= '' then
+                            if ImGui.Button(Icon.MD_PLAYLIST_ADD.." ["..NavSet.ChainPath .."]##") then
+                                if not ChainedPaths then ChainedPaths = {} end
+                                table.insert(ChainedPaths , {Zone = NavSet.ChainZone, Path = NavSet.ChainPath, Type = 'Normal'})
+                            end
+                            ImGui.PopStyleColor()
+                        else
+                            ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.500, 0.500, 0.500, 1.000))
+                            ImGui.Button(Icon.MD_PLAYLIST_ADD.."##Dummy2")
+                            ImGui.PopStyleColor()
                         end
-                        ImGui.PopStyleColor()
                         if ImGui.IsItemHovered() then
                             ImGui.SetTooltip("Add Path to Chain")
                         end
