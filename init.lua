@@ -33,10 +33,10 @@ local ZoningPause
 local lastRecordedWP = ''
 local PathStartClock,PathStartTime = nil, nil
 local NavSet = {
-    ChainPath = '',
+    ChainPath = 'Select Path...',
     ChainStart = false,
     SelectedPath = 'None',
-    ChainZone = '',
+    ChainZone = 'Select Zone...',
     LastPath = nil,
     CurChain = 0,
     doChainPause = false,
@@ -885,7 +885,7 @@ end
 local transFlag = false
 local importString = ''
 local tmpCmd = ''
-local exportZone, exportPathName = '', ''
+local exportZone, exportPathName = 'Select Zone...', 'Select Path...'
 
 local function Draw_GUI()
     -- Main Window
@@ -1218,7 +1218,7 @@ local function Draw_GUI()
                                 end
                                 ImGui.EndCombo()
                             end
-                            if exportZone ~= ''  then
+                            if exportZone ~= 'Select Zone...'  then
                                         ImGui.SetNextItemWidth(120)
                                 if ImGui.BeginCombo("Path##SelectExportPath", exportPathName) then
                                     if not Paths[exportZone] then Paths[exportZone] = {} end
@@ -1232,7 +1232,7 @@ local function Draw_GUI()
                                 end
                             end
                             ImGui.SameLine()
-                            if exportZone ~= '' and exportPathName ~= '' then
+                            if exportZone ~= 'Select Zone...' and exportPathName ~= 'Select Path...' then
                                 ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.911, 0.461, 0.085, 1.000))
                                 if ImGui.Button(Icon.FA_SHARE.."##ExportZonePath") then
                                     local exportData = export_paths(exportZone, exportPathName, Paths[exportZone][exportPathName])
@@ -1261,15 +1261,14 @@ local function Draw_GUI()
                                 if not ChainedPaths then ChainedPaths = {} end
                                 table.insert(ChainedPaths , {Zone = currZone, Path = NavSet.SelectedPath, Type = 'Normal'})
                             end
-                            ImGui.PopStyleColor()
-                            if ImGui.IsItemHovered() then
-                                ImGui.SetTooltip("Add Selected Path to Chain")
-                            end
-                            
+                            ImGui.PopStyleColor()                          
                         else
                             ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.500, 0.500, 0.500, 1.000))
                             ImGui.Button(Icon.MD_PLAYLIST_ADD.."##Dummy")
                             ImGui.PopStyleColor()
+                        end
+                        if ImGui.IsItemHovered() then
+                            ImGui.SetTooltip("Add ".. currZone..": "..NavSet.SelectedPath.. " to Chain")
                         end
                         local tmpCZ, tmpCP = {}, {}
                         for name, data in pairs(Paths) do
@@ -1288,7 +1287,7 @@ local function Draw_GUI()
                             end
                             ImGui.EndCombo()
                         end
-                        if NavSet.ChainZone ~= '' then
+                        if NavSet.ChainZone ~= 'Select Zone...' then
                                     ImGui.SetNextItemWidth(120)
 
                             if ImGui.BeginCombo("Path##SelectChainPath", NavSet.ChainPath) then
@@ -1308,7 +1307,7 @@ local function Draw_GUI()
                         end
                         ImGui.SameLine()
                         ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
-                        if NavSet.ChainZone ~= '' and NavSet.ChainPath ~= '' then
+                        if NavSet.ChainZone ~= 'Select Zone...' and NavSet.ChainPath ~= 'Select Path...' then
                             if ImGui.Button(Icon.MD_PLAYLIST_ADD.." ["..NavSet.ChainPath .."]##") then
                                 if not ChainedPaths then ChainedPaths = {} end
                                 table.insert(ChainedPaths , {Zone = NavSet.ChainZone, Path = NavSet.ChainPath, Type = 'Normal'})
@@ -1320,7 +1319,7 @@ local function Draw_GUI()
                             ImGui.PopStyleColor()
                         end
                         if ImGui.IsItemHovered() then
-                            ImGui.SetTooltip("Add Path to Chain")
+                            ImGui.SetTooltip("Add "..NavSet.ChainZone..": "..NavSet.ChainPath.." to Chain")
                         end
                         if #ChainedPaths > 0  then
                             ImGui.SameLine()
@@ -2347,8 +2346,8 @@ local function Loop()
                     ChainedPaths = {}
                     NavSet.CurChain = 0
                     NavSet.ChainStart = false
-                    NavSet.ChainZone = ''
-                    NavSet.ChainPath = ''
+                    NavSet.ChainZone = 'Select Zone...'
+                    NavSet.ChainPath = 'Select Path...'
                 end
             end
             justZoned = true
@@ -2562,7 +2561,7 @@ local function Loop()
                         NavSet.doNav = false
                         NavSet.doChainPause = false
                         NavSet.ChainStart = false
-                        NavSet.ChainPath = ''
+                        NavSet.ChainPath = 'Select...'
                         ChainedPaths = {}
                     end
                 end
