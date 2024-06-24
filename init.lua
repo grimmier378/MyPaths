@@ -1766,6 +1766,8 @@ local function Draw_GUI()
                 showConfigGUI = false
             end
             if showConfig then
+                -- Set Window Font Scale
+                ImGui.SetWindowFontScale(scale)
                 if ImGui.CollapsingHeader('Theme##Settings'..script) then
                     -- Configure ThemeZ --
                     ImGui.SeparatorText("Theme##"..script)
@@ -1935,6 +1937,8 @@ local function Draw_GUI()
                     showConfigGUI = false
                 end
             end
+            -- Reset Window Font Scale
+            ImGui.SetWindowFontScale(1)
             LoadTheme.EndTheme(ColCntConf, StyCntConf)
             ImGui.End()
     end
@@ -1955,6 +1959,8 @@ local function Draw_GUI()
             showHUD = false
         end
         if showHUDWin then
+            -- Set Window Font Scale
+            ImGui.SetWindowFontScale(scale)
             if ImGui.IsWindowHovered() then
                 transFlag = true
                 if ImGui.IsMouseDoubleClicked(0) then
@@ -2066,23 +2072,9 @@ local function Draw_GUI()
             end
         end
         ImGui.PopStyleColor()
+        -- Set Window Font Scale
+        ImGui.SetWindowFontScale(1)
         ImGui.End()
-    end
-
-    -- Import Path Data Popup
-    if ImGui.BeginPopup("Import Path Data") then
-        local importData = ImGui.InputTextMultiline("Import Path Data", "", 2048)
-        if importData ~= "" then
-            local importedPaths = import_paths(importData)
-            if importedPaths then
-                Paths[currZone][NavSet.SelectedPath] = importedPaths
-                SavePaths()
-                print('\ayPath imported successfully!\ax')
-            else
-                print('\arFailed to import path data!\ax')
-            end
-        end
-        ImGui.EndPopup()
     end
 end
 
