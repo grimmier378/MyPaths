@@ -1094,8 +1094,11 @@ local function Draw_GUI()
             end
             ImGui.Separator()
             -- Tabs
+            -- ImGui.BeginChild("Tabs##MainTabs", -1, -1,ImGuiChildFlags.AutoResizeX)
             if ImGui.BeginTabBar('MainTabBar') then
+                
                 if ImGui.BeginTabItem('Controls') then
+                    if ImGui.BeginChild("Tabs##Controls", -1, -1,ImGuiChildFlags.AutoResizeX) then
                     ImGui.SeparatorText("Select a Path")
                     ImGui.SetNextItemWidth(150)
                     if ImGui.BeginCombo("##SelectPath", NavSet.SelectedPath) then
@@ -1399,9 +1402,13 @@ local function Draw_GUI()
                         end
 
                     end
-                    ImGui.EndTabItem()
+                   
+                    ImGui.EndChild()
+                end
+                ImGui.EndTabItem()
                 end
                 if ImGui.BeginTabItem('Path Data') then
+                    if ImGui.BeginChild("Tabs##PathTab", -1, -1,ImGuiChildFlags.AutoResizeX) then
                     if NavSet.SelectedPath ~= 'None' then
                         if ImGui.CollapsingHeader("Manage Waypoints##") then
                             ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
@@ -1647,10 +1654,13 @@ local function Draw_GUI()
                             ImGui.Text("No Path Selected")
                         end
                     end
+                    ImGui.EndChild()
+                end
                 ImGui.EndTabItem()
                 end
                 if showDebugTab then
                     if ImGui.BeginTabItem('Debug Messages') then
+                        if ImGui.BeginChild("Tabs##DebugTab", -1, -1,ImGuiChildFlags.AutoResizeX) then
                         if ImGui.Button('Clear Debug Messages') then
                             debugMessages = {}
                         end
@@ -1686,11 +1696,14 @@ local function Draw_GUI()
                             end
                             ImGui.EndTable()
                         end
+                        ImGui.EndChild()
+                    end
                         ImGui.EndTabItem()
                     end
                 end
                 ImGui.EndTabBar()
             end
+            -- ImGui.EndChild()
         end
             -- Reset Font Scale
             ImGui.SetWindowFontScale(1)
