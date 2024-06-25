@@ -25,7 +25,7 @@ local curTime = os.time()
 local lastTime = curTime
 local deleteWP, deleteWPStep = false, 0
 local status, lastStatus = 'Idle', ''
-local wpLoc = ''
+local tmpLoc = ''
 local currZone, lastZone = '', ''
 local lastHP, lastMP, pauseTime = 0, 0, 0
 local zoningHideGUI = false
@@ -348,7 +348,10 @@ local function RecordWaypoint(name)
     local index = #tmp or 1
     local distToLast = 0
     if lastRecordedWP ~= loc and lastRecordedWP ~= '' then
-        distToLast = mq.TLO.Math.Distance(string.format("%s:%s", lastRecordedWP, loc))()
+        local tmpLastWP = lastRecordedWP
+        local yx = tmpLastWP:match("^(.-,.-),") -- Match the y,x part of the string
+        tmpLastWP = tmpLastWP:sub(1, #yx - 1)
+        distToLast = mq.TLO.Math.Distance(tmpLastWP)()
         if distToLast < NavSet.RecordMinDist and NavSet.autoRecord then
             status = "Recording: Distance to Last WP is less than "..NavSet.RecordMinDist.."!"
             if DEBUG and not InterruptSet.reported then
@@ -622,9 +625,11 @@ local function FindIndexClosestWaypoint(table)
     local closestLoc = 1
     if tmp == nil then return closestLoc end
     for i = 1,  #tmp do
-        local tmpLoc = string.format("%s:%s", tmp[i].loc, mq.TLO.Me.LocYXZ())
-        tmpLoc = tmpLoc:gsub(",", " ")
-        local dist = mq.TLO.Math.Distance(tmpLoc)()
+        local tmpClosest = tmp[i].loc
+        local yx = tmpClosest:match("^(.-,.-),") -- Match the y,x part of the string
+        tmpClosest = tmpClosest:sub(1, #yx - 1)
+
+        local dist = mq.TLO.Math.Distance(tmpClosest)()
         if dist < closest then
             closest = dist
             closestLoc = i
@@ -674,23 +679,17 @@ local function NavigatePath(name)
             if not NavSet.doNav then
                 return
             end
-            local tmpLoc = string.format("%s:%s", tmp[i].loc, mq.TLO.Me.LocYXZ())
-            wpLoc = tmp[i].loc
-            tmpLoc = tmpLoc:gsub(",", " ")
-            -- Find the position of the last comma
-            local comma_pos = tmpLoc:match(".*(),") 
+            local tmpDestLoc = tmp[i].loc
+            local yx = tmpDestLoc:match("^(.-,.-),") -- Match the y,x part of the string
+            tmpDestLoc = tmpDestLoc:sub(1, #yx - 1)
 
-            -- Extract the substring up to the last comma
-            if comma_pos then
-                tmpLoc = tmpLoc:sub(1, comma_pos - 1)
-            end
-            local tmpDist = mq.TLO.Math.Distance(tmpLoc)() or 0
-            mq.cmdf("/squelch /nav locyx %s | distance %s", tmpLoc, NavSet.StopDist)
+            local tmpDist = mq.TLO.Math.Distance(tmpDestLoc)() or 0
+            mq.cmdf("/squelch /nav locyx %s | distance %s", tmpDestLoc, NavSet.StopDist)
             status = "Nav to WP #: "..tmp[i].step.." Distance: "..string.format("%.2f",tmpDist)
             mq.delay(1)
             -- mq.delay(3000, function () return mq.TLO.Me.Speed() > 0 end)
             -- coroutine.yield()  -- Yield here to allow updates
-            while mq.TLO.Math.Distance(tmpLoc)() > NavSet.StopDist do
+            while mq.TLO.Math.Distance(tmpDestLoc)() > NavSet.StopDist do
                 if not NavSet.doNav then
                     return
                 end
@@ -707,17 +706,21 @@ local function NavigatePath(name)
                 elseif mq.TLO.Me.Speed() == 0 then
                     mq.delay(1)
                     if not mq.TLO.Me.Sitting() then
-                        mq.cmdf("/squelch /nav locyx %s | distance %s", tmpLoc, NavSet.StopDist)
-                        tmpLoc = string.format("%s:%s", tmp[i].loc, mq.TLO.Me.LocYXZ())
-                        tmpLoc = tmpLoc:gsub(",", " ")
-                        tmpDist = mq.TLO.Math.Distance(tmpLoc)() or 0
+                        
+                        tmpDestLoc = tmp[i].loc
+                        yx = tmpDestLoc:match("^(.-,.-),") -- Match the y,x part of the string
+                        tmpDestLoc = tmpDestLoc:sub(1, #yx - 1)
+                        mq.cmdf("/squelch /nav locyx %s | distance %s", tmpDestLoc, NavSet.StopDist)
+                        tmpDist = mq.TLO.Math.Distance(tmpDestLoc)() or 0
                         status = "Nav to WP #: "..tmp[i].step.." Distance: "..string.format("%.2f",tmpDist)
                         coroutine.yield()
                     end
                 end
                 mq.delay(1)
-                tmpLoc = string.format("%s:%s", wpLoc, mq.TLO.Me.LocYXZ())
-                tmpLoc = tmpLoc:gsub(",", " ")
+                tmpDestLoc = tmp[i].loc
+                yx = tmpDestLoc:match("^(.-,.-),") -- Match the y,x part of the string
+                tmpDestLoc = tmpDestLoc:sub(1, #yx - 1)
+                tmpDist = mq.TLO.Math.Distance(tmpDestLoc)() or 0
                 coroutine.yield()  -- Yield here to allow updates
             end
             mq.cmdf("/squelch /nav stop")
@@ -907,8 +910,13 @@ local function Draw_GUI()
             local tmpTable = sortPathsTable(currZone, NavSet.SelectedPath) or {}
             local closestWaypointIndex = FindIndexClosestWaypoint(tmpTable)
             local curWPTxt = 1
+            tmpLoc = ''
+            local xy = 0
             if tmpTable[NavSet.CurrentStepIndex] ~= nil then
                 curWPTxt = tmpTable[NavSet.CurrentStepIndex].step or 0
+                tmpLoc = tmpTable[NavSet.CurrentStepIndex].loc or ''
+                xy = tmpLoc:match("^(.-,.-),") -- Match the y,x part of the string
+                tmpLoc = tmpLoc:sub(1, #xy - 1)
             end
 
             if ImGui.BeginMenuBar() then
@@ -986,7 +994,7 @@ local function Draw_GUI()
                 ImGui.Text("Distance to Waypoint: ")
                 ImGui.SameLine()
                 if tmpTable[NavSet.CurrentStepIndex] ~= nil then
-                    ImGui.TextColored(0,1,1,1,"%.2f", mq.TLO.Math.Distance(string.format("%s:%s", tmpTable[NavSet.CurrentStepIndex].loc:gsub(",", " "), mq.TLO.Me.LocYXZ()))())
+                    ImGui.TextColored(0,1,1,1,"%.2f", mq.TLO.Math.Distance(tmpLoc)())
                 end
             end
             ImGui.Separator()
@@ -1068,7 +1076,7 @@ local function Draw_GUI()
             elseif status:find("Arrived") then
                 ImGui.TextColored(ImVec4(0, 1, 0, 1), status)
             elseif status:find("Nav to WP") then
-                local tmpDist = mq.TLO.Math.Distance(string.format("%s:%s", wpLoc:gsub(",", " "), mq.TLO.Me.LocYXZ()))() or 0
+                local tmpDist = mq.TLO.Math.Distance(tmpLoc)() or 0
                 local dist = string.format("%.2f",tmpDist)
                 local tmpStatus = status
                 if tmpStatus:find("Distance") then
@@ -1993,7 +2001,7 @@ local function Draw_GUI()
                     ImGui.SameLine()
                     ImGui.Text("Distance: ")
                     ImGui.SameLine()
-                    ImGui.TextColored(0,1,1,1,"%.2f", mq.TLO.Math.Distance(string.format("%s:%s", tmpTable[NavSet.CurrentStepIndex].loc:gsub(",", " "), mq.TLO.Me.LocYXZ()))())
+                    ImGui.TextColored(0,1,1,1,"%.2f", mq.TLO.Math.Distance(tmpLoc)())
                 end
             end
 
