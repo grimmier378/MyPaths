@@ -712,7 +712,7 @@ local function NavigatePath(name)
             tmpDestLoc = tmpDestLoc:sub(1, #yx - 1)
 
             local tmpDist = mq.TLO.Math.Distance(tmpDestLoc)() or 0
-            mq.cmdf("/squelch /nav locyx %s | distance %s", tmpDestLoc, NavSet.StopDist)
+            mq.cmdf("/squelch /nav locyxz %s | distance %s", tmp[i].loc, NavSet.StopDist)
             status = "Nav to WP #: "..tmp[i].step.." Distance: "..string.format("%.2f",tmpDist)
             mq.delay(1)
             -- mq.delay(3000, function () return mq.TLO.Me.Speed() > 0 end)
@@ -738,7 +738,7 @@ local function NavigatePath(name)
                         tmpDestLoc = tmp[i].loc
                         yx = tmpDestLoc:match("^(.-,.-),") -- Match the y,x part of the string
                         tmpDestLoc = tmpDestLoc:sub(1, #yx - 1)
-                        mq.cmdf("/squelch /nav locyx %s | distance %s", tmpDestLoc, NavSet.StopDist)
+                        mq.cmdf("/squelch /nav locyxz %s | distance %s", tmp[i].loc, NavSet.StopDist)
                         tmpDist = mq.TLO.Math.Distance(tmpDestLoc)() or 0
                         status = "Nav to WP #: "..tmp[i].step.." Distance: "..string.format("%.2f",tmpDist)
                         coroutine.yield()
