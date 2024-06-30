@@ -32,6 +32,7 @@ local zoningHideGUI = false
 local ZoningPause
 local lastRecordedWP = ''
 local PathStartClock,PathStartTime = nil, nil
+
 local NavSet = {
     ChainPath = 'Select Path...',
     ChainStart = false,
@@ -568,6 +569,7 @@ local function CheckInterrupts()
     if not NavSet.doNav then return false end
     local xCount = mq.TLO.Me.XTarget() or 0
     local flag = false
+    local invis = false
     if mq.TLO.Window('LootWnd').Open() and InterruptSet.stopForLoot then
         if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
         status = 'Paused for Looting.'
@@ -616,13 +618,15 @@ local function CheckInterrupts()
         status = 'Paused for Charmed.'
         flag = true
     elseif not mq.TLO.Me.Invis() and InterruptSet.stopForInvis then
-        if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
-        status = 'Paused for Invis.'
+        if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true status = 'Paused for Invis.' end
+        
         flag = true
+        invis = true
     elseif not (mq.TLO.Me.Invis(1)() and mq.TLO.Me.Invis(2)()) and InterruptSet.stopForDblInvis then
-        if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
-        status = 'Paused for Double Invis.'
+        if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true  status = 'Paused for Double Invis.' end
+        
         flag = true
+        invis = true
     elseif mq.TLO.Me.Zoning() then
         if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
         status = 'Paused for Zoning.'
@@ -638,8 +642,10 @@ local function CheckInterrupts()
     if flag then
         InterruptSet.PauseStart = os.time()
         pauseTime = InterruptSet.interruptDelay
+        if invis then pauseTime = settings[script].InvisDelay end
     else
         interruptInProcess = false
+        pauseTime = 0
     end
 
     return flag
@@ -2442,14 +2448,6 @@ local function Loop()
             InterruptSet.stopForAll = false
         end
 
-        if status == 'Paused for Invis.' or  status == 'Paused for Double Invis.' then
-            if settings[script].InvisAction ~= '' then
-                mq.cmd(settings[script].InvisAction)
-                local iDelay = settings[script].InvisDelay * 1000
-                mq.delay(iDelay)
-            end
-        end
-
         if currZone ~= lastZone then
 
             printf("\ay[\at%s\ax] \agZone Changed Last: \at%s Current: \ay%s", script, lastZone, currZone)
@@ -2622,6 +2620,13 @@ local function Loop()
                     mq.delay(1)
                     status = 'Paused: GM Detected'
                     NavSet.PausedActiveGN = true
+                end
+                if status == 'Paused for Invis.' or  status == 'Paused for Double Invis.' then
+                    if settings[script].InvisAction ~= '' then
+                        mq.cmd(settings[script].InvisAction)
+                        -- local iDelay = settings[script].InvisDelay * 1000
+                        -- mq.delay(iDelay)
+                    end
                 end
             end
 
