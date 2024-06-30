@@ -35,6 +35,7 @@ local PathStartClock,PathStartTime = nil, nil
 local NavSet = {
     ChainPath = 'Select Path...',
     ChainStart = false,
+    ChainLoop = false,
     SelectedPath = 'None',
     ChainZone = 'Select Zone...',
     LastPath = nil,
@@ -1305,6 +1306,9 @@ local function Draw_GUI()
                         if ImGui.IsItemHovered() then
                             ImGui.SetTooltip("Add ".. currZone..": "..NavSet.SelectedPath.. " to Chain")
                         end
+                        if #ChainedPaths > 0  then
+                            NavSet.ChainLoop = ImGui.Checkbox('Loop Chain', NavSet.ChainLoop)
+                        end
                         local tmpCZ, tmpCP = {}, {}
                         for name, data in pairs(Paths) do
                             table.insert(tmpCZ , name)
@@ -2131,11 +2135,37 @@ end
 -------- Main Functions --------
 
 local function displayHelp()
-    printf("\ay[\at%s\ax] \agCommands: \ay/mypaths [go|stop|list|show|quit|help] [loop|rloop|start|reverse|pingpong|closest|rclosest] [path]", script)
+    --[[
+    Commands: /mypaths [go|stop|list|chainadd|chainclear|show|quit|help] [loop|rloop|start|reverse|pingpong|closest|rclosest] [path]
+    Options: go = REQUIRES arguments and Path name see below for Arguments.
+    Options: stop = Stops the current Navigation.
+    Options: show = Toggles Main GUI.
+    Options: chainclear = Clears the Current Chain.
+    Options: chainadd [normal|reverse|loop|pingpong] [path] -- adds path to chain in current zone
+    Options: chainadd [normal|reverse|loop|pingpong] [zone] [path] -- adds zone/path to chain 
+    Options: list = Lists all Paths in the current Zone.
+    Options: list zone -- list all zones that have paths
+    Options: list [zone] -- list all paths in specified zone
+    Options: quit or exit = Exits the script.
+    Options: help = Prints out this help list.
+    Arguments: loop = Loops the path, rloop = Loop in reverse.
+    Arguments: closest = start at closest wp, rclosest = start at closest wp and go in reverse.
+    Arguments: start = starts the path normally, reverse = run the path backwards.
+    Arguments: pingpong = start in ping pong mode.
+    Example: /mypaths go loop "Loop A"
+    Example: /mypaths stop
+    Commands: /mypaths [combat|xtarg] [on|off] - Toggle Combat or Xtarget.]]
+    printf("\ay[\at%s\ax] \agCommands: \ay/mypaths [go|stop|list|chainadd|chainclear|chainloop|show|quit|help] [loop|rloop|start|reverse|pingpong|closest|rclosest] [path]", script)
     printf("\ay[\at%s\ax] \agOptions: \aygo \aw= \atREQUIRES arguments and Path name see below for Arguments.", script)
     printf("\ay[\at%s\ax] \agOptions: \aystop \aw= \atStops the current Navigation.", script)
     printf("\ay[\at%s\ax] \agOptions: \ayshow \aw= \atToggles Main GUI.", script)
+    printf("\ay[\at%s\ax] \agOptions: \aychainclear \aw= \atClears the Current Chain.", script)
+    printf("\ay[\at%s\ax] \agOptions: \aychainloop \aw= \atToggle Loop the Current Chain.", script)
+    printf("\ay[\at%s\ax] \agOptions: \aychainadd [normal|reverse|loop|pingpong] [path] \aw= \atadds path to chain in current zone", script)
+    printf("\ay[\at%s\ax] \agOptions: \aychainadd [normal|reverse|loop|pingpong] [zone] [path] \aw= \atadds zone/path to chain", script)
     printf("\ay[\at%s\ax] \agOptions: \aylist \aw= \atLists all Paths in the current Zone.", script)
+    printf("\ay[\at%s\ax] \agOptions: \aylist zone \aw= \atlist all zones that have paths", script)
+    printf("\ay[\at%s\ax] \agOptions: \aylist [zone] \aw= \atlist all paths in specified zone", script)
     printf("\ay[\at%s\ax] \agOptions: \ayquit or exit \aw= \atExits the script.", script)
     printf("\ay[\at%s\ax] \agOptions: \ayhelp \aw= \atPrints out this help list.", script)
     printf("\ay[\at%s\ax] \agArguments: \ayloop \aw= \atLoops the path, \ayrloop \aw= \atLoop in reverse.", script)    
@@ -2197,6 +2227,10 @@ local function bind(...)
             end
         elseif key == 'chainclear' then
             ChainedPaths = {}
+        elseif key == 'chainloop' then
+            if #ChainedPaths > 0 then
+                NavSet.ChainLoop = not NavSet.ChainLoop
+            end
         else
             printf("\ay[\at%s\ax] \arInvalid Command!", script)
         end
@@ -2404,8 +2438,7 @@ local function Loop()
         if status == 'Paused for Invis.' or  status == 'Paused for Double Invis.' then
             if settings[script].InvisAction ~= '' then
                 mq.cmd(settings[script].InvisAction)
-                mq.delay(5)
-                status = 'Idle'
+                mq.delay('3s')
             end
         end
 
@@ -2671,13 +2704,20 @@ local function Loop()
                     end
                     mq.delay(500)            
                 elseif ChainedPaths[NavSet.CurChain].Path == NavSet.ChainPath and NavSet.CurChain == #ChainedPaths then
+                    if not NavSet.ChainLoop then
                     NavSet.ChainStart = false
-                    if ChainedPaths[NavSet.CurChain].Type == 'Normal' or ChainedPaths[NavSet.CurChain].Type == 'Reverse' then
-                        NavSet.doNav = false
-                        NavSet.doChainPause = false
+                        if ChainedPaths[NavSet.CurChain].Type == 'Normal' or ChainedPaths[NavSet.CurChain].Type == 'Reverse' then
+                            NavSet.doNav = false
+                            NavSet.doChainPause = false
+                            NavSet.ChainStart = false
+                            NavSet.ChainPath = 'Select...'
+                            ChainedPaths = {}
+                        end
+                    else
+                        NavSet.CurChain = 0
                         NavSet.ChainStart = false
-                        NavSet.ChainPath = 'Select...'
-                        ChainedPaths = {}
+                        NavSet.doChainPause = false
+                        NavSet.doNav = true
                     end
                 end
             -- end
