@@ -107,6 +107,7 @@ defaults = {
     WatchMana = 60,
     WatchType = 'None',
     InvisAction = '',
+    InvisDelay = 3,
     WatchHealth = 90,
     GroupWatch = false,
     HeadsUpTransparency = 0.5,
@@ -230,6 +231,11 @@ local function loadSettings()
 
     if settings[script].InterruptDelay == nil then
         settings[script].InterruptDelay = InterruptSet.interruptDelay
+        newSetting = true
+    end
+
+    if settings[script].InvisDelay == nil then
+        settings[script].InvisDelay = 3
         newSetting = true
     end
 
@@ -1922,6 +1928,7 @@ local function Draw_GUI()
                         ImGui.EndTable()
                         if InterruptSet.stopForInvis or InterruptSet.stopForDblInvis then
                             settings[script].InvisAction = ImGui.InputText("Invis Action##"..script, settings[script].InvisAction)
+                            settings[script].InvisDelay = ImGui.InputInt("Invis Delay##"..script, settings[script].InvisDelay, 1, 5)
                         end
                         if InterruptSet.stopForDist then
                             ImGui.SetNextItemWidth(100)
@@ -2438,7 +2445,8 @@ local function Loop()
         if status == 'Paused for Invis.' or  status == 'Paused for Double Invis.' then
             if settings[script].InvisAction ~= '' then
                 mq.cmd(settings[script].InvisAction)
-                mq.delay('3s')
+                local iDelay = settings[script].InvisDelay * 1000
+                mq.delay(iDelay)
             end
         end
 
