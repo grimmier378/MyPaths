@@ -105,6 +105,7 @@ defaults = {
     RecordDlay = 5,
     WatchMana = 60,
     WatchType = 'None',
+    InvisAction = '',
     WatchHealth = 90,
     GroupWatch = false,
     HeadsUpTransparency = 0.5,
@@ -238,6 +239,11 @@ local function loadSettings()
 
     if settings[script].RecordMinDist == nil then
         settings[script].RecordMinDist = NavSet.RecordMinDist
+        newSetting = true
+    end
+
+    if settings[script].InvisAction == nil then
+        settings[script].InvisAction = ''
         newSetting = true
     end
 
@@ -1335,8 +1341,9 @@ local function Draw_GUI()
                             end
                         end
                         ImGui.SameLine()
-                        ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
+                        
                         if NavSet.ChainZone ~= 'Select Zone...' and NavSet.ChainPath ~= 'Select Path...' then
+                            ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
                             if ImGui.Button(Icon.MD_PLAYLIST_ADD.." ["..NavSet.ChainPath .."]##") then
                                 if not ChainedPaths then ChainedPaths = {} end
                                 table.insert(ChainedPaths , {Zone = NavSet.ChainZone, Path = NavSet.ChainPath, Type = 'Normal'})
@@ -1909,6 +1916,9 @@ local function Draw_GUI()
                         InterruptSet.stopForDblInvis = ImGui.Checkbox("Stop for Dbl Invis##"..script, InterruptSet.stopForDblInvis)
                         if not InterruptSet.stopForDblInvis then InterruptSet.stopForAll = false end
                         ImGui.EndTable()
+                        if InterruptSet.stopForInvis or InterruptSet.stopForDblInvis then
+                            settings[script].InvisAction = ImGui.InputText("Invis Action##"..script, settings[script].InvisAction)
+                        end
                         if InterruptSet.stopForDist then
                             ImGui.SetNextItemWidth(100)
                             InterruptSet.stopForGoupDist = ImGui.InputInt("Party Distance##GroupDist", InterruptSet.stopForGoupDist, 1, 50)
@@ -1936,6 +1946,7 @@ local function Draw_GUI()
                             end
                         end
                     end
+
                 end
                 ImGui.Dummy(5,5)
                 ImGui.SeparatorText("Recording Settings##"..script)
@@ -2384,10 +2395,18 @@ local function Loop()
         end
 
         if (InterruptSet.stopForDist and InterruptSet.stopForCharm and InterruptSet.stopForCombat and InterruptSet.stopForFear and InterruptSet.stopForGM and
-            InterruptSet.stopForLoot and InterruptSet.stopForMez and InterruptSet.stopForRoot and InterruptSet.stopForSitting and InterruptSet.stopForXtar) then
+            InterruptSet.stopForLoot and InterruptSet.stopForMez and InterruptSet.stopForRoot and InterruptSet.stopForSitting and InterruptSet.stopForXtar and InterruptSet.stopForInvis and InterruptSet.stopForDblInvis) then
             InterruptSet.stopForAll = true
         else
             InterruptSet.stopForAll = false
+        end
+
+        if status == 'Paused for Invis.' or  status == 'Paused for Double Invis.' then
+            if settings[script].InvisAction ~= '' then
+                mq.cmd(settings[script].InvisAction)
+                mq.delay(5)
+                status = 'Idle'
+            end
         end
 
         if currZone ~= lastZone then
@@ -2488,6 +2507,8 @@ local function Loop()
             NavSet.CurChain = 1
             mq.delay(500)
         end
+
+
 
         if zoningHideGUI then
             printf("\ay[\at%s\ax] \agZoning, \ayHiding GUI...", script)
