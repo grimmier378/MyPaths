@@ -975,30 +975,30 @@ local function Draw_GUI()
                 end
             end
             if not showHUD then
-            -- Main Window Content 
-            ImGui.Text("Current Zone: ")
-            ImGui.SameLine()
-            ImGui.TextColored(0,1,0,1,"%s", currZone)
-            ImGui.SameLine()
-            ImGui.Text("Selected Path: ")
-            ImGui.SameLine()
-            ImGui.TextColored(0,1,1,1,"%s", NavSet.SelectedPath)
-            
-            ImGui.Text("Current Loc: ")
-            ImGui.SameLine()
-            ImGui.TextColored(1,1,0,1,"%s", mq.TLO.Me.LocYXZ())
-            if NavSet.doNav then
-                ImGui.Text("Current Destination Waypoint: ")
+                -- Main Window Content 
+                ImGui.Text("Current Zone: ")
                 ImGui.SameLine()
-                ImGui.TextColored(0,1,0,1,"%s", curWPTxt)
-                ImGui.Text("Distance to Waypoint: ")
+                ImGui.TextColored(0,1,0,1,"%s", currZone)
                 ImGui.SameLine()
-                if tmpTable[NavSet.CurrentStepIndex] ~= nil then
-                    ImGui.TextColored(0,1,1,1,"%.2f", mq.TLO.Math.Distance(tmpLoc)())
+                ImGui.Text("Selected Path: ")
+                ImGui.SameLine()
+                ImGui.TextColored(0,1,1,1,"%s", NavSet.SelectedPath)
+                
+                ImGui.Text("Current Loc: ")
+                ImGui.SameLine()
+                ImGui.TextColored(1,1,0,1,"%s", mq.TLO.Me.LocYXZ())
+                if NavSet.doNav then
+                    ImGui.Text("Current Destination Waypoint: ")
+                    ImGui.SameLine()
+                    ImGui.TextColored(0,1,0,1,"%s", curWPTxt)
+                    ImGui.Text("Distance to Waypoint: ")
+                    ImGui.SameLine()
+                    if tmpTable[NavSet.CurrentStepIndex] ~= nil then
+                        ImGui.TextColored(0,1,1,1,"%.2f", mq.TLO.Math.Distance(tmpLoc)())
+                    end
                 end
+                ImGui.Separator()
             end
-            ImGui.Separator()
-        end
             if NavSet.SelectedPath ~= 'None' or #ChainedPaths > 0 then
                 if NavSet.doPause and NavSet.doNav then
                     ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
@@ -2117,7 +2117,7 @@ local function bind(...)
             mq.cmdf("/squelch /nav stop")
             NavSet.ChainStart = false
             NavSet.SelectedPath = 'None'
-            loadPaths()
+            -- loadPaths()
         elseif key == 'help' then
             displayHelp()
         elseif key == 'debug' then
@@ -2148,14 +2148,12 @@ local function bind(...)
             NavSet.doNav = false
             RUNNING = false
         elseif key == 'list' then
-            if Paths[zone] == nil then 
-                printf("\ay[\at%s\ax] \arNo Paths Found!", script)
-                return
-            end
-            printf("\ay[\at%s\ax] \agZone: \at%s \agPaths: ", script, zone)
-            for name, data in pairs(Paths[zone]) do
+            printf("\ay[\at%s\ax] \agZones: ", script)
+            for name, data in pairs(Paths) do
                 printf("\ay[\at%s\ax] \ay%s", script, name)
             end
+        elseif key == 'chainclear' then
+            ChainedPaths = {}
         else
             printf("\ay[\at%s\ax] \arInvalid Command!", script)
         end
@@ -2181,6 +2179,22 @@ local function bind(...)
             elseif action == 'off' then
                 InterruptSet.stopForCombat = false
                 InterruptSet.stopForAll = false
+            end
+        elseif key == 'list' then
+            if action == 'zones' then
+                printf("\ay[\at%s\ax] \agZone: \atZones With Paths: ", script)
+                for name, data in pairs(Paths) do
+                    if name ~= nil and name ~= '' then printf("\ay[\at%s\ax] \ay%s", script, name) end
+                end
+            else
+                if Paths[action] == nil then 
+                    printf("\ay[\at%s\ax] \arNo Paths Found!", script)
+                    return
+                end
+                printf("\ay[\at%s\ax] \agZone: \at%s \agPaths: ", script, action)
+                for name, data in pairs(Paths[action]) do
+                    printf("\ay[\at%s\ax] \ay%s", script, name)
+                end
             end
         end
     elseif #args  == 3 then
@@ -2235,6 +2249,46 @@ local function bind(...)
                 NavSet.doReverse = true
                 NavSet.CurrentStepIndex = FindIndexClosestWaypoint(Paths[zone][path])
                 PathStartClock,PathStartTime = os.date("%I:%M:%S %p"), os.time()
+            end
+        end
+        if key == 'chainadd' then
+            if action == 'loop' then
+                if not ChainedPaths then ChainedPaths = {} end
+                table.insert(ChainedPaths , {Zone = zone, Path = path, Type = 'Loop'})
+            end
+            if action == 'normal' then
+                if not ChainedPaths then ChainedPaths = {} end
+                table.insert(ChainedPaths , {Zone = zone, Path = path, Type = 'Normal'})
+            end
+            if action == 'reverse' then
+                if not ChainedPaths then ChainedPaths = {} end
+                table.insert(ChainedPaths , {Zone = zone, Path = path, Type = 'Reverse'})
+            end
+            if action == 'pingpong' then
+                if not ChainedPaths then ChainedPaths = {} end
+                table.insert(ChainedPaths , {Zone = zone, Path = path, Type = 'PingPong'})
+            end
+        end
+    elseif #args == 4 then
+        action = args[2]
+        zone = args[3]
+        path = args[4]
+        if key == 'chainadd' then
+            if action == 'loop' then
+                if not ChainedPaths then ChainedPaths = {} end
+                table.insert(ChainedPaths , {Zone = zone, Path = path, Type = 'Loop'})
+            end
+            if action == 'normal' then
+                if not ChainedPaths then ChainedPaths = {} end
+                table.insert(ChainedPaths , {Zone = zone, Path = path, Type = 'Normal'})
+            end
+            if action == 'reverse' then
+                if not ChainedPaths then ChainedPaths = {} end
+                table.insert(ChainedPaths , {Zone = zone, Path = path, Type = 'Reverse'})
+            end
+            if action == 'pingpong' then
+                if not ChainedPaths then ChainedPaths = {} end
+                table.insert(ChainedPaths , {Zone = zone, Path = path, Type = 'PingPong'})
             end
         end
     else
