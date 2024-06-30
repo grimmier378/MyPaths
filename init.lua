@@ -75,6 +75,8 @@ local InterruptSet = {
     stopForMez = true,
     stopForRoot = true,
     stopForLoot = true,
+    stopForInvis = false,
+    stopForDblInvis = false,
     interruptCheck = 0,
 }
 
@@ -313,6 +315,17 @@ local function loadSettings()
         settings[script].Interrupts.stopForDist = false
         newSetting = true
     end
+
+    if settings[script].Interrupts.stopForInvis == nil then
+        settings[script].Interrupts.stopForInvis = false
+        newSetting = true
+    end
+
+    if settings[script].Interrupts.stopForDblInvis == nil then
+        settings[script].Interrupts.stopForDblInvis = false
+        newSetting = true
+    end
+
     -- Load the theme
     loadTheme()
     InterruptSet = settings[script].Interrupts
@@ -588,6 +601,14 @@ local function CheckInterrupts()
     elseif mq.TLO.Me.Charmed() and InterruptSet.stopForCharm then
         if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
         status = 'Paused for Charmed.'
+        flag = true
+    elseif not mq.TLO.Me.Invis() and InterruptSet.stopForInvis then
+        if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
+        status = 'Paused for Invis.'
+        flag = true
+    elseif not (mq.TLO.Me.Invis(1)() and mq.TLO.Me.Invis(2)()) and InterruptSet.stopForDblInvis then
+        if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
+        status = 'Paused for Double Invis.'
         flag = true
     elseif mq.TLO.Me.Zoning() then
         if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
@@ -1823,8 +1844,8 @@ local function Draw_GUI()
                 hudMouse = ImGui.Checkbox("On Mouseover##"..script, hudMouse)
                 if ImGui.CollapsingHeader("Interrupt Settings##"..script) then
                 -- Set Interrupts we will stop for
-                    InterruptSet.stopForAll = ImGui.Checkbox("Stop for All##"..script, InterruptSet.stopForAll)
-                    if InterruptSet.stopForAll then
+                    
+                    if ImGui.Button('Check All') then
                         InterruptSet.stopForDist = true
                         InterruptSet.stopForCharm = true
                         InterruptSet.stopForCombat = true
@@ -1835,7 +1856,10 @@ local function Draw_GUI()
                         InterruptSet.stopForRoot = true
                         InterruptSet.stopForSitting = true
                         InterruptSet.stopForXtar = true
+                        InterruptSet.stopForInvis = true
+                        InterruptSet.stopForDblInvis = true
                     end
+                
                     if ImGui.BeginTable("##Interrupts", 2, bit32.bor(ImGuiTableFlags.Borders), -1,0) then
                         ImGui.TableNextRow()
                         ImGui.TableSetColumnIndex(0)
@@ -1876,6 +1900,14 @@ local function Draw_GUI()
                         ImGui.TableSetColumnIndex(1)
                         InterruptSet.stopForDist = ImGui.Checkbox("Stop for Party Dist##"..script, InterruptSet.stopForDist)
                         if not InterruptSet.stopForDist then InterruptSet.stopForAll = false end
+                        ImGui.TableNextRow()
+
+                        ImGui.TableSetColumnIndex(0)
+                        InterruptSet.stopForInvis = ImGui.Checkbox("Stop for Invis##"..script, InterruptSet.stopForInvis)
+                        if not InterruptSet.stopForInvis then InterruptSet.stopForAll = false end
+                        ImGui.TableSetColumnIndex(1)
+                        InterruptSet.stopForDblInvis = ImGui.Checkbox("Stop for Dbl Invis##"..script, InterruptSet.stopForDblInvis)
+                        if not InterruptSet.stopForDblInvis then InterruptSet.stopForAll = false end
                         ImGui.EndTable()
                         if InterruptSet.stopForDist then
                             ImGui.SetNextItemWidth(100)
