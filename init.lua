@@ -79,6 +79,7 @@ local InterruptSet = {
     stopForLoot = true,
     stopForInvis = false,
     stopForDblInvis = false,
+    stopForCasting = true,
     interruptCheck = 0,
 }
 
@@ -330,6 +331,11 @@ local function loadSettings()
         newSetting = true
     end
 
+    if settings[script].Interrupts.stopForCasting == nil then
+        settings[script].Interrupts.stopForCasting = true
+        newSetting = true
+    end
+
     if settings[script].Interrupts.stopForInvis == nil then
         settings[script].Interrupts.stopForInvis = false
         newSetting = true
@@ -578,6 +584,10 @@ local function CheckInterrupts()
         if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
         status = 'Paused for Looting.'
         flag = true
+    elseif mq.TLO.Me.Casting() ~= nil and InterruptSet.stopForCasting then
+        if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
+        status = 'Paused for Casting.'
+        flag = true
     elseif mq.TLO.Me.Combat() and InterruptSet.stopForCombat then
         if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
         status = 'Paused for Combat.'
@@ -743,6 +753,7 @@ local function NavigatePath(name)
                 end
                 if interruptInProcess then
                     coroutine.yield()
+                    if not NavSet.doNav then return end
                 elseif mq.TLO.Me.Speed() == 0 then
                     mq.delay(1)
                     if not mq.TLO.Me.Sitting() then
@@ -754,6 +765,7 @@ local function NavigatePath(name)
                         tmpDist = mq.TLO.Math.Distance(tmpDestLoc)() or 0
                         status = "Nav to WP #: "..tmp[i].step.." Distance: "..string.format("%.2f",tmpDist)
                         coroutine.yield()
+                        if not NavSet.doNav then return end
                     end
                 end
                 mq.delay(1)
@@ -762,6 +774,7 @@ local function NavigatePath(name)
                 tmpDestLoc = tmpDestLoc:sub(1, #yx - 1)
                 tmpDist = mq.TLO.Math.Distance(tmpDestLoc)() or 0
                 coroutine.yield()  -- Yield here to allow updates
+                if not NavSet.doNav then return end
             end
             mq.cmdf("/squelch /nav stop")
             -- status = "Arrived at WP #: "..tmp[i].step
@@ -781,6 +794,7 @@ local function NavigatePath(name)
                 mq.cmdf(tmp[i].cmd)
                 mq.delay(1)
                 coroutine.yield()
+                if not NavSet.doNav then return end
             end
             -- Door Check
             if tmp[i].door and not NavSet.doReverse then
@@ -802,6 +816,7 @@ local function NavigatePath(name)
                 pauseTime = NavSet.WpPause
                 InterruptSet.PauseStart = os.time()
                 coroutine.yield()
+                if not NavSet.doNav then return end
                 -- coroutine.yield()  -- Yield here to allow updates
             else
                 if not InterruptSet.interruptFound then
@@ -1147,143 +1162,74 @@ local function Draw_GUI()
             if ImGui.BeginTabBar('MainTabBar') then
                 if ImGui.BeginTabItem('Controls') then
                     if ImGui.BeginChild("Tabs##Controls", -1, -1,ImGuiChildFlags.AutoResizeX) then
-                    ImGui.SeparatorText("Select a Path")
-                    ImGui.SetNextItemWidth(120)
-                    if ImGui.BeginCombo("##SelectPath", NavSet.SelectedPath) then
-                        if not Paths[currZone] then Paths[currZone] = {} end
-                        for name, data in pairs(Paths[currZone]) do
-                            local isSelected = name == NavSet.SelectedPath
-                            if ImGui.Selectable(name, isSelected) then
-                                NavSet.SelectedPath = name
-                            end
-                        end
-                        ImGui.EndCombo()
-                    end
-                    ImGui.SameLine()
-                    ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1, 0.4, 0.4, 0.4))
-                    if ImGui.Button(Icon.MD_DELETE) then
-                        DeletePath(NavSet.SelectedPath)
-                        NavSet.SelectedPath = 'None'
-                    end
-                    ImGui.PopStyleColor()
-                    if ImGui.IsItemHovered() then
-                        ImGui.SetTooltip("Delete Path")
-                    end
-                    ImGui.Dummy(10,5)
-                    if ImGui.CollapsingHeader("Manage Paths##") then
-                        ImGui.SetNextItemWidth(150)
-                        newPath = ImGui.InputTextWithHint("##NewPathName", "New Path Name",newPath)
-                        ImGui.SameLine()
-                        ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
-                        if ImGui.Button(Icon.MD_CREATE) then
-                            CreatePath(newPath)
-                            NavSet.SelectedPath = newPath
-                            newPath = ''
-                        end
-                        ImGui.PopStyleColor()
-                        if ImGui.IsItemHovered() then
-                            ImGui.SetTooltip("Create New Path")
-                        end
-                        ImGui.SameLine()
-                        if NavSet.SelectedPath ~= 'None' then
-                            
-                            ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.911, 0.461, 0.085, 1.000))
-                            if ImGui.Button(Icon.MD_CONTENT_COPY) then
-                                CreatePath(newPath)
-                                for i = 1, #Paths[currZone][NavSet.SelectedPath] do
-                                    table.insert(Paths[currZone][newPath], Paths[currZone][NavSet.SelectedPath][i])
+                        ImGui.SeparatorText("Select a Path")
+                        if not NavSet.doNav then
+                            ImGui.SetNextItemWidth(120)
+                            if ImGui.BeginCombo("##SelectPath", NavSet.SelectedPath) then
+                                if not Paths[currZone] then Paths[currZone] = {} end
+                                for name, data in pairs(Paths[currZone]) do
+                                    local isSelected = name == NavSet.SelectedPath
+                                    if ImGui.Selectable(name, isSelected) then
+                                        NavSet.SelectedPath = name
+                                    end
                                 end
-                                SavePaths()
+                                ImGui.EndCombo()
+                            end
+                            ImGui.SameLine()
+                            ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1, 0.4, 0.4, 0.4))
+                            if ImGui.Button(Icon.MD_DELETE) then
+                                DeletePath(NavSet.SelectedPath)
+                                NavSet.SelectedPath = 'None'
+                            end
+                            ImGui.PopStyleColor()
+                            if ImGui.IsItemHovered() then
+                                ImGui.SetTooltip("Delete Path")
+                            end
+                        else
+                            ImGui.Text("Navigation Active")
+                        end
+                        ImGui.Dummy(10,5)
+                        if ImGui.CollapsingHeader("Manage Paths##") then
+                            ImGui.SetNextItemWidth(150)
+                            newPath = ImGui.InputTextWithHint("##NewPathName", "New Path Name",newPath)
+                            ImGui.SameLine()
+                            ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
+                            if ImGui.Button(Icon.MD_CREATE) then
+                                CreatePath(newPath)
                                 NavSet.SelectedPath = newPath
                                 newPath = ''
                             end
                             ImGui.PopStyleColor()
                             if ImGui.IsItemHovered() then
-                                ImGui.SetTooltip("Copy Path")
+                                ImGui.SetTooltip("Create New Path")
                             end
-                        else
-                            ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.500, 0.500, 0.500, 1.000))
-                            ImGui.Button(Icon.MD_CONTENT_COPY.."##Dummy")
-                            ImGui.PopStyleColor()
-                        end
-                        ImGui.SameLine()
-                        if NavSet.SelectedPath ~= 'None' then
-                            ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.911, 0.461, 0.085, 1.000))
-                            if ImGui.Button(Icon.FA_SHARE.."##ExportSelected") then
-                                local exportData = export_paths(currZone, NavSet.SelectedPath, Paths[currZone][NavSet.SelectedPath])
-                                ImGui.LogToClipboard()
-                                ImGui.LogText(exportData)
-                                ImGui.LogFinish()
-                                print('\ayPath data copied to clipboard!\ax')
-                            end
-                            ImGui.PopStyleColor()
-                        else
-                            ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.500, 0.500, 0.500, 1.000))
-                            ImGui.Button(Icon.FA_SHARE.."##Dummy")
-                            ImGui.PopStyleColor()
-                        end
-                        if ImGui.IsItemHovered() then
-                            ImGui.SetTooltip("Export: "..currZone.." : "..NavSet.SelectedPath)
-                        end
-                        ImGui.Dummy(10,5)
-                        if ImGui.CollapsingHeader("Share Paths##") then
-                            importString   = ImGui.InputTextWithHint("##ImportString","Paste Import String", importString)
                             ImGui.SameLine()
-                            if importString ~= '' then
-                                ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
-                                if ImGui.Button(Icon.FA_DOWNLOAD.."##ImportPath") then
-                                    local imported = import_paths(importString)
-                                    if imported then
-                                        for zone, paths in pairs(imported) do
-                                            if not Paths[zone] then Paths[zone] = {} end
-                                            for pathName, pathData in pairs(paths) do
-                                                Paths[zone][pathName] = pathData
-                                                if currZone == zone then NavSet.SelectedPath = pathName end
-                                            end
-                                        end
-                                        importString = ''
-                                        SavePaths()
+                            if NavSet.SelectedPath ~= 'None' then
+                                
+                                ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.911, 0.461, 0.085, 1.000))
+                                if ImGui.Button(Icon.MD_CONTENT_COPY) then
+                                    CreatePath(newPath)
+                                    for i = 1, #Paths[currZone][NavSet.SelectedPath] do
+                                        table.insert(Paths[currZone][newPath], Paths[currZone][NavSet.SelectedPath][i])
                                     end
+                                    SavePaths()
+                                    NavSet.SelectedPath = newPath
+                                    newPath = ''
                                 end
                                 ImGui.PopStyleColor()
+                                if ImGui.IsItemHovered() then
+                                    ImGui.SetTooltip("Copy Path")
+                                end
                             else
                                 ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.500, 0.500, 0.500, 1.000))
-                                ImGui.Button(Icon.FA_DOWNLOAD.."##Dummy")
+                                ImGui.Button(Icon.MD_CONTENT_COPY.."##Dummy")
                                 ImGui.PopStyleColor()
                             end
-                            if ImGui.IsItemHovered() then
-                                ImGui.SetTooltip("Import Path")
-                            end
-                            ImGui.SeparatorText('Export Paths')
-                                    ImGui.SetNextItemWidth(120)
-                            if ImGui.BeginCombo("Zone##SelectExportZone", exportZone) then
-                                if not Paths[exportZone] then Paths[exportZone] = {} end
-                                for name, data in pairs(Paths) do
-                                    local isSelected = name == exportZone
-                                    if ImGui.Selectable(name, isSelected) then
-                                        exportZone = name
-                                    end
-                                end
-                                ImGui.EndCombo()
-                            end
-                            if exportZone ~= 'Select Zone...'  then
-                                        ImGui.SetNextItemWidth(120)
-                                if ImGui.BeginCombo("Path##SelectExportPath", exportPathName) then
-                                    if not Paths[exportZone] then Paths[exportZone] = {} end
-                                    for name, data in pairs(Paths[exportZone]) do
-                                        local isSelected = name == exportPathName
-                                        if ImGui.Selectable(name, isSelected) then
-                                            exportPathName = name
-                                        end
-                                    end
-                                    ImGui.EndCombo()
-                                end
-                            end
                             ImGui.SameLine()
-                            if exportZone ~= 'Select Zone...' and exportPathName ~= 'Select Path...' then
+                            if NavSet.SelectedPath ~= 'None' then
                                 ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.911, 0.461, 0.085, 1.000))
-                                if ImGui.Button(Icon.FA_SHARE.."##ExportZonePath") then
-                                    local exportData = export_paths(exportZone, exportPathName, Paths[exportZone][exportPathName])
+                                if ImGui.Button(Icon.FA_SHARE.."##ExportSelected") then
+                                    local exportData = export_paths(currZone, NavSet.SelectedPath, Paths[currZone][NavSet.SelectedPath])
                                     ImGui.LogToClipboard()
                                     ImGui.LogText(exportData)
                                     ImGui.LogFinish()
@@ -1292,212 +1238,285 @@ local function Draw_GUI()
                                 ImGui.PopStyleColor()
                             else
                                 ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.500, 0.500, 0.500, 1.000))
-                                ImGui.Button(Icon.FA_SHARE.."##Dummy2")
+                                ImGui.Button(Icon.FA_SHARE.."##Dummy")
                                 ImGui.PopStyleColor()
                             end
                             if ImGui.IsItemHovered() then
-                                ImGui.SetTooltip("Export:  "..exportZone.." : "..exportPathName)
+                                ImGui.SetTooltip("Export: "..currZone.." : "..NavSet.SelectedPath)
                             end
-                        end
-                    end
-                    ImGui.Dummy(10,5)
-                    ImGui.Separator()
-                    if ImGui.CollapsingHeader("Chain Paths##") then
-                        if NavSet.SelectedPath ~= 'None' then
-                            ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
-                            if ImGui.Button(Icon.MD_PLAYLIST_ADD.." ["..NavSet.SelectedPath.."]##") then
-                                if not ChainedPaths then ChainedPaths = {} end
-                                table.insert(ChainedPaths , {Zone = currZone, Path = NavSet.SelectedPath, Type = 'Normal'})
-                            end
-                            ImGui.PopStyleColor()                          
-                        else
-                            ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.500, 0.500, 0.500, 1.000))
-                            ImGui.Button(Icon.MD_PLAYLIST_ADD.."##Dummy")
-                            ImGui.PopStyleColor()
-                        end
-                        if ImGui.IsItemHovered() then
-                            ImGui.SetTooltip("Add ".. currZone..": "..NavSet.SelectedPath.. " to Chain")
-                        end
-                        if #ChainedPaths > 0  then
-                            NavSet.ChainLoop = ImGui.Checkbox('Loop Chain', NavSet.ChainLoop)
-                        end
-                        local tmpCZ, tmpCP = {}, {}
-                        for name, data in pairs(Paths) do
-                            table.insert(tmpCZ , name)
-                        end
-                        table.sort(tmpCZ)
-                                ImGui.SetNextItemWidth(120)
-
-                        if ImGui.BeginCombo("Zone##SelectChainZone", NavSet.ChainZone) then
-                            if not Paths[NavSet.ChainZone] then Paths[NavSet.ChainZone] = {} end
-                            for k, name in pairs(tmpCZ) do
-                                local isSelected = name == NavSet.ChainZone
-                                if ImGui.Selectable(name, isSelected) then
-                                    NavSet.ChainZone = name
-                                end
-                            end
-                            ImGui.EndCombo()
-                        end
-                        if NavSet.ChainZone ~= 'Select Zone...' then
-                                    ImGui.SetNextItemWidth(120)
-
-                            if ImGui.BeginCombo("Path##SelectChainPath", NavSet.ChainPath) then
-                                if not Paths[NavSet.ChainZone] then Paths[NavSet.ChainZone] = {} end
-                                for k, data in pairs(Paths[NavSet.ChainZone]) do
-                                    table.insert(tmpCP , k)
-                                end
-                                table.sort(tmpCP)
-                                for k, name in pairs(tmpCP) do
-                                    local isSelected = name == NavSet.ChainPath
-                                    if ImGui.Selectable(name, isSelected) then
-                                        NavSet.ChainPath = name
+                            ImGui.Dummy(10,5)
+                            if ImGui.CollapsingHeader("Share Paths##") then
+                                importString   = ImGui.InputTextWithHint("##ImportString","Paste Import String", importString)
+                                ImGui.SameLine()
+                                if importString ~= '' then
+                                    ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
+                                    if ImGui.Button(Icon.FA_DOWNLOAD.."##ImportPath") then
+                                        local imported = import_paths(importString)
+                                        if imported then
+                                            for zone, paths in pairs(imported) do
+                                                if not Paths[zone] then Paths[zone] = {} end
+                                                for pathName, pathData in pairs(paths) do
+                                                    Paths[zone][pathName] = pathData
+                                                    if currZone == zone then NavSet.SelectedPath = pathName end
+                                                end
+                                            end
+                                            importString = ''
+                                            SavePaths()
+                                        end
                                     end
+                                    ImGui.PopStyleColor()
+                                else
+                                    ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.500, 0.500, 0.500, 1.000))
+                                    ImGui.Button(Icon.FA_DOWNLOAD.."##Dummy")
+                                    ImGui.PopStyleColor()
                                 end
-                                ImGui.EndCombo()
-                            end
-                        end
-                        ImGui.SameLine()
-                        
-                        if NavSet.ChainZone ~= 'Select Zone...' and NavSet.ChainPath ~= 'Select Path...' then
-                            ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
-                            if ImGui.Button(Icon.MD_PLAYLIST_ADD.." ["..NavSet.ChainPath .."]##") then
-                                if not ChainedPaths then ChainedPaths = {} end
-                                table.insert(ChainedPaths , {Zone = NavSet.ChainZone, Path = NavSet.ChainPath, Type = 'Normal'})
-                            end
-                            ImGui.PopStyleColor()
-                        else
-                            ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.500, 0.500, 0.500, 1.000))
-                            ImGui.Button(Icon.MD_PLAYLIST_ADD.."##Dummy2")
-                            ImGui.PopStyleColor()
-                        end
-                        if ImGui.IsItemHovered() then
-                            ImGui.SetTooltip("Add "..NavSet.ChainZone..": "..NavSet.ChainPath.." to Chain")
-                        end
-                        if #ChainedPaths > 0  then
-                            ImGui.SameLine()
-                            ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1, 0.4, 0.4, 0.4))
-                            if ImGui.Button(Icon.MD_DELETE_SWEEP.."##") then
-                                ChainedPaths = {}
-                            end
-                            ImGui.PopStyleColor()
-
-                            if ImGui.IsItemHovered() then
-                                ImGui.SetTooltip("Clear Chain")
-                            end
-                            ImGui.SeparatorText("Chain Paths:")
-                            for i = 1, #ChainedPaths do
-                                ImGui.SetNextItemWidth(100)
-                                local chainType = {'Normal', 'Loop', 'PingPong', 'Reverse'}
-                                if ImGui.BeginCombo("##PathType_"..i, ChainedPaths[i].Type) then
-                                    if not Paths[currZone] then Paths[currZone] = {} end
-                                    for k, v in pairs(chainType)  do
-                                        local isSelected = v == ChainedPaths[i].Type
-                                        if ImGui.Selectable(v, isSelected) then
-                                            ChainedPaths[i].Type = v
+                                if ImGui.IsItemHovered() then
+                                    ImGui.SetTooltip("Import Path")
+                                end
+                                ImGui.SeparatorText('Export Paths')
+                                        ImGui.SetNextItemWidth(120)
+                                if ImGui.BeginCombo("Zone##SelectExportZone", exportZone) then
+                                    if not Paths[exportZone] then Paths[exportZone] = {} end
+                                    for name, data in pairs(Paths) do
+                                        local isSelected = name == exportZone
+                                        if ImGui.Selectable(name, isSelected) then
+                                            exportZone = name
                                         end
                                     end
                                     ImGui.EndCombo()
                                 end
+                                if exportZone ~= 'Select Zone...'  then
+                                            ImGui.SetNextItemWidth(120)
+                                    if ImGui.BeginCombo("Path##SelectExportPath", exportPathName) then
+                                        if not Paths[exportZone] then Paths[exportZone] = {} end
+                                        for name, data in pairs(Paths[exportZone]) do
+                                            local isSelected = name == exportPathName
+                                            if ImGui.Selectable(name, isSelected) then
+                                                exportPathName = name
+                                            end
+                                        end
+                                        ImGui.EndCombo()
+                                    end
+                                end
                                 ImGui.SameLine()
-                                ImGui.TextColored(0.0,1,1,1,"%s", ChainedPaths[i].Zone)
-                                ImGui.SameLine()
-                                if ChainedPaths[i].Path == NavSet.ChainPath then
-                                    ImGui.TextColored(1,1,0,1,"%s", ChainedPaths[i].Path)
+                                if exportZone ~= 'Select Zone...' and exportPathName ~= 'Select Path...' then
+                                    ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.911, 0.461, 0.085, 1.000))
+                                    if ImGui.Button(Icon.FA_SHARE.."##ExportZonePath") then
+                                        local exportData = export_paths(exportZone, exportPathName, Paths[exportZone][exportPathName])
+                                        ImGui.LogToClipboard()
+                                        ImGui.LogText(exportData)
+                                        ImGui.LogFinish()
+                                        print('\ayPath data copied to clipboard!\ax')
+                                    end
+                                    ImGui.PopStyleColor()
                                 else
-                                    ImGui.TextColored(0.0,1,0,1,"%s", ChainedPaths[i].Path)
+                                    ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.500, 0.500, 0.500, 1.000))
+                                    ImGui.Button(Icon.FA_SHARE.."##Dummy2")
+                                    ImGui.PopStyleColor()
+                                end
+                                if ImGui.IsItemHovered() then
+                                    ImGui.SetTooltip("Export:  "..exportZone.." : "..exportPathName)
                                 end
                             end
                         end
-                    end
-                    ImGui.Dummy(10,5)
-                    if NavSet.SelectedPath ~= 'None' or #ChainedPaths > 0 then
-                        -- Navigation Controls
-                        if ImGui.CollapsingHeader("Navigation##") then
-                            if not NavSet.doNav then NavSet.doReverse = ImGui.Checkbox('Reverse Order', NavSet.doReverse) ImGui.SameLine() end
-                            NavSet.doLoop = ImGui.Checkbox('Loop Path', NavSet.doLoop)
-                            ImGui.SameLine()
-                            NavSet.doPingPong = ImGui.Checkbox('Ping Pong', NavSet.doPingPong)
-                            if NavSet.doPingPong then
-                                NavSet.doLoop = true
-                            end
-                            ImGui.Separator()
-                            if not Paths[currZone] then Paths[currZone] = {} end
-                            if NavSet.doPause and NavSet.doNav then
+                        ImGui.Dummy(10,5)
+                        ImGui.Separator()
+                        if ImGui.CollapsingHeader("Chain Paths##") then
+                            if NavSet.SelectedPath ~= 'None' then
                                 ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
-                                
-                                if ImGui.Button(Icon.FA_PLAY_CIRCLE_O) then
-                                    NavSet.doPause = false
-                                    NavSet.PausedActiveGN = false
-                                    table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = currZone, Path = NavSet.SelectedPath, WP = 'Resume', Status = 'Resumed Navigation!'})
+                                if ImGui.Button(Icon.MD_PLAYLIST_ADD.." ["..NavSet.SelectedPath.."]##") then
+                                    if not ChainedPaths then ChainedPaths = {} end
+                                    table.insert(ChainedPaths , {Zone = currZone, Path = NavSet.SelectedPath, Type = 'Normal'})
                                 end
-                                ImGui.PopStyleColor()
-
-                                if ImGui.IsItemHovered() then
-                                    ImGui.SetTooltip("Resume Navigation")
-                                end
-                                ImGui.SameLine()
-                            elseif not NavSet.doPause and NavSet.doNav then
-                                ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1, 0.4, 0.4, 0.4))
-                                
-                                if ImGui.Button(Icon.FA_PAUSE) then
-                                    NavSet.doPause = true
-                                    mq.cmd("/squelch /nav stop")
-                                    table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = currZone, Path = NavSet.SelectedPath, WP = 'Pause', Status = 'Paused Navigation!'})
-                                end
-                                ImGui.PopStyleColor()
-
-                                if ImGui.IsItemHovered() then
-                                    ImGui.SetTooltip("Pause Navigation")
-                                end
-                                ImGui.SameLine()
-                            end
-                            local tmpLabel = NavSet.doNav and Icon.FA_STOP or Icon.FA_PLAY
-                            if NavSet.doNav then
-                                ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1.0, 0.4, 0.4, 0.4))
+                                ImGui.PopStyleColor()                          
                             else
-                                ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1.0, 0.4, 0.4))
+                                ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.500, 0.500, 0.500, 1.000))
+                                ImGui.Button(Icon.MD_PLAYLIST_ADD.."##Dummy")
+                                ImGui.PopStyleColor()
                             end
-                            if ImGui.Button(tmpLabel) then
-                                NavSet.PausedActiveGN = false
-                                NavSet.doNav = not NavSet.doNav
-                                NavSet.ChainStart = false
-                                if not NavSet.doNav then
-                                    mq.cmdf("/squelch /nav stop")
-                                    NavSet.ChainStart = false
-                                    PathStartClock,PathStartTime = nil, nil
-                                else
-                                    PathStartClock,PathStartTime = os.date("%I:%M:%S %p"), os.time()
-                                end
-                            end
-                            ImGui.PopStyleColor()
-
                             if ImGui.IsItemHovered() then
-                                if NavSet.doNav then
-                                    ImGui.SetTooltip("Stop Navigation")
-                                else
-                                    ImGui.SetTooltip("Start Navigation")
+                                ImGui.SetTooltip("Add ".. currZone..": "..NavSet.SelectedPath.. " to Chain")
+                            end
+                            if #ChainedPaths > 0  then
+                                NavSet.ChainLoop = ImGui.Checkbox('Loop Chain', NavSet.ChainLoop)
+                            end
+                            local tmpCZ, tmpCP = {}, {}
+                            for name, data in pairs(Paths) do
+                                table.insert(tmpCZ , name)
+                            end
+                            table.sort(tmpCZ)
+                                    ImGui.SetNextItemWidth(120)
+
+                            if ImGui.BeginCombo("Zone##SelectChainZone", NavSet.ChainZone) then
+                                if not Paths[NavSet.ChainZone] then Paths[NavSet.ChainZone] = {} end
+                                for k, name in pairs(tmpCZ) do
+                                    local isSelected = name == NavSet.ChainZone
+                                    if ImGui.Selectable(name, isSelected) then
+                                        NavSet.ChainZone = name
+                                    end
+                                end
+                                ImGui.EndCombo()
+                            end
+                            if NavSet.ChainZone ~= 'Select Zone...' then
+                                        ImGui.SetNextItemWidth(120)
+
+                                if ImGui.BeginCombo("Path##SelectChainPath", NavSet.ChainPath) then
+                                    if not Paths[NavSet.ChainZone] then Paths[NavSet.ChainZone] = {} end
+                                    for k, data in pairs(Paths[NavSet.ChainZone]) do
+                                        table.insert(tmpCP , k)
+                                    end
+                                    table.sort(tmpCP)
+                                    for k, name in pairs(tmpCP) do
+                                        local isSelected = name == NavSet.ChainPath
+                                        if ImGui.Selectable(name, isSelected) then
+                                            NavSet.ChainPath = name
+                                        end
+                                    end
+                                    ImGui.EndCombo()
                                 end
                             end
                             ImGui.SameLine()
-                            ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1.0, 0.4, 0.4))
-                            if ImGui.Button(Icon.FA_PLAY.." Closest WP") then
-                                NavSet.CurrentStepIndex = closestWaypointIndex
-                                NavSet.doNav = true
-                                NavSet.PausedActiveGN = false
-                                PathStartClock, PathStartTime = os.date("%I:%M:%S %p"), os.time()
+                            
+                            if NavSet.ChainZone ~= 'Select Zone...' and NavSet.ChainPath ~= 'Select Path...' then
+                                ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
+                                if ImGui.Button(Icon.MD_PLAYLIST_ADD.." ["..NavSet.ChainPath .."]##") then
+                                    if not ChainedPaths then ChainedPaths = {} end
+                                    table.insert(ChainedPaths , {Zone = NavSet.ChainZone, Path = NavSet.ChainPath, Type = 'Normal'})
+                                end
+                                ImGui.PopStyleColor()
+                            else
+                                ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.500, 0.500, 0.500, 1.000))
+                                ImGui.Button(Icon.MD_PLAYLIST_ADD.."##Dummy2")
+                                ImGui.PopStyleColor()
                             end
-                            ImGui.PopStyleColor()
                             if ImGui.IsItemHovered() then
-                                ImGui.SetTooltip("Start Navigation at Closest Waypoint")
+                                ImGui.SetTooltip("Add "..NavSet.ChainZone..": "..NavSet.ChainPath.." to Chain")
                             end
-                            ImGui.SetNextItemWidth(100)
-                            NavSet.StopDist = ImGui.InputInt("Stop Distance##"..script, NavSet.StopDist, 1, 50)
-                            ImGui.SetNextItemWidth(100)
-                            NavSet.WpPause = ImGui.InputInt("Global Pause##"..script, NavSet.WpPause, 1,5 )
+                            if #ChainedPaths > 0  then
+                                ImGui.SameLine()
+                                ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1, 0.4, 0.4, 0.4))
+                                if ImGui.Button(Icon.MD_DELETE_SWEEP.."##") then
+                                    ChainedPaths = {}
+                                end
+                                ImGui.PopStyleColor()
+
+                                if ImGui.IsItemHovered() then
+                                    ImGui.SetTooltip("Clear Chain")
+                                end
+                                ImGui.SeparatorText("Chain Paths:")
+                                for i = 1, #ChainedPaths do
+                                    ImGui.SetNextItemWidth(100)
+                                    local chainType = {'Normal', 'Loop', 'PingPong', 'Reverse'}
+                                    if ImGui.BeginCombo("##PathType_"..i, ChainedPaths[i].Type) then
+                                        if not Paths[currZone] then Paths[currZone] = {} end
+                                        for k, v in pairs(chainType)  do
+                                            local isSelected = v == ChainedPaths[i].Type
+                                            if ImGui.Selectable(v, isSelected) then
+                                                ChainedPaths[i].Type = v
+                                            end
+                                        end
+                                        ImGui.EndCombo()
+                                    end
+                                    ImGui.SameLine()
+                                    ImGui.TextColored(0.0,1,1,1,"%s", ChainedPaths[i].Zone)
+                                    ImGui.SameLine()
+                                    if ChainedPaths[i].Path == NavSet.ChainPath then
+                                        ImGui.TextColored(1,1,0,1,"%s", ChainedPaths[i].Path)
+                                    else
+                                        ImGui.TextColored(0.0,1,0,1,"%s", ChainedPaths[i].Path)
+                                    end
+                                end
+                            end
                         end
+                        ImGui.Dummy(10,5)
+                        if NavSet.SelectedPath ~= 'None' or #ChainedPaths > 0 then
+                            -- Navigation Controls
+                            if ImGui.CollapsingHeader("Navigation##") then
+                                if not NavSet.doNav then NavSet.doReverse = ImGui.Checkbox('Reverse Order', NavSet.doReverse) ImGui.SameLine() end
+                                NavSet.doLoop = ImGui.Checkbox('Loop Path', NavSet.doLoop)
+                                ImGui.SameLine()
+                                NavSet.doPingPong = ImGui.Checkbox('Ping Pong', NavSet.doPingPong)
+                                if NavSet.doPingPong then
+                                    NavSet.doLoop = true
+                                end
+                                ImGui.Separator()
+                                if not Paths[currZone] then Paths[currZone] = {} end
+                                if NavSet.doPause and NavSet.doNav then
+                                    ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
+                                    
+                                    if ImGui.Button(Icon.FA_PLAY_CIRCLE_O) then
+                                        NavSet.doPause = false
+                                        NavSet.PausedActiveGN = false
+                                        table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = currZone, Path = NavSet.SelectedPath, WP = 'Resume', Status = 'Resumed Navigation!'})
+                                    end
+                                    ImGui.PopStyleColor()
+
+                                    if ImGui.IsItemHovered() then
+                                        ImGui.SetTooltip("Resume Navigation")
+                                    end
+                                    ImGui.SameLine()
+                                elseif not NavSet.doPause and NavSet.doNav then
+                                    ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1, 0.4, 0.4, 0.4))
+                                    
+                                    if ImGui.Button(Icon.FA_PAUSE) then
+                                        NavSet.doPause = true
+                                        mq.cmd("/squelch /nav stop")
+                                        table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = currZone, Path = NavSet.SelectedPath, WP = 'Pause', Status = 'Paused Navigation!'})
+                                    end
+                                    ImGui.PopStyleColor()
+
+                                    if ImGui.IsItemHovered() then
+                                        ImGui.SetTooltip("Pause Navigation")
+                                    end
+                                    ImGui.SameLine()
+                                end
+                                local tmpLabel = NavSet.doNav and Icon.FA_STOP or Icon.FA_PLAY
+                                if NavSet.doNav then
+                                    ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1.0, 0.4, 0.4, 0.4))
+                                else
+                                    ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1.0, 0.4, 0.4))
+                                end
+                                if ImGui.Button(tmpLabel) then
+                                    NavSet.PausedActiveGN = false
+                                    NavSet.doNav = not NavSet.doNav
+                                    NavSet.ChainStart = false
+                                    if not NavSet.doNav then
+                                        mq.cmdf("/squelch /nav stop")
+                                        NavSet.ChainStart = false
+                                        PathStartClock,PathStartTime = nil, nil
+                                    else
+                                        PathStartClock,PathStartTime = os.date("%I:%M:%S %p"), os.time()
+                                    end
+                                end
+                                ImGui.PopStyleColor()
+
+                                if ImGui.IsItemHovered() then
+                                    if NavSet.doNav then
+                                        ImGui.SetTooltip("Stop Navigation")
+                                    else
+                                        ImGui.SetTooltip("Start Navigation")
+                                    end
+                                end
+                                ImGui.SameLine()
+                                ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1.0, 0.4, 0.4))
+                                if ImGui.Button(Icon.FA_PLAY.." Closest WP") then
+                                    NavSet.CurrentStepIndex = closestWaypointIndex
+                                    NavSet.doNav = true
+                                    NavSet.PausedActiveGN = false
+                                    PathStartClock, PathStartTime = os.date("%I:%M:%S %p"), os.time()
+                                end
+                                ImGui.PopStyleColor()
+                                if ImGui.IsItemHovered() then
+                                    ImGui.SetTooltip("Start Navigation at Closest Waypoint")
+                                end
+                                ImGui.SetNextItemWidth(100)
+                                NavSet.StopDist = ImGui.InputInt("Stop Distance##"..script, NavSet.StopDist, 1, 50)
+                                ImGui.SetNextItemWidth(100)
+                                NavSet.WpPause = ImGui.InputInt("Global Pause##"..script, NavSet.WpPause, 1,5 )
+                            end
+                        end
+                        ImGui.EndChild()
                     end
-                    ImGui.EndChild()
-                end
                 ImGui.EndTabItem()
                 end
                 if ImGui.BeginTabItem('Path Data') then
@@ -2521,6 +2540,7 @@ local function Loop()
             end
         end
 
+        -- start the chain path
         if NavSet.doNav and not NavSet.ChainStart and #ChainedPaths > 0 then
             NavSet.SelectedPath = ChainedPaths[1].Path
             if ChainedPaths[1].Type == 'Loop' then
@@ -2546,8 +2566,6 @@ local function Loop()
             NavSet.CurChain = 1
             mq.delay(500)
         end
-
-
 
         if zoningHideGUI then
             printf("\ay[\at%s\ax] \agZoning, \ayHiding GUI...", script)
@@ -2603,6 +2621,7 @@ local function Loop()
             mq.exit()
         end
 
+        -- check interrupts
         if NavSet.doNav and not NavSet.doPause and not justZoned then
             mq.delay(1)
             cTime = os.time()
@@ -2632,14 +2651,13 @@ local function Loop()
 
         end
         
-        if NavSet.doNav and not InterruptSet.interruptFound and not NavSet.doPause and not NavSet.doChainPause then
+        if  not InterruptSet.interruptFound and not NavSet.doPause and not NavSet.doChainPause then
 
-            if NavSet.PreviousDoNav ~= NavSet.doNav then
+            if NavSet.doNav and NavSet.PreviousDoNav ~= NavSet.doNav then
                 -- Reset the coroutine since doNav changed from false to true
                 co = coroutine.create(NavigatePath)
             end
-
-            local curTime = os.time()
+            curTime = os.time()
                 
             -- If the coroutine is not dead, resume it
             if coroutine.status(co) ~= "dead" then
