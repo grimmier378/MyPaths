@@ -577,33 +577,33 @@ local function CheckInterrupts()
     local flag = false
     local invis = false
     if mq.TLO.Window('LootWnd').Open() and InterruptSet.stopForLoot then
-        if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
+        if not interruptInProcess then mq.cmdf("/nav stop") interruptInProcess = true end
         status = 'Paused for Looting.'
         flag = true
     elseif mq.TLO.Window('AdvancedLootWnd').Open() and InterruptSet.stopForLoot then
-        if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
+        if not interruptInProcess then mq.cmdf("/nav stop") interruptInProcess = true end
         status = 'Paused for Looting.'
         flag = true
     elseif mq.TLO.Me.Casting() ~= nil and InterruptSet.stopForCasting then
-        if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
+        if not interruptInProcess then mq.cmdf("/nav stop") interruptInProcess = true end
         status = 'Paused for Casting.'
         flag = true
     elseif mq.TLO.Me.Combat() and InterruptSet.stopForCombat then
-        if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
+        if not interruptInProcess then mq.cmdf("/nav stop") interruptInProcess = true end
         status = 'Paused for Combat.'
         flag = true
     elseif xCount > 0 and InterruptSet.stopForXtar then
         for i = 1, mq.TLO.Me.XTargetSlots() do
             if mq.TLO.Me.XTarget(i) ~= nil then
                 if (mq.TLO.Me.XTarget(i).ID() ~= 0 and mq.TLO.Me.XTarget(i).Type() ~= 'PC' and mq.TLO.Me.XTarget(i).Master.Type() ~= "PC") then
-                    if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
+                    if not interruptInProcess then mq.cmdf("/nav stop") interruptInProcess = true end
                     status = string.format('Paused for XTarget. XTarg Count %s', mq.TLO.Me.XTarget())
                     flag = true
                 end
             end
         end
     elseif mq.TLO.Me.Sitting() == true and InterruptSet.stopForSitting then
-        if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
+        if not interruptInProcess then mq.cmdf("/nav stop") interruptInProcess = true end
         mq.delay(30)
         local curHP, curMP = mq.TLO.Me.PctHPs(), mq.TLO.Me.PctMana() or 0
         if curHP - lastHP > 10 or curMP - lastMP > 10 then
@@ -612,42 +612,42 @@ local function CheckInterrupts()
         end
         flag = true
     elseif mq.TLO.Me.Rooted() and InterruptSet.stopForRoot then
-        if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
+        if not interruptInProcess then mq.cmdf("/nav stop") interruptInProcess = true end
         status = 'Paused for Rooted.'
         flag = true
     elseif mq.TLO.Me.Feared() and InterruptSet.stopForFear then
-        if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
+        if not interruptInProcess then mq.cmdf("/nav stop") interruptInProcess = true end
         status = 'Paused for Feared.'
         flag = true
     elseif mq.TLO.Me.Mezzed() and InterruptSet.stopForMez then
-        if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
+        if not interruptInProcess then mq.cmdf("/nav stop") interruptInProcess = true end
         status = 'Paused for Mezzed.'
         flag = true
     elseif mq.TLO.Me.Charmed() and InterruptSet.stopForCharm then
-        if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
+        if not interruptInProcess then mq.cmdf("/nav stop") interruptInProcess = true end
         status = 'Paused for Charmed.'
         flag = true
     elseif not mq.TLO.Me.Invis() and InterruptSet.stopForInvis then
-        if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true status = 'Paused for Invis.' end
+        if not interruptInProcess then mq.cmdf("/nav stop") interruptInProcess = true status = 'Paused for Invis.' end
         
         flag = true
         invis = true
     elseif not (mq.TLO.Me.Invis(1)() and mq.TLO.Me.Invis(2)()) and InterruptSet.stopForDblInvis then
-        if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true  status = 'Paused for Double Invis.' end
+        if not interruptInProcess then mq.cmdf("/nav stop") interruptInProcess = true  status = 'Paused for Double Invis.' end
         
         flag = true
         invis = true
     elseif mq.TLO.Me.Zoning() then
-        if not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
+        if not interruptInProcess then mq.cmdf("/nav stop") interruptInProcess = true end
         status = 'Paused for Zoning.'
         lastZone = ''
         flag = true
     elseif settings[script].GroupWatch == true and groupWatch(settings[script].WatchType) then
         flag =  true
-        if flag and not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
+        if flag and not interruptInProcess then mq.cmdf("/nav stop") interruptInProcess = true end
     elseif InterruptSet.stopForDist == true and groupDistance() then
         flag = true
-        if flag and not interruptInProcess then mq.cmdf("/squelch /nav stop") interruptInProcess = true end
+        if flag and not interruptInProcess then mq.cmdf("/nav stop") interruptInProcess = true end
     end
     if flag then
         InterruptSet.PauseStart = os.time()
@@ -734,7 +734,7 @@ local function NavigatePath(name)
             tmpDestLoc = tmpDestLoc:sub(1, #yx - 1)
 
             local tmpDist = mq.TLO.Math.Distance(tmpDestLoc)() or 0
-            mq.cmdf("/squelch /nav locyxz %s | distance %s", tmp[i].loc, NavSet.StopDist)
+            mq.cmdf("/nav locyxz %s dist=%s log=off", tmp[i].loc, NavSet.StopDist)
             status = "Nav to WP #: "..tmp[i].step.." Distance: "..string.format("%.2f",tmpDist)
             mq.delay(1)
             -- mq.delay(3000, function () return mq.TLO.Me.Speed() > 0 end)
@@ -761,7 +761,7 @@ local function NavigatePath(name)
                         tmpDestLoc = tmp[i].loc
                         yx = tmpDestLoc:match("^(.-,.-),") -- Match the y,x part of the string
                         tmpDestLoc = tmpDestLoc:sub(1, #yx - 1)
-                        mq.cmdf("/squelch /nav locyxz %s | distance %s", tmp[i].loc, NavSet.StopDist)
+                        mq.cmdf("/nav locyxz %s dist=%s log=off", tmp[i].loc, NavSet.StopDist)
                         tmpDist = mq.TLO.Math.Distance(tmpDestLoc)() or 0
                         status = "Nav to WP #: "..tmp[i].step.." Distance: "..string.format("%.2f",tmpDist)
                         coroutine.yield()
@@ -776,7 +776,7 @@ local function NavigatePath(name)
                 coroutine.yield()  -- Yield here to allow updates
                 if not NavSet.doNav then return end
             end
-            mq.cmdf("/squelch /nav stop")
+            -- mq.cmdf("/nav stop")
             -- status = "Arrived at WP #: "..tmp[i].step
 
             if NavSet.doSingle then
@@ -1071,7 +1071,7 @@ local function Draw_GUI()
                     ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1, 0.4, 0.4, 0.4))
                     if ImGui.Button(Icon.FA_PAUSE) then
                         NavSet.doPause = true
-                        mq.cmd("/squelch /nav stop")
+                        mq.cmd("/nav stop")
                         table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = currZone, Path = NavSet.SelectedPath, WP = 'Pause', Status = 'Paused Navigation!'})
                     end
                     ImGui.PopStyleColor()
@@ -1086,7 +1086,7 @@ local function Draw_GUI()
                     if ImGui.Button(Icon.FA_STOP) then
                         NavSet.doNav = false
                         NavSet.ChainStart = false
-                        mq.cmdf("/squelch /nav stop")
+                        mq.cmdf("/nav stop")
                         PathStartClock,PathStartTime = nil, nil
                     end
                     ImGui.PopStyleColor()
@@ -1188,7 +1188,7 @@ local function Draw_GUI()
                         else
                             ImGui.Text("Navigation Active")
                         end
-                        ImGui.Dummy(10,5)
+                        ImGui.Spacing()
                         if ImGui.CollapsingHeader("Manage Paths##") then
                             ImGui.SetNextItemWidth(150)
                             newPath = ImGui.InputTextWithHint("##NewPathName", "New Path Name",newPath)
@@ -1244,7 +1244,7 @@ local function Draw_GUI()
                             if ImGui.IsItemHovered() then
                                 ImGui.SetTooltip("Export: "..currZone.." : "..NavSet.SelectedPath)
                             end
-                            ImGui.Dummy(10,5)
+                            ImGui.Spacing()
                             if ImGui.CollapsingHeader("Share Paths##") then
                                 importString   = ImGui.InputTextWithHint("##ImportString","Paste Import String", importString)
                                 ImGui.SameLine()
@@ -1319,7 +1319,7 @@ local function Draw_GUI()
                                 end
                             end
                         end
-                        ImGui.Dummy(10,5)
+                        ImGui.Spacing()
                         ImGui.Separator()
                         if ImGui.CollapsingHeader("Chain Paths##") then
                             if NavSet.SelectedPath ~= 'None' then
@@ -1428,7 +1428,7 @@ local function Draw_GUI()
                                 end
                             end
                         end
-                        ImGui.Dummy(10,5)
+                        ImGui.Spacing()
                         if NavSet.SelectedPath ~= 'None' or #ChainedPaths > 0 then
                             -- Navigation Controls
                             if ImGui.CollapsingHeader("Navigation##") then
@@ -1460,7 +1460,7 @@ local function Draw_GUI()
                                     
                                     if ImGui.Button(Icon.FA_PAUSE) then
                                         NavSet.doPause = true
-                                        mq.cmd("/squelch /nav stop")
+                                        mq.cmd("/nav stop")
                                         table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = currZone, Path = NavSet.SelectedPath, WP = 'Pause', Status = 'Paused Navigation!'})
                                     end
                                     ImGui.PopStyleColor()
@@ -1481,7 +1481,7 @@ local function Draw_GUI()
                                     NavSet.doNav = not NavSet.doNav
                                     NavSet.ChainStart = false
                                     if not NavSet.doNav then
-                                        mq.cmdf("/squelch /nav stop")
+                                        mq.cmdf("/nav stop")
                                         NavSet.ChainStart = false
                                         PathStartClock,PathStartTime = nil, nil
                                     else
@@ -1568,7 +1568,7 @@ local function Draw_GUI()
                         end
                         ImGui.Separator()
                     end
-                    ImGui.Dummy(10,5)
+                    ImGui.Spacing()
                     if ImGui.CollapsingHeader("Waypoint Table##Header") then
                         -- Waypoint Table
                         if NavSet.SelectedPath ~= 'None' then
@@ -1984,7 +1984,7 @@ local function Draw_GUI()
                     end
 
                 end
-                ImGui.Dummy(5,5)
+                ImGui.Spacing()
                 ImGui.SeparatorText("Recording Settings##"..script)
                 -- Set RecordDley
                 ImGui.SetNextItemWidth(100)
@@ -2219,7 +2219,7 @@ local function bind(...)
     if #args == 1 then
         if key == 'stop' then
             NavSet.doNav = false
-            mq.cmdf("/squelch /nav stop")
+            mq.cmdf("/nav stop")
             NavSet.ChainStart = false
             NavSet.SelectedPath = 'None'
             -- loadPaths()
@@ -2247,7 +2247,7 @@ local function bind(...)
             NavSet.doPause = false
         elseif key == 'quit' or key == 'exit' then
             -- mq.exit()
-            mq.cmd("/squelch /nav stop")
+            mq.cmd("/nav stop")
             mq.TLO.Me.Stand()
             mq.delay(1)
             NavSet.doNav = false
@@ -2633,7 +2633,7 @@ local function Loop()
                 if mq.TLO.SpawnCount('gm')() > 0 and InterruptSet.stopForGM and not NavSet.PausedActiveGN then
                     printf("\ay[\at%s\ax] \arGM Detected, \ayPausing Navigation...", script)
                     NavSet.doNav = false
-                    mq.cmdf("/squelch /nav stop")
+                    mq.cmdf("/nav stop")
                     NavSet.ChainStart = false
                     mq.cmd("/multiline ; /squelch /beep; /timed  3, /beep ; /timed 2, /beep ; /timed 1, /beep")
                     mq.delay(1)
