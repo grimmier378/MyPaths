@@ -665,7 +665,7 @@ local function CheckInterrupts()
         InterruptSet.PauseStart = os.time()
         pauseTime = InterruptSet.interruptDelay
         if invis then pauseTime = settings[script].InvisDelay end
-    else
+    elseif interruptInProgress then
         interruptInProgress = false
         pauseTime = 0
     end
@@ -822,6 +822,7 @@ local function NavigatePath(name)
                 pauseTime = tmp[i].delay
                 InterruptSet.PauseStart = os.time()
                 coroutine.yield()
+                if not NavSet.doNav then return end
                 -- coroutine.yield()  -- Yield here to allow updates
             elseif NavSet.WpPause > 0 then
                 status = string.format("Global Paused %s seconds at WP #: %s", NavSet.WpPause, tmp[i].step)
@@ -831,9 +832,10 @@ local function NavigatePath(name)
                 if not NavSet.doNav then return end
                 -- coroutine.yield()  -- Yield here to allow updates
             else
-                if not InterruptSet.interruptFound then
+                if not InterruptSet.interruptFound and tmp[i].delay == 0 then
                     pauseTime = 0
                     InterruptSet.PauseStart = 0
+                    if not NavSet.doNav then return end
                 end
             end
 
@@ -880,7 +882,9 @@ function ZoningPause()
         NavSet.SelectedPath = 'None'
         NavSet.CurrentStepIndex = 1
         InterruptSet.PauseStart = 0
+        
         pauseTime = 0
+        
         zoningHideGUI = true
         showMainGUI = false
         lastZone = ''
@@ -2680,8 +2684,11 @@ local function Loop()
             if coroutine.status(co) ~= "dead" then
                 -- Check if we need to pause
                 if InterruptSet.PauseStart > 0 then
-                    if curTime - InterruptSet.PauseStart > pauseTime then
+                    curTime = os.time()
+                    local diff = curTime - InterruptSet.PauseStart
+                    if diff > pauseTime then
                         -- Time is up, resume the coroutine and reset the timer values
+                        -- printf("Pause time: %s Start Time %s Current Time: %s Difference: %s", pauseTime, InterruptSet.PauseStart, curTime, diff)
                         pauseTime = 0
                         InterruptSet.PauseStart = 0
                         local success, message = coroutine.resume(co, NavSet.SelectedPath)
