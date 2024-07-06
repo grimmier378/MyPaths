@@ -90,7 +90,8 @@ local showMainGUI, showConfigGUI, showDebugTab, showHUD = true, false, true, fal
 local scale = 1
 local aSize, locked, hasThemeZ = false, false, false
 local hudTransparency = 0.5
-local hudMouse = true
+local mouseOverTransparency = 1.0
+local doMouseOver = true
 
 -- File Paths
 local themeFile = string.format('%s/MyUI/MyThemeZ.lua', mq.configDir)
@@ -113,6 +114,7 @@ defaults = {
     WatchHealth = 90,
     GroupWatch = false,
     HeadsUpTransparency = 0.5,
+    MouseOverTransparency = 1.0,
     StopDistance = 30,
     PauseStops = 1,
     InterruptDelay = 1,
@@ -192,6 +194,10 @@ local function loadPaths()
                 end
                 if wData.doorRev == nil then
                     wData.doorRev = false
+                    needsUpdate = true
+                end
+                if wData.Interrupts ~= nil then
+                    wData.Interrupts = nil
                     needsUpdate = true
                 end
             end
@@ -292,7 +298,7 @@ local function loadSettings()
     end
 
     if settings[script].MouseHUD == nil then
-        settings[script].MouseHUD = hudMouse
+        settings[script].MouseHUD = doMouseOver
         newSetting = true
     end
 
@@ -308,6 +314,11 @@ local function loadSettings()
 
     if settings[script].HeadsUpTransparency == nil then
         settings[script].HeadsUpTransparency = hudTransparency
+        newSetting = true
+    end
+
+    if settings[script].MouseOverTransparency == nil then
+        settings[script].MouseOverTransparency = mouseOverTransparency
         newSetting = true
     end
 
@@ -357,8 +368,9 @@ local function loadSettings()
     InterruptSet.stopForDist = settings[script].Interrupts.stopForDist
     InterruptSet.interruptDelay = settings[script].InterruptDelay
     hudTransparency = settings[script].HeadsUpTransparency
+    mouseOverTransparency = settings[script].MouseOverTransparency
     aSize = settings[script].AutoSize
-    hudMouse = settings[script].MouseHUD
+    doMouseOver = settings[script].MouseHUD
     locked = settings[script].locked
     scale = settings[script].Scale
     themeName = settings[script].LoadTheme
@@ -570,40 +582,36 @@ local function groupWatch(type)
     return false
 end
 
-local interruptInProcess = false
+local interruptInProgress = false
 local function CheckInterrupts()
     if not NavSet.doNav then return false end
     local xCount = mq.TLO.Me.XTarget() or 0
     local flag = false
     local invis = false
     if mq.TLO.Window('LootWnd').Open() and InterruptSet.stopForLoot then
-        if not interruptInProcess then mq.cmdf("/nav stop") interruptInProcess = true end
+        if not interruptInProgress then mq.cmdf("/nav stop") interruptInProgress = true end
         status = 'Paused for Looting.'
         flag = true
     elseif mq.TLO.Window('AdvancedLootWnd').Open() and InterruptSet.stopForLoot then
-        if not interruptInProcess then mq.cmdf("/nav stop") interruptInProcess = true end
+        if not interruptInProgress then mq.cmdf("/nav stop") interruptInProgress = true end
         status = 'Paused for Looting.'
         flag = true
-    elseif mq.TLO.Me.Casting() ~= nil and InterruptSet.stopForCasting then
-        if not interruptInProcess then mq.cmdf("/nav stop") interruptInProcess = true end
-        status = 'Paused for Casting.'
-        flag = true
     elseif mq.TLO.Me.Combat() and InterruptSet.stopForCombat then
-        if not interruptInProcess then mq.cmdf("/nav stop") interruptInProcess = true end
+        if not interruptInProgress then mq.cmdf("/nav stop") interruptInProgress = true end
         status = 'Paused for Combat.'
         flag = true
     elseif xCount > 0 and InterruptSet.stopForXtar then
         for i = 1, mq.TLO.Me.XTargetSlots() do
             if mq.TLO.Me.XTarget(i) ~= nil then
                 if (mq.TLO.Me.XTarget(i).ID() ~= 0 and mq.TLO.Me.XTarget(i).Type() ~= 'PC' and mq.TLO.Me.XTarget(i).Master.Type() ~= "PC") then
-                    if not interruptInProcess then mq.cmdf("/nav stop") interruptInProcess = true end
+                    if not interruptInProgress then mq.cmdf("/nav stop") interruptInProgress = true end
                     status = string.format('Paused for XTarget. XTarg Count %s', mq.TLO.Me.XTarget())
                     flag = true
                 end
             end
         end
     elseif mq.TLO.Me.Sitting() == true and InterruptSet.stopForSitting then
-        if not interruptInProcess then mq.cmdf("/nav stop") interruptInProcess = true end
+        if not interruptInProgress then mq.cmdf("/nav stop") interruptInProgress = true end
         mq.delay(30)
         local curHP, curMP = mq.TLO.Me.PctHPs(), mq.TLO.Me.PctMana() or 0
         if curHP - lastHP > 10 or curMP - lastMP > 10 then
@@ -612,49 +620,53 @@ local function CheckInterrupts()
         end
         flag = true
     elseif mq.TLO.Me.Rooted() and InterruptSet.stopForRoot then
-        if not interruptInProcess then mq.cmdf("/nav stop") interruptInProcess = true end
+        if not interruptInProgress then mq.cmdf("/nav stop") interruptInProgress = true end
         status = 'Paused for Rooted.'
         flag = true
     elseif mq.TLO.Me.Feared() and InterruptSet.stopForFear then
-        if not interruptInProcess then mq.cmdf("/nav stop") interruptInProcess = true end
+        if not interruptInProgress then mq.cmdf("/nav stop") interruptInProgress = true end
         status = 'Paused for Feared.'
         flag = true
     elseif mq.TLO.Me.Mezzed() and InterruptSet.stopForMez then
-        if not interruptInProcess then mq.cmdf("/nav stop") interruptInProcess = true end
+        if not interruptInProgress then mq.cmdf("/nav stop") interruptInProgress = true end
         status = 'Paused for Mezzed.'
         flag = true
     elseif mq.TLO.Me.Charmed() and InterruptSet.stopForCharm then
-        if not interruptInProcess then mq.cmdf("/nav stop") interruptInProcess = true end
+        if not interruptInProgress then mq.cmdf("/nav stop") interruptInProgress = true end
         status = 'Paused for Charmed.'
         flag = true
+    elseif mq.TLO.Me.Casting() ~= nil and InterruptSet.stopForCasting then
+        if not interruptInProgress then mq.cmdf("/nav stop") interruptInProgress = true end
+        status = 'Paused for Casting.'
+        flag = true
     elseif not mq.TLO.Me.Invis() and InterruptSet.stopForInvis then
-        if not interruptInProcess then mq.cmdf("/nav stop") interruptInProcess = true status = 'Paused for Invis.' end
+        if not interruptInProgress then mq.cmdf("/nav stop") interruptInProgress = true status = 'Paused for Invis.' end
         
         flag = true
         invis = true
     elseif not (mq.TLO.Me.Invis(1)() and mq.TLO.Me.Invis(2)()) and InterruptSet.stopForDblInvis then
-        if not interruptInProcess then mq.cmdf("/nav stop") interruptInProcess = true  status = 'Paused for Double Invis.' end
+        if not interruptInProgress then mq.cmdf("/nav stop") interruptInProgress = true  status = 'Paused for Double Invis.' end
         
         flag = true
         invis = true
     elseif mq.TLO.Me.Zoning() then
-        if not interruptInProcess then mq.cmdf("/nav stop") interruptInProcess = true end
+        if not interruptInProgress then mq.cmdf("/nav stop") interruptInProgress = true end
         status = 'Paused for Zoning.'
         lastZone = ''
         flag = true
     elseif settings[script].GroupWatch == true and groupWatch(settings[script].WatchType) then
         flag =  true
-        if flag and not interruptInProcess then mq.cmdf("/nav stop") interruptInProcess = true end
+        if flag and not interruptInProgress then mq.cmdf("/nav stop") interruptInProgress = true end
     elseif InterruptSet.stopForDist == true and groupDistance() then
         flag = true
-        if flag and not interruptInProcess then mq.cmdf("/nav stop") interruptInProcess = true end
+        if flag and not interruptInProgress then mq.cmdf("/nav stop") interruptInProgress = true end
     end
     if flag then
         InterruptSet.PauseStart = os.time()
         pauseTime = InterruptSet.interruptDelay
         if invis then pauseTime = settings[script].InvisDelay end
     else
-        interruptInProcess = false
+        interruptInProgress = false
         pauseTime = 0
     end
 
@@ -751,7 +763,7 @@ local function NavigatePath(name)
 
                     return
                 end
-                if interruptInProcess then
+                if interruptInProgress then
                     coroutine.yield()
                     if not NavSet.doNav then return end
                 elseif mq.TLO.Me.Speed() == 0 then
@@ -940,7 +952,7 @@ local function import_paths(import_string)
 end
 
 -------- GUI Functions --------
-local transFlag = false
+local mousedOverFlag = false
 local importString = ''
 local tmpCmd = ''
 local exportZone, exportPathName = 'Select Zone...', 'Select Path...'
@@ -1881,9 +1893,13 @@ local function Draw_GUI()
                 ImGui.SeparatorText("MyPaths Settings##"..script)
                 -- HUD Transparency --
                 ImGui.SetNextItemWidth(100)
-                hudTransparency = ImGui.SliderFloat("HUD Transparency##"..script, hudTransparency, 0.0, 1)
-                
-                hudMouse = ImGui.Checkbox("On Mouseover##"..script, hudMouse)
+                local lblHudTrans = doMouseOver and "HUD Faded Transparency##"..script or "HUD Transparency##"..script
+                hudTransparency = ImGui.SliderFloat(lblHudTrans, hudTransparency, 0.0, 1)
+                if doMouseOver then
+                    ImGui.SetNextItemWidth(100)
+                    mouseOverTransparency = ImGui.SliderFloat("HUD MouseOver Transparency##"..script, mouseOverTransparency, 0.0, 1)
+                end
+                doMouseOver = ImGui.Checkbox("On Mouseover##"..script, doMouseOver)
                 if ImGui.CollapsingHeader("Interrupt Settings##"..script) then
                 -- Set Interrupts we will stop for
                     
@@ -2007,11 +2023,12 @@ local function Draw_GUI()
                 -- Save & Close Button --
                 if ImGui.Button("Save & Close") then
                     settings[script].HeadsUpTransparency = hudTransparency
+                    settings[script].MouseOverTransparency = mouseOverTransparency
                     settings[script].Scale = scale
                     settings[script].LoadTheme = themeName
                     settings[script].locked = locked
                     settings[script].AutoSize = aSize
-                    settings[script].MouseHUD = hudMouse
+                    settings[script].MouseHUD = doMouseOver
                     settings[script].RecordDelay = NavSet.RecordDelay
                     settings[script].StopForGM = InterruptSet.stopForGM
                     settings[script].StopDistance = NavSet.StopDist
@@ -2032,12 +2049,12 @@ local function Draw_GUI()
     if showHUD then
         if mq.TLO.Me.Zoning() then return end
         
-        if transFlag and hudMouse then
+        if mousedOverFlag and doMouseOver then
+            ImGui.PushStyleColor(ImGuiCol.WindowBg, ImVec4(0.0, 0.0, 0.0, mouseOverTransparency))
+        elseif not mousedOverFlag and doMouseOver then
             ImGui.PushStyleColor(ImGuiCol.WindowBg, ImVec4(0.0, 0.0, 0.0, hudTransparency))
-        elseif not hudMouse then
+        elseif not doMouseOver then
             ImGui.PushStyleColor(ImGuiCol.WindowBg, ImVec4(0.0, 0.0, 0.0, hudTransparency))
-        else
-            ImGui.PushStyleColor(ImGuiCol.WindowBg, ImVec4(0.0, 0.0, 0.0, 0.0))
         end
         local openHUDWin, showHUDWin = ImGui.Begin("MyPaths HUD##HUD", true, bit32.bor(ImGuiWindowFlags.NoCollapse, ImGuiWindowFlags.AlwaysAutoResize, ImGuiWindowFlags.NoTitleBar))
         if not openHUDWin then
@@ -2048,13 +2065,13 @@ local function Draw_GUI()
             -- Set Window Font Scale
             ImGui.SetWindowFontScale(scale)
             if ImGui.IsWindowHovered() then
-                transFlag = true
+                mousedOverFlag = true
                 if ImGui.IsMouseDoubleClicked(0) then
                     showMainGUI = not showMainGUI
                 end
                 ImGui.SetTooltip("Double Click to Toggle Main GUI")
             else
-                transFlag = false
+                mousedOverFlag = false
             end
             if NavSet.PausedActiveGN then
                 if mq.TLO.SpawnCount('gm')() > 0 then
