@@ -27,7 +27,7 @@ local deleteWP, deleteWPStep = false, 0
 local status, lastStatus = 'Idle', ''
 local tmpLoc = ''
 local currZone, lastZone = '', ''
-local lastHP, lastMP, pauseTime = 0, 0, 0
+local lastHP, lastMP, intPauseTime, curWpPauseTime = 0, 0, 0, 0
 local zoningHideGUI = false
 local ZoningPause
 local lastRecordedWP = ''
@@ -51,6 +51,7 @@ local NavSet = {
     doPause = false,
     RecordDelay = 5,
     StopDist = 30,
+    PauseStart = 0,
     WpPause = 1,
     CurrentStepIndex = 1,
     LoopCount = 0,
@@ -663,11 +664,11 @@ local function CheckInterrupts()
     end
     if flag then
         InterruptSet.PauseStart = os.time()
-        pauseTime = InterruptSet.interruptDelay
-        if invis then pauseTime = settings[script].InvisDelay end
+        intPauseTime = InterruptSet.interruptDelay
+        if invis then intPauseTime = settings[script].InvisDelay end
     elseif interruptInProgress then
         interruptInProgress = false
-        pauseTime = 0
+        intPauseTime = 0
     end
 
     return flag
@@ -758,7 +759,7 @@ local function NavigatePath(name)
                 if currZone ~= lastZone then
                     NavSet.SelectedPath = 'None'
                     NavSet.doNav = false
-                    pauseTime = 0
+                    intPauseTime = 0
                     InterruptSet.PauseStart = 0
 
                     return
@@ -819,22 +820,22 @@ local function NavigatePath(name)
             -- Check for Delay at Waypoint
             if tmp[i].delay > 0 then
                 status = string.format("Paused %s seconds at WP #: %s", tmp[i].delay, tmp[i].step)
-                pauseTime = tmp[i].delay
-                InterruptSet.PauseStart = os.time()
+                curWpPauseTime = tmp[i].delay
+                NavSet.PauseStart = os.time()
                 coroutine.yield()
                 if not NavSet.doNav then return end
                 -- coroutine.yield()  -- Yield here to allow updates
             elseif NavSet.WpPause > 0 then
                 status = string.format("Global Paused %s seconds at WP #: %s", NavSet.WpPause, tmp[i].step)
-                pauseTime = NavSet.WpPause
-                InterruptSet.PauseStart = os.time()
+                curWpPauseTime = NavSet.WpPause
+                NavSet.PauseStart = os.time()
                 coroutine.yield()
                 if not NavSet.doNav then return end
                 -- coroutine.yield()  -- Yield here to allow updates
             else
                 if not InterruptSet.interruptFound and tmp[i].delay == 0 then
-                    pauseTime = 0
-                    InterruptSet.PauseStart = 0
+                    curWpPauseTime = 0
+                    NavSet.PauseStart = os.time()
                     if not NavSet.doNav then return end
                 end
             end
@@ -883,7 +884,7 @@ function ZoningPause()
         NavSet.CurrentStepIndex = 1
         InterruptSet.PauseStart = 0
         
-        pauseTime = 0
+        intPauseTime = 0
         
         zoningHideGUI = true
         showMainGUI = false
@@ -2500,8 +2501,9 @@ local function Loop()
             NavSet.doPingPong = false
             NavSet.doPause = false
             
-            pauseTime = 0
+            intPauseTime = 0
             InterruptSet.PauseStart = 0
+            NavSet.PauseStart = 0
             NavSet.PreviousDoNav = false
             -- Reset navigation state for new zone
             NavSet.CurrentStepIndex = 1
@@ -2605,8 +2607,9 @@ local function Loop()
                 NavSet.doNav = false
                 NavSet.doPause = false
                 lastZone = currZone
-                pauseTime = 0
+                intPauseTime = 0
                 InterruptSet.PauseStart = 0
+                NavSet.PauseStart = 0
                 printf('\ay[\at%s\ay]\ag Zone Changed Last:\at %s Current:\ay %s', script, lastZone, currZone)
             end
         end
@@ -2683,14 +2686,43 @@ local function Loop()
             -- If the coroutine is not dead, resume it
             if coroutine.status(co) ~= "dead" then
                 -- Check if we need to pause
-                if InterruptSet.PauseStart > 0 then
+                if InterruptSet.PauseStart > 0 and NavSet.PauseStart == 0 then
+                    curTime = os.time()
+
+                    local diff = curTime - InterruptSet.PauseStart
+                    if diff > intPauseTime then
+                        -- Time is up, resume the coroutine and reset the timer values
+                        
+                        -- printf("Pause time: %s Start Time %s Current Time: %s Difference: %s", pauseTime, InterruptSet.PauseStart, curTime, diff)
+                        intPauseTime = 0
+                        InterruptSet.PauseStart = 0
+                        local success, message = coroutine.resume(co, NavSet.SelectedPath)
+                        if not success then
+                            print("Error: " .. message)
+                            -- Reset coroutine on error
+                            co = coroutine.create(NavigatePath)
+                        end
+                    end
+                elseif InterruptSet.PauseStart > 0 and NavSet.PauseStart > 0 then
                     curTime = os.time()
                     local diff = curTime - InterruptSet.PauseStart
-                    if diff > pauseTime then
+                    if diff > intPauseTime then
+                        -- Interrupt is over, reset the values
+                        intPauseTime = 0
+                        InterruptSet.PauseStart = 0
+                        --reset wp pause timer
+                        NavSet.PauseStart = os.time()
+                        status = string.format('Paused: Interrupt over Restarting WP %s delay', curWpPauseTime)
+                     
+                    end
+                elseif InterruptSet.PauseStart == 0 and NavSet.PauseStart > 0 then
+                    curTime = os.time()
+                    local diff = curTime - NavSet.PauseStart
+                    if diff > curWpPauseTime then
                         -- Time is up, resume the coroutine and reset the timer values
                         -- printf("Pause time: %s Start Time %s Current Time: %s Difference: %s", pauseTime, InterruptSet.PauseStart, curTime, diff)
-                        pauseTime = 0
-                        InterruptSet.PauseStart = 0
+                        curWpPauseTime = 0
+                        NavSet.PauseStart = 0
                         local success, message = coroutine.resume(co, NavSet.SelectedPath)
                         if not success then
                             print("Error: " .. message)
