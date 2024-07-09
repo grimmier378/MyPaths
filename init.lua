@@ -87,7 +87,7 @@ local InterruptSet = {
 -- GUI Settings
 local winFlags = bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.MenuBar)
 local RUNNING, DEBUG = true, false
-local showMainGUI, showConfigGUI, showDebugTab, showHUD = true, false, true, false
+local showMainGUI, showConfigGUI, showDebugTab, showHUD, hudLock = true, false, true, false, false
 local scale = 1
 local aSize, locked, hasThemeZ = false, false, false
 local hudTransparency = 0.5
@@ -105,6 +105,7 @@ defaults = {
     Scale = 1.0,
     LoadTheme = 'Default',
     locked = false,
+    HudLock = false,
     AutoSize = false,
     stopForGM = true,
     RecordDlay = 5,
@@ -358,8 +359,14 @@ local function loadSettings()
         newSetting = true
     end
 
+    if settings[script].HudLock == nil then
+        settings[script].HudLock = hudLock
+        newSetting = true
+    end
+
     -- Load the theme
     loadTheme()
+    hudLock = settings[script].HudLock
     InterruptSet = settings[script].Interrupts
     -- Set the settings to the variables
     NavSet.StopDist = settings[script].StopDistance
@@ -2061,12 +2068,15 @@ local function Draw_GUI()
         elseif not doMouseOver then
             ImGui.PushStyleColor(ImGuiCol.WindowBg, ImVec4(0.0, 0.0, 0.0, hudTransparency))
         end
-        local openHUDWin, showHUDWin = ImGui.Begin("MyPaths HUD##HUD", true, bit32.bor(ImGuiWindowFlags.NoCollapse, ImGuiWindowFlags.AlwaysAutoResize, ImGuiWindowFlags.NoTitleBar))
+        local hudFlags = bit32.bor(ImGuiWindowFlags.NoCollapse, ImGuiWindowFlags.AlwaysAutoResize, ImGuiWindowFlags.NoTitleBar)
+        if hudLock then hudFlags = bit32.bor(hudFlags, ImGuiWindowFlags.NoMove) end
+        local openHUDWin, showHUDWin = ImGui.Begin("MyPaths HUD##HUD", true, hudFlags)
         if not openHUDWin then
             ImGui.PopStyleColor()
             showHUD = false
         end
         if showHUDWin then
+            ImGui.BeginGroup()
             -- Set Window Font Scale
             ImGui.SetWindowFontScale(scale)
             if ImGui.IsWindowHovered() then
@@ -2178,6 +2188,20 @@ local function Draw_GUI()
         
     
             end
+            ImGui.EndGroup()
+        if ImGui.BeginPopupContextItem("##MyPaths_Context") then
+
+            local lockLabel = hudLock and 'Unlock' or 'Lock'
+            if ImGui.MenuItem(lockLabel.."##MyPathsHud") then
+                hudLock = not hudLock
+        
+                settings[script].HudLock = hudLock
+                mq.pickle(configFile, settings)
+            end
+
+            ImGui.EndPopup()
+        end
+
         end
         ImGui.PopStyleColor()
         -- Set Window Font Scale
