@@ -28,8 +28,6 @@ local status, lastStatus = 'Idle', ''
 local tmpLoc = ''
 local currZone, lastZone = '', ''
 local lastHP, lastMP, intPauseTime, curWpPauseTime = 0, 0, 0, 0
-local zoningHideGUI = false
-local ZoningPause
 local lastRecordedWP = ''
 local PathStartClock,PathStartTime = nil, nil
 
@@ -657,11 +655,11 @@ local function CheckInterrupts()
         
         flag = true
         invis = true
-    elseif mq.TLO.Me.Zoning() then
-        if not interruptInProgress then mq.cmdf("/nav stop") interruptInProgress = true end
-        status = 'Paused for Zoning.'
-        lastZone = ''
-        flag = true
+    -- elseif currZone ~= lastZone then
+    --     if not interruptInProgress then mq.cmdf("/nav stop") interruptInProgress = true end
+    --     status = 'Paused for Zoning.'
+    --     lastZone = ''
+    --     flag = true
     elseif settings[script].GroupWatch == true and groupWatch(settings[script].WatchType) then
         flag =  true
         if flag and not interruptInProgress then mq.cmdf("/nav stop") interruptInProgress = true end
@@ -870,36 +868,6 @@ end
 
 local co = coroutine.create(NavigatePath)
 
-function ZoningPause()
-    status = 'Zoning'
-    print("Zoning")
-    table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = 'Zoning', Path = "Zoning", WP = 'Zoning', Status = 'Zoning'})
-    mq.delay(1)
-    while mq.TLO.Me.Zoning() == true do
-        NavSet.doNav = false
-        if coroutine.status(co) ~= "dead" then
-            local success, message = coroutine.close(co)
-            if not success then
-                print("Error: " .. message)
-                break
-            end
-        else
-            -- If the coroutine is dead, create a new one
-            co = coroutine.create(NavigatePath)
-        end
-        NavSet.SelectedPath = 'None'
-        NavSet.CurrentStepIndex = 1
-        InterruptSet.PauseStart = 0
-        
-        intPauseTime = 0
-        
-        zoningHideGUI = true
-        showMainGUI = false
-        lastZone = ''
-        mq.delay(1000, function () return mq.TLO.Me.Zoning() == false end)
-    end
-end
-
 -------- Import and Export Functions --------
 local function serialize_table(val, name, skipnewlines, depth)
     skipnewlines = skipnewlines or false
@@ -972,7 +940,7 @@ local exportZone, exportPathName = 'Select Zone...', 'Select Path...'
 local function Draw_GUI()
     -- Main Window
     if showMainGUI then
-        if mq.TLO.Me.Zoning() then return end
+        if currZone ~= lastZone then return end
         -- local currZone = mq.TLO.Zone.ShortName()
         -- Set Window Name
         local winName = string.format('%s##Main_%s', script, meName)
@@ -1852,7 +1820,7 @@ local function Draw_GUI()
 
     -- Config Window
     if showConfigGUI then
-        if mq.TLO.Me.Zoning() then return end
+        if currZone ~= lastZone then return end
             local winName = string.format('%s Config##Config_%s',script, meName)
             local ColCntConf, StyCntConf = LoadTheme.StartTheme(theme.Theme[themeID])
             local openConfig, showConfig = ImGui.Begin(winName,true,bit32.bor(ImGuiWindowFlags.NoCollapse, ImGuiWindowFlags.AlwaysAutoResize))
@@ -2059,7 +2027,7 @@ local function Draw_GUI()
     end
 
     if showHUD then
-        if mq.TLO.Me.Zoning() then return end
+        if currZone ~= lastZone then return end
         
         if mousedOverFlag and doMouseOver then
             ImGui.PushStyleColor(ImGuiCol.WindowBg, ImVec4(0.0, 0.0, 0.0, mouseOverTransparency))
@@ -2501,10 +2469,6 @@ local function Loop()
         local justZoned = false
         local cTime = os.time()
         currZone = mq.TLO.Zone.ShortName()
-        if mq.TLO.Me.Zoning() == true then
-            printf("\ay[\at%s\ax] \agZoning, \ayPausing Navigation...", script)
-            ZoningPause()
-        end
 
         if (InterruptSet.stopForDist and InterruptSet.stopForCharm and InterruptSet.stopForCombat and InterruptSet.stopForFear and InterruptSet.stopForGM and
             InterruptSet.stopForLoot and InterruptSet.stopForMez and InterruptSet.stopForRoot and InterruptSet.stopForSitting and InterruptSet.stopForXtar and InterruptSet.stopForInvis and InterruptSet.stopForDblInvis) then
@@ -2514,7 +2478,6 @@ local function Loop()
         end
 
         if currZone ~= lastZone then
-
             printf("\ay[\at%s\ax] \agZone Changed Last: \at%s Current: \ay%s", script, lastZone, currZone)
             lastZone = currZone
             NavSet.SelectedPath = 'None'
@@ -2569,7 +2532,7 @@ local function Loop()
                 end
             end
             justZoned = true
-        else justZoned = false end
+        end
 
         if NavSet.doNav and NavSet.ChainStart and not NavSet.doChainPause then NavSet.ChainPath = NavSet.SelectedPath end
 
@@ -2614,30 +2577,6 @@ local function Loop()
             mq.delay(500)
         end
 
-        if zoningHideGUI then
-            printf("\ay[\at%s\ax] \agZoning, \ayHiding GUI...", script)
-            mq.delay(1)
-            showMainGUI = true
-            NavSet.LoopCount = 0
-            zoningHideGUI = false
-            NavSet.CurrentStepIndex = 1
-            NavSet.SelectedPath = 'None'
-            NavSet.doNav = false
-            table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = mq.TLO.Zone.ShortName(), Path = NavSet.SelectedPath, WP = 1, Status = 'Finished Zoning'})
-            mq.delay(1)
-            status = 'Idle'
-            if currZone ~= lastZone then
-                NavSet.SelectedPath = 'None'
-                NavSet.doNav = false
-                NavSet.doPause = false
-                lastZone = currZone
-                intPauseTime = 0
-                InterruptSet.PauseStart = 0
-                NavSet.PauseStart = 0
-                printf('\ay[\at%s\ay]\ag Zone Changed Last:\at %s Current:\ay %s', script, lastZone, currZone)
-            end
-        end
-        
         if not mq.TLO.Me.Sitting() then 
             lastHP, lastMP = 0,0
         end
