@@ -231,100 +231,11 @@ local function loadSettings()
     end
 
     -- Check if the settings are missing and use defaults if they are
-
-    if settings[script].locked == nil then
-        settings[script].locked = false
-        newSetting = true
-    end
-
-    if settings[script].InterruptDelay == nil then
-        settings[script].InterruptDelay = InterruptSet.interruptDelay
-        newSetting = true
-    end
-
-    if settings[script].InvisDelay == nil then
-        settings[script].InvisDelay = 3
-        newSetting = true
-    end
-
-    if settings[script].stopForGM == nil then
-        settings[script].stopForGM = InterruptSet.stopForGM
-        newSetting = true
-    end
-
-    if settings[script].RecordMinDist == nil then
-        settings[script].RecordMinDist = NavSet.RecordMinDist
-        newSetting = true
-    end
-
-    if settings[script].InvisAction == nil then
-        settings[script].InvisAction = ''
-        newSetting = true
-    end
-
-    if settings[script].RecordDelay == nil then
-        settings[script].RecordDelay = NavSet.RecordDelay
-        newSetting = true
-    end
-
-    if settings[script].Scale == nil then
-        settings[script].Scale = 1
-        newSetting = true
-    end
-
-    if not settings[script].LoadTheme then
-        settings[script].LoadTheme = 'Default'
-        newSetting = true
-    end
-
-    if settings[script].WatchMana == nil then
-        settings[script].WatchMana = 60
-        newSetting = true
-    end
-
-    if settings[script].WatchHealth == nil then
-        settings[script].WatchHealth = 90
-        newSetting = true
-    end
-
-    if settings[script].WatchType == nil then
-        settings[script].WatchType = 'None'
-        newSetting = true
-    end
-
-    if settings[script].GroupWatch == nil then
-        settings[script].GroupWatch = false
-        newSetting = true
-    end
-
-    if settings[script].MouseHUD == nil then
-        settings[script].MouseHUD = doMouseOver
-        newSetting = true
-    end
-
-    if settings[script].AutoSize == nil then
-        settings[script].AutoSize = aSize
-        newSetting = true
-    end
-
-    if settings[script].PauseStops == nil then
-        settings[script].PauseStops = NavSet.WpPause
-        newSetting = true
-    end
-
-    if settings[script].HeadsUpTransparency == nil then
-        settings[script].HeadsUpTransparency = hudTransparency
-        newSetting = true
-    end
-
-    if settings[script].MouseOverTransparency == nil then
-        settings[script].MouseOverTransparency = mouseOverTransparency
-        newSetting = true
-    end
-
-    if settings[script].StopDistance == nil then
-        settings[script].StopDistance = NavSet.StopDist
-        newSetting = true
+    for k, v in pairs(defaults) do
+        if settings[script][k] == nil then
+            settings[script][k] = v
+            newSetting = true
+        end
     end
 
     if settings[script].Interrupts == nil then
@@ -332,34 +243,11 @@ local function loadSettings()
         newSetting = true
     end
 
-    if settings[script].Interrupts.stopForGoupDist == nil then
-        settings[script].Interrupts.stopForGoupDist = 100
-        newSetting = true
-    end
-
-    if settings[script].Interrupts.stopForDist == nil then
-        settings[script].Interrupts.stopForDist = false
-        newSetting = true
-    end
-
-    if settings[script].Interrupts.stopForCasting == nil then
-        settings[script].Interrupts.stopForCasting = true
-        newSetting = true
-    end
-
-    if settings[script].Interrupts.stopForInvis == nil then
-        settings[script].Interrupts.stopForInvis = false
-        newSetting = true
-    end
-
-    if settings[script].Interrupts.stopForDblInvis == nil then
-        settings[script].Interrupts.stopForDblInvis = false
-        newSetting = true
-    end
-
-    if settings[script].HudLock == nil then
-        settings[script].HudLock = hudLock
-        newSetting = true
+    for k, v in pairs(InterruptSet) do
+        if settings[script].Interrupts[k] == nil then
+            settings[script].Interrupts[k] = v
+            newSetting = true
+        end
     end
 
     -- Load the theme
@@ -1634,6 +1522,7 @@ local function Draw_GUI()
                                     end
                                     ImGui.TableSetColumnIndex(2)
                                     ImGui.SetNextItemWidth(90)
+                                    local changed, changedCmd = false, false
                                     tmpTable[i].delay, changed = ImGui.InputInt("##delay_" .. i, tmpTable[i].delay, 1, 1)
                                     if changed then
                                         for k, v in pairs(Paths[currZone][NavSet.SelectedPath]) do
@@ -1661,6 +1550,7 @@ local function Draw_GUI()
                                         ImGui.SetTooltip("Command")
                                     end
                                     ImGui.TableSetColumnIndex(4)
+                                    local changedDoor, changedDoorRev = false, false
                                     tmpTable[i].door, changedDoor = ImGui.Checkbox(Icon.FA_FORWARD.."##door_" .. i, tmpTable[i].door)
                                     if changedDoor then
                                         for k, v in pairs(Paths[currZone][NavSet.SelectedPath]) do
