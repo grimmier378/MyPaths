@@ -59,6 +59,7 @@ local NavSet = {
 }
 
 local InterruptSet = {
+    interruptsOn = true,
     interruptFound = false,
     reported = false,
     interruptDelay = 2,
@@ -478,6 +479,7 @@ end
 
 local interruptInProgress = false
 local function CheckInterrupts()
+    if not InterruptSet.interruptsOn then return false end
     if not NavSet.doNav then return false end
     local xCount = mq.TLO.Me.XTarget() or 0
     local flag = false
@@ -1760,19 +1762,24 @@ local function Draw_GUI()
                         loadTheme()
                     end
                 end
-                ImGui.SeparatorText("MyPaths Settings##"..script)
-                -- HUD Transparency --
-                ImGui.SetNextItemWidth(100)
-                local lblHudTrans = doMouseOver and "HUD Faded Transparency##"..script or "HUD Transparency##"..script
-                hudTransparency = ImGui.SliderFloat(lblHudTrans, hudTransparency, 0.0, 1)
-                if doMouseOver then
+                ImGui.Spacing()
+
+                if ImGui.CollapsingHeader("HUD Settings##"..script) then
+                    -- HUD Transparency --
                     ImGui.SetNextItemWidth(100)
-                    mouseOverTransparency = ImGui.SliderFloat("HUD MouseOver Transparency##"..script, mouseOverTransparency, 0.0, 1)
+                    local lblHudTrans = doMouseOver and "HUD Faded Transparency##"..script or "HUD Transparency##"..script
+                    hudTransparency = ImGui.SliderFloat(lblHudTrans, hudTransparency, 0.0, 1)
+                    if doMouseOver then
+                        ImGui.SetNextItemWidth(100)
+                        mouseOverTransparency = ImGui.SliderFloat("HUD MouseOver Transparency##"..script, mouseOverTransparency, 0.0, 1)
+                    end
+                    doMouseOver = ImGui.Checkbox("On Mouseover##"..script, doMouseOver)
                 end
-                doMouseOver = ImGui.Checkbox("On Mouseover##"..script, doMouseOver)
+                ImGui.Spacing()
+
                 if ImGui.CollapsingHeader("Interrupt Settings##"..script) then
                 -- Set Interrupts we will stop for
-                    
+                    InterruptSet.interruptsOn = ImGui.Checkbox("Interrupts On##"..script, InterruptSet.interruptsOn)
                     if ImGui.Button('Check All') then
                         InterruptSet.stopForDist = true
                         InterruptSet.stopForCharm = true
@@ -1871,24 +1878,29 @@ local function Draw_GUI()
 
                 end
                 ImGui.Spacing()
-                ImGui.SeparatorText("Recording Settings##"..script)
-                -- Set RecordDley
-                ImGui.SetNextItemWidth(100)
-                NavSet.RecordDelay = ImGui.InputInt("Record Delay##"..script, NavSet.RecordDelay, 1, 5)
-                -- Minimum Distance Between Waypoints
-                ImGui.SetNextItemWidth(100)
-                NavSet.RecordMinDist = ImGui.InputInt("Min Dist. Between WP##"..script, NavSet.RecordMinDist, 1, 50)
 
-                ImGui.SeparatorText("Navigation Settings##"..script)
-                -- Set Stop Distance
-                ImGui.SetNextItemWidth(100)
-                NavSet.StopDist = ImGui.InputInt("Stop Distance##"..script, NavSet.StopDist, 1, 50)
-                -- Set Waypoint Pause time
-                ImGui.SetNextItemWidth(100)
-                NavSet.WpPause = ImGui.InputInt("Waypoint Pause##"..script, NavSet.WpPause, 1, 5)
-                -- Set Interrupt Delay
-                ImGui.SetNextItemWidth(100)
-                InterruptSet.interruptDelay = ImGui.InputInt("Interrupt Delay##"..script, InterruptSet.interruptDelay, 1, 5)
+                if ImGui.CollapsingHeader("Recording Settings##"..script) then
+                    -- Set RecordDley
+                    ImGui.SetNextItemWidth(100)
+                    NavSet.RecordDelay = ImGui.InputInt("Record Delay##"..script, NavSet.RecordDelay, 1, 5)
+                    -- Minimum Distance Between Waypoints
+                    ImGui.SetNextItemWidth(100)
+                    NavSet.RecordMinDist = ImGui.InputInt("Min Dist. Between WP##"..script, NavSet.RecordMinDist, 1, 50)
+                end
+                ImGui.Spacing()
+
+                if ImGui.CollapsingHeader("Navigation Settings##"..script) then
+                    -- Set Stop Distance
+                    ImGui.SetNextItemWidth(100)
+                    NavSet.StopDist = ImGui.InputInt("Stop Distance##"..script, NavSet.StopDist, 1, 50)
+                    -- Set Waypoint Pause time
+                    ImGui.SetNextItemWidth(100)
+                    NavSet.WpPause = ImGui.InputInt("Waypoint Pause##"..script, NavSet.WpPause, 1, 5)
+                    -- Set Interrupt Delay
+                    ImGui.SetNextItemWidth(100)
+                    InterruptSet.interruptDelay = ImGui.InputInt("Interrupt Delay##"..script, InterruptSet.interruptDelay, 1, 5)
+                end
+                ImGui.Spacing()
 
                 -- Save & Close Button --
                 if ImGui.Button("Save & Close") then
@@ -2111,6 +2123,7 @@ local function displayHelp()
     printf("\ay[\at%s\ax] \agExample: \ay/mypaths \aogo \ayloop \am\"Loop A\"", script)
     printf("\ay[\at%s\ax] \agExample: \ay/mypaths \aostop", script)
     printf("\ay[\at%s\ax] \agCommands: \ay/mypaths [\atcombat\ax|\atxtarg\ax] [\aton\ax|\atoff\ax] \ay- \atToggle Combat or Xtarget.", script)
+    printf("\ay[\at%s\ax] \agCommands: \ay/mypaths [\atdointerrupts\ax] [\aton\ax|\atoff\ax] \ay- \atToggle Interrupts.", script)
 end
 
 local function bind(...)
@@ -2192,6 +2205,14 @@ local function bind(...)
             elseif action == 'off' then
                 InterruptSet.stopForCombat = false
                 InterruptSet.stopForAll = false
+            end
+        elseif key == 'dointerrupts' then
+            if action == 'on' then
+                InterruptSet.interruptsOn = true
+                printf("\ay[\at%s\ax] \agPausing for Interrupts: \atON", script)
+            elseif action == 'off' then
+                InterruptSet.interruptsOn = false
+                printf("\ay[\at%s\ax] \agPausing for Interrupts: \arOFF", script)
             end
         elseif key == 'list' then
             if action == 'zones' then
