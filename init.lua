@@ -95,6 +95,7 @@ local doMouseOver = true
 
 -- File Paths
 local themeFile = string.format('%s/MyUI/MyThemeZ.lua', mq.configDir)
+local configFileOld = string.format('%s/MyUI/%s/%s_Configs.lua', mq.configDir, script, script)
 local configFile = string.format('%s/MyUI/%s/%s_Configs.lua', mq.configDir, script, script)
 local pathsFile = string.format('%s/MyUI/%s/%s_Paths.lua', mq.configDir, script, script)
 local themezDir = mq.luaDir .. '/themez/init.lua'
@@ -216,10 +217,15 @@ local function loadSettings()
 
     -- Check Settings File_Exists
     if not File_Exists(configFile) then
-        -- Create the settings file from the defaults
-        settings[script] = defaults
-        mq.pickle(configFile, settings)
-        loadSettings()
+        if File_Exists(configFileOld) then
+            settings = dofile(configFileOld)
+            mq.pickle(configFile, settings)
+        else
+            -- Create the settings file from the defaults
+            settings[script] = defaults
+            mq.pickle(configFile, settings)
+            loadSettings()
+        end
     else
         -- Load settings from the Lua config file
         settings = dofile(configFile)
@@ -1056,6 +1062,10 @@ local function Draw_GUI()
                                     end
                                 end
                                 ImGui.EndCombo()
+                            end
+                            ImGui.SameLine()
+                            if ImGui.Button(Icon.MD_DELETE_SWEEP..'##ClearSelectedPath') then
+                                NavSet.SelectedPath = 'None'
                             end
                             ImGui.SameLine()
                             ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1, 0.4, 0.4, 0.4))
@@ -2356,12 +2366,14 @@ end
 
 local function Init()
     processArgs()
+    -- Get Character Name
+    meName = mq.TLO.Me.Name()
+    configFile = string.format('%s/MyUI/%s/%s/%s_Configs.lua', mq.configDir, script, mq.TLO.EverQuest.Server(), meName)
     -- Load Settings
     loadSettings()
     loadPaths()
     mq.bind('/mypaths', bind)
-    -- Get Character Name
-    meName = mq.TLO.Me.Name()
+
     -- Check if ThemeZ exists
     if File_Exists(themezDir) then
         hasThemeZ = true
