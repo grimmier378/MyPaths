@@ -2443,6 +2443,7 @@ local function Loop()
                         end
                         NavSet.doChainPause = false
                         NavSet.doNav = true
+                        PathStartClock,PathStartTime = os.date("%I:%M:%S %p"), os.time()
                         status = 'Navigating'
                         printf('\ay[\at%s\ax] \agStarting navigation for path: \ay%s \agin zone: \ay%s', script, NavSet.SelectedPath, currZone)
                     end
@@ -2452,6 +2453,10 @@ local function Loop()
                     NavSet.ChainStart = false
                     NavSet.ChainZone = 'Select Zone...'
                     NavSet.ChainPath = 'Select Path...'
+                    PathStartClock,PathStartTime = nil, nil
+                    NavSet.doNav = false
+                    NavSet.SelectedPath = 'None'
+                    NavSet.CurrentStepIndex = 1
                 end
             end
             justZoned = true
@@ -2672,13 +2677,14 @@ local function Loop()
                             NavSet.doPingPong = false
                         end
                         NavSet.CurChain = NavSet.CurChain + 1
-                        mq.delay(500)
+                        mq.delay(5)
                         NavSet.doNav = true
+                        PathStartClock,PathStartTime = os.date("%I:%M:%S %p"), os.time()
                     end
-                    mq.delay(500)            
+                    mq.delay(5)
                 elseif ChainedPaths[NavSet.CurChain].Path == NavSet.ChainPath and NavSet.CurChain == #ChainedPaths then
                     if not NavSet.ChainLoop then
-                    NavSet.ChainStart = false
+                        NavSet.ChainStart = false
                         if ChainedPaths[NavSet.CurChain].Type == 'Normal' or ChainedPaths[NavSet.CurChain].Type == 'Reverse' then
                             NavSet.doNav = false
                             NavSet.doChainPause = false
