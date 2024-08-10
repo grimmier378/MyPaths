@@ -99,6 +99,10 @@ local configFileOld = string.format('%s/MyUI/%s/%s_Configs.lua', mq.configDir, s
 local configFile = string.format('%s/MyUI/%s/%s_Configs.lua', mq.configDir, script, script)
 local pathsFile = string.format('%s/MyUI/%s/%s_Paths.lua', mq.configDir, script, script)
 local themezDir = mq.luaDir .. '/themez/init.lua'
+-- SQL information
+local PackageMan = require('mq/PackageMan')
+local sqlite3 = PackageMan.Require('lsqlite3')
+local PathDB = string.format('%s/MyUI/%s/%s.db', mq.configDir, script, script)
 
 -- Default Settings
 defaults = {
@@ -168,48 +172,104 @@ local function loadTheme()
     end
 end
 
-local function loadPaths()
-    -- Check for the Paths File
-    Paths = {} -- Reset the Paths Table
-    if File_Exists(pathsFile) then
-        Paths = dofile(pathsFile)
-    else
-        -- Create the paths file from the defaults
-        Paths = require('paths') -- your local paths file incase the user doesn't have one in config folder
-        mq.pickle(pathsFile, Paths)
-    end
-    local needsUpdate = false
-    for zone, data in pairs(Paths) do
-        for path, wp in pairs(data) do
-            for i, wData in pairs(wp) do
-                if wData.delay == nil then
-                    wData.delay = 0
-                    needsUpdate = true
-                end
-                if wData.cmd == nil then
-                    wData.cmd = ''
-                    needsUpdate = true
-                end
-                if wData.door == nil then
-                    wData.door = false
-                    needsUpdate = true
-                end
-                if wData.doorRev == nil then
-                    wData.doorRev = false
-                    needsUpdate = true
-                end
-                if wData.Interrupts ~= nil then
-                    wData.Interrupts = nil
-                    needsUpdate = true
+local function SavePaths()
+    -- Save paths to the SQLite3 database
+    local db = sqlite3.open(PathDB)
+    if db then
+        -- Clear existing entries for fresh insert
+        db:exec("DELETE FROM Paths_Table")
+
+        local stmt = db:prepare([[
+            INSERT INTO Paths_Table (zone_name, path_name, step_number, step_cmd, step_door, step_door_rev, step_loc, step_delay)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ]])
+
+        for zone, paths in pairs(Paths) do
+            for path, waypoints in pairs(paths) do
+                for step, data in pairs(waypoints) do
+                    stmt:bind_values(
+                        zone,
+                        path,
+                        data.step,
+                        data.cmd,
+                        data.door and 1 or 0,
+                        data.doorRev and 1 or 0,
+                        data.loc,
+                        data.delay
+                    )
+                    stmt:step()
+                    stmt:reset()
                 end
             end
         end
+
+        stmt:finalize()
+        db:close()
+    else
+        print("Failed to open the database.")
     end
-    if needsUpdate then mq.pickle(pathsFile, Paths) end
+
+    -- Optionally, save paths to a Lua file as a backup
+    mq.pickle(pathsFile, Paths)
 end
 
-local function SavePaths()
-    mq.pickle(pathsFile, Paths)
+local function loadPaths()
+    -- Check if the SQLite3 database file exists
+    if not File_Exists(PathDB) then
+        -- Create the database and its table if it doesn't exist
+        printf("Creating the MyPaths Database")
+        local db = sqlite3.open(PathDB)
+        db:exec[[
+            CREATE TABLE IF NOT EXISTS Paths_Table (
+                "zone_name" TEXT NOT NULL,
+                "path_name" TEXT NOT NULL,
+                "step_number" INTEGER NOT NULL,
+                "step_cmd" TEXT,
+                "step_door" INTEGER NOT NULL DEFAULT 0,
+                "step_door_rev" INTEGER NOT NULL DEFAULT 0,
+                "step_loc" TEXT NOT NULL,
+                "step_delay" INTEGER NOT NULL DEFAULT 0,
+                "id" INTEGER PRIMARY KEY AUTOINCREMENT
+            );
+        ]]
+        db:close()
+    end
+
+    -- Reset the Paths table
+    Paths = {}
+
+    -- Load paths from the SQLite3 database
+    local db = sqlite3.open(PathDB, sqlite3.OPEN_READONLY)
+    if db then
+        local stmt = db:prepare("SELECT * FROM Paths_Table ORDER BY zone_name, path_name, step_number")
+        for row in stmt:nrows() do
+            if not Paths[row.zone_name] then
+                Paths[row.zone_name] = {}
+            end
+            if not Paths[row.zone_name][row.path_name] then
+                Paths[row.zone_name][row.path_name] = {}
+            end
+            Paths[row.zone_name][row.path_name][row.step_number] = {
+                doorRev = row.step_door_rev == 1,
+                step = row.step_number,
+                delay = row.step_delay,
+                loc = row.step_loc,
+                cmd = row.step_cmd,
+                door = row.step_door == 1,
+            }
+        end
+        stmt:finalize()
+        db:close()
+    else
+        print("Failed to open the database.")
+    end
+
+    -- Fallback to load from Lua file if the database is empty
+    if next(Paths) == nil and File_Exists(pathsFile) then
+        Paths = dofile(pathsFile)
+        printf("Populating MyPaths DB from Lua file! Depending on size, This may take some time...")
+        SavePaths()  -- Save to the SQLite database after loading from Lua file
+    end
 end
 
 local function loadSettings()
@@ -320,11 +380,22 @@ local function RecordWaypoint(name)
         InterruptSet.reported = false
     end
     Paths[zone][name] = tmp
+
+    -- Update the database directly
+    local db = sqlite3.open(PathDB)
+    local stmt = db:prepare([[
+        INSERT INTO Paths_Table (zone_name, path_name, step_number, step_cmd, step_door, step_door_rev, step_loc, step_delay)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ]])
+    stmt:bind_values(zone, name, index, '', 0, 0, loc, 0)
+    stmt:step()
+    stmt:finalize()
+    db:close()
+
     if NavSet.autoRecord then
         status = "Recording: Waypoint #"..index.." Added!"
     end
     if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = zone, Path = name, WP = "Add WP#"..index, Status = 'Waypoint #'..index..' Added Successfully!'}) end
-    SavePaths()
 end
 
 local function RemoveWaypoint(name, step)
@@ -333,16 +404,36 @@ local function RemoveWaypoint(name, step)
     if not Paths[zone][name] then return end
     local tmp = Paths[zone][name]
     if not tmp then return end
+
+    -- Remove the specified waypoint from the in-memory table
     for i, data in pairs(tmp) do
         if data.step == step then
             table.remove(tmp, i)
+            -- Also remove it from the database
+            local db = sqlite3.open(PathDB)
+            local stmt = db:prepare("DELETE FROM Paths_Table WHERE zone_name = ? AND path_name = ? AND step_number = ?")
+            stmt:bind_values(zone, name, step)
+            stmt:step()
+            stmt:finalize()
+            db:close()
+            break
         end
     end
+
+    -- Reindex the remaining waypoints
     for i, data in pairs(tmp) do
         data.step = i
+        -- Update the step number in the database
+        local db = sqlite3.open(PathDB)
+        local stmt = db:prepare("UPDATE Paths_Table SET step_number = ? WHERE zone_name = ? AND path_name = ? AND step_loc = ?")
+        stmt:bind_values(i, zone, name, data.loc)
+        stmt:step()
+        stmt:finalize()
+        db:close()
     end
+
+    -- Update the in-memory Paths table
     Paths[zone][name] = tmp
-    SavePaths()
 end
 
 local function ClearWaypoints(name)
@@ -350,8 +441,16 @@ local function ClearWaypoints(name)
     if not Paths[zone] then return end
     if not Paths[zone][name] then return end
     Paths[zone][name] = {}
+
+    -- Remove all waypoints from the database for this path
+    local db = sqlite3.open(PathDB)
+    local stmt = db:prepare("DELETE FROM Paths_Table WHERE zone_name = ? AND path_name = ?")
+    stmt:bind_values(zone, name)
+    stmt:step()
+    stmt:finalize()
+    db:close()
+
     if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = zone, Path = name, WP = 'All Waypoints', Status = 'All Waypoints Cleared Successfully!'}) end
-    SavePaths()
 end
 
 local function DeletePath(name)
@@ -359,16 +458,26 @@ local function DeletePath(name)
     if not Paths[zone] then return end
     if not Paths[zone][name] then return end
     Paths[zone][name] = nil
+
+    -- Remove the entire path from the database
+    local db = sqlite3.open(PathDB)
+    local stmt = db:prepare("DELETE FROM Paths_Table WHERE zone_name = ? AND path_name = ?")
+    stmt:bind_values(zone, name)
+    stmt:step()
+    stmt:finalize()
+    db:close()
+
     if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = zone, Path = name, WP = 'Path Deleted', Status = 'Path ['..name..'] Deleted Successfully!'}) end
-    SavePaths()
 end
 
 local function CreatePath(name)
     local zone = mq.TLO.Zone.ShortName()
     if not Paths[zone] then Paths[zone] = {} end
     if not Paths[zone][name] then Paths[zone][name] = {} end
+
+    -- No need to update the database until waypoints are added
+
     if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = zone, Path = name, WP = 'Path Created', Status = 'Path ['..name..'] Created Successfully!'}) end
-    SavePaths()
 end
 
 local function AutoRecordPath(name)
@@ -377,8 +486,51 @@ local function AutoRecordPath(name)
         RecordWaypoint(name)
         lastTime = curTime
     end
-    SavePaths()
 end
+
+local function UpdatePath(zone, pathName)
+    if not Paths[zone] or not Paths[zone][pathName] then
+        printf("Path %s in zone %s does not exist.", pathName, zone)
+        return
+    end
+
+    -- Open the SQLite database
+    local db = sqlite3.open(PathDB)
+    if not db then
+        print("Failed to open the database.")
+        return
+    end
+
+    -- Delete the existing path in the database
+    local deleteStmt = db:prepare("DELETE FROM Paths_Table WHERE zone_name = ? AND path_name = ?")
+    deleteStmt:bind_values(zone, pathName)
+    deleteStmt:step()
+    deleteStmt:finalize()
+
+    -- Re-add the updated path
+    for _, waypoint in pairs(Paths[zone][pathName]) do
+        local insertStmt = db:prepare([[
+            INSERT INTO Paths_Table (zone_name, path_name, step_number, step_cmd, step_door, step_door_rev, step_loc, step_delay)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ]])
+        insertStmt:bind_values(
+            zone,
+            pathName,
+            waypoint.step,
+            waypoint.cmd,
+            waypoint.door and 1 or 0,
+            waypoint.doorRev and 1 or 0,
+            waypoint.loc,
+            waypoint.delay
+        )
+        insertStmt:step()
+        insertStmt:finalize()
+    end
+
+    -- Close the database connection
+    db:close()
+end
+
 
 local function groupDistance()
     local member = mq.TLO.Group.Member
@@ -814,6 +966,13 @@ local function import_paths(import_string)
         print('\arERROR: Failed to import paths\ax')
         return
     end
+
+    local db = sqlite3.open(PathDB)
+    if not db then
+        print('\arERROR: Failed to open database\ax')
+        return
+    end
+
     for zone, paths in pairs(imported_paths) do
         if not Paths[zone] then
             Paths[zone] = paths
@@ -822,8 +981,21 @@ local function import_paths(import_string)
                 Paths[zone][pathName] = pathData
             end
         end
+
+        for pathName, pathData in pairs(paths) do
+            for _, waypoint in pairs(pathData) do
+                local stmt = db:prepare([[
+                    INSERT INTO Paths_Table (zone_name, path_name, step_number, step_cmd, step_door, step_door_rev, step_loc, step_delay)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ]])
+                stmt:bind_values(zone, pathName, waypoint.step, waypoint.cmd, waypoint.door and 1 or 0, waypoint.doorRev and 1 or 0, waypoint.loc, waypoint.delay)
+                stmt:step()
+                stmt:finalize()
+            end
+        end
     end
-    SavePaths()
+
+    db:close()
     return imported_paths
 end
 
@@ -832,6 +1004,133 @@ local mousedOverFlag = false
 local importString = ''
 local tmpCmd = ''
 local exportZone, exportPathName = 'Select Zone...', 'Select Path...'
+
+local function DrawStatus()
+    ImGui.BeginGroup()
+    -- Set Window Font Scale
+    ImGui.SetWindowFontScale(scale)
+    if ImGui.IsWindowHovered() then
+        mousedOverFlag = true
+        if ImGui.IsMouseDoubleClicked(0) then
+            showMainGUI = not showMainGUI
+        end
+        ImGui.SetTooltip("Double Click to Toggle Main GUI")
+    else
+        mousedOverFlag = false
+    end
+    if NavSet.PausedActiveGN then
+        if mq.TLO.SpawnCount('gm')() > 0 then
+        ImGui.TextColored(1,0,0,1,"!!%s GM in Zone %s!!", Icon.FA_BELL,Icon.FA_BELL)
+        end
+    end
+    ImGui.Text("Current Zone: ")
+    ImGui.SameLine()
+    ImGui.TextColored(0,1,0,1,"%s", currZone)
+    ImGui.SameLine()
+    ImGui.Text("Selected Path: ")
+    ImGui.SameLine()
+    ImGui.TextColored(0,1,1,1,"%s", NavSet.SelectedPath)
+    ImGui.Text("Current Loc: ")
+    ImGui.SameLine()
+    ImGui.TextColored(1,1,0,1,"%s", mq.TLO.Me.LocYXZ())
+    -- if NavSet.doNav then
+    --     local tmpTable = sortPathsTable(currZone, NavSet.SelectedPath) or {}
+    --     if tmpTable[NavSet.CurrentStepIndex] then
+    --         ImGui.Text("Current WP: ")
+    --         ImGui.SameLine()
+    --         ImGui.TextColored(1,1,0,1,"%s ",tmpTable[NavSet.CurrentStepIndex].step or 0)
+    --         ImGui.SameLine()
+    --         ImGui.Text("Distance: ")
+    --         ImGui.SameLine()
+    --         ImGui.TextColored(0,1,1,1,"%.2f", mq.TLO.Math.Distance(tmpLoc)())
+    --         local tmpDist = mq.TLO.Math.Distance(tmpLoc)() or 0
+    --         local dist = string.format("%.2f",tmpDist)
+    --         local tmpStatus = status
+    --         if tmpStatus:find("Distance") then
+    --             tmpStatus = tmpStatus:sub(1, tmpStatus:find("Distance:") - 1)
+    --             tmpStatus = string.format("%s Distance: %s",tmpStatus,dist)
+    --             ImGui.TextColored(ImVec4(0,1,1,1), tmpStatus)
+    --         end
+    --     end
+    -- end
+
+    ImGui.Text("Nav Type: ")
+    ImGui.SameLine()
+    if not NavSet.doNav then
+        ImGui.TextColored(ImVec4(0, 1, 0, 1), "None")
+    else
+        if NavSet.doPingPong then
+            ImGui.TextColored(ImVec4(0, 1, 0, 1), "Ping Pong")
+        elseif NavSet.doLoop then
+            ImGui.TextColored(ImVec4(0, 1, 0, 1), "Loop ")
+            ImGui.SameLine()
+            ImGui.TextColored(ImVec4(0, 1, 1, 1), "(%s)", NavSet.LoopCount)
+        elseif NavSet.doSingle then
+            ImGui.TextColored(ImVec4(0, 1, 0, 1), "Single")
+        else 
+            ImGui.TextColored(ImVec4(0, 1, 0, 1), "Normal")
+        end
+        ImGui.SameLine()
+        ImGui.Text("Reverse: ")
+        ImGui.SameLine()
+        if NavSet.doReverse then
+            ImGui.TextColored(ImVec4(0, 1, 0, 1), "Yes")
+        else
+            ImGui.TextColored(ImVec4(0, 1, 0, 1), "No")
+        end
+    end
+    local tmpStatus = status
+    if tmpStatus:find("Distance:") then
+        tmpStatus = tmpStatus:sub(1, tmpStatus:find("Distance:") - 1)
+    end
+    if status:find("Idle") then
+        ImGui.Text("Status: ")
+        ImGui.SameLine()
+        ImGui.TextColored(ImVec4(0, 1, 1, 1), status)
+    elseif status:find("Paused") then
+        ImGui.Text("Status: ")
+        ImGui.SameLine()
+        if status:find("Mana") then
+            ImGui.TextColored(ImVec4(0.000, 0.438, 0.825, 1.000), status)
+        elseif status:find("Health") then
+            ImGui.TextColored(ImVec4(0.928, 0.352, 0.035, 1.000), status)
+        else
+            ImGui.TextColored(ImVec4(0.9, 0.4, 0.4, 1), status)
+        end
+    elseif status:find("Arrived") then
+        ImGui.Text("Status: ")
+        ImGui.SameLine()
+        ImGui.TextColored(ImVec4(0, 1, 0, 1), status)
+    elseif status:find("Last WP is less than") then
+        ImGui.TextColored(ImVec4(0.9, 0.4, 0.4, 1), status)
+    elseif status:find("Recording") then
+        ImGui.TextColored(ImVec4(0.4, 0.9, 0.4, 1), status)
+    elseif status:find("Nav to WP") then
+        ImGui.Text("Status: ")
+        ImGui.SameLine()
+        ImGui.TextColored(ImVec4(1,1,0,1), tmpStatus)
+    else
+        ImGui.Text("Status: ")
+        ImGui.SameLine()
+        ImGui.TextColored(ImVec4(1,1,1,1), status)
+    end
+    if PathStartClock ~= nil then
+        ImGui.Text("Start Time: ")
+        ImGui.SameLine()
+        ImGui.TextColored(0,1,1,1,"%s", PathStartClock)
+        ImGui.SameLine()
+        ImGui.Text("Elapsed : ")
+        ImGui.SameLine()
+        local timeDiff = os.time() - PathStartTime
+        local hours = math.floor(timeDiff / 3600)
+        local minutes = math.floor((timeDiff % 3600) / 60)
+        local seconds = timeDiff % 60
+
+        ImGui.TextColored(0, 1, 0, 1, string.format("%02d:%02d:%02d", hours, minutes, seconds))
+
+    end
+    ImGui.EndGroup()
+end
 
 local function Draw_GUI()
     -- Main Window
@@ -919,17 +1218,7 @@ local function Draw_GUI()
             end
             if not showHUD then
                 -- Main Window Content 
-                ImGui.Text("Current Zone: ")
-                ImGui.SameLine()
-                ImGui.TextColored(0,1,0,1,"%s", currZone)
-                ImGui.SameLine()
-                ImGui.Text("Selected Path: ")
-                ImGui.SameLine()
-                ImGui.TextColored(0,1,1,1,"%s", NavSet.SelectedPath)
-                
-                ImGui.Text("Current Loc: ")
-                ImGui.SameLine()
-                ImGui.TextColored(1,1,0,1,"%s", mq.TLO.Me.LocYXZ())
+                DrawStatus()
                 if NavSet.doNav then
                     ImGui.Text("Current Destination Waypoint: ")
                     ImGui.SameLine()
@@ -1028,7 +1317,7 @@ local function Draw_GUI()
                     ImGui.TextColored(ImVec4(1,1,0,1), tmpStatus)
                 end
             end
-            if PathStartClock ~= nil then
+            if PathStartClock ~= nil and showHUD then
                 ImGui.Text("Start Time: ")
                 ImGui.SameLine()
                 ImGui.TextColored(0,1,1,1,"%s", PathStartClock)
@@ -1104,7 +1393,7 @@ local function Draw_GUI()
                                     for i = 1, #Paths[currZone][NavSet.SelectedPath] do
                                         table.insert(Paths[currZone][newPath], Paths[currZone][NavSet.SelectedPath][i])
                                     end
-                                    SavePaths()
+                                    UpdatePath(currZone, NavSet.SelectedPath)
                                     NavSet.SelectedPath = newPath
                                     newPath = ''
                                 end
@@ -1153,7 +1442,7 @@ local function Draw_GUI()
                                                 end
                                             end
                                             importString = ''
-                                            SavePaths()
+                                            UpdatePath(currZone, NavSet.SelectedPath)
                                         end
                                     end
                                     ImGui.PopStyleColor()
@@ -1540,7 +1829,7 @@ local function Draw_GUI()
                                         for k, v in pairs(Paths[currZone][NavSet.SelectedPath]) do
                                             if v.step == tmpTable[i].step then
                                                 Paths[currZone][NavSet.SelectedPath][k].delay = tmpTable[i].delay
-                                                SavePaths()
+                                                UpdatePath(currZone, NavSet.SelectedPath)
                                             end
                                         end
                                     end
@@ -1554,7 +1843,7 @@ local function Draw_GUI()
                                         for k, v in pairs(Paths[currZone][NavSet.SelectedPath]) do
                                             if v.step == tmpTable[i].step then
                                                 Paths[currZone][NavSet.SelectedPath][k].cmd = tmpTable[i].cmd
-                                                SavePaths()
+                                                UpdatePath(currZone, NavSet.SelectedPath)
                                             end
                                         end
                                     end
@@ -1568,7 +1857,7 @@ local function Draw_GUI()
                                         for k, v in pairs(Paths[currZone][NavSet.SelectedPath]) do
                                             if v.step == tmpTable[i].step then
                                                 Paths[currZone][NavSet.SelectedPath][k].door = tmpTable[i].door
-                                                SavePaths()
+                                                UpdatePath(currZone, NavSet.SelectedPath)
                                             end
                                         end
                                     end
@@ -1581,7 +1870,7 @@ local function Draw_GUI()
                                         for k, v in pairs(Paths[currZone][NavSet.SelectedPath]) do
                                             if v.step == tmpTable[i].step then
                                                 Paths[currZone][NavSet.SelectedPath][k].doorRev = tmpTable[i].doorRev
-                                                SavePaths()
+                                                UpdatePath(currZone, NavSet.SelectedPath)
                                             end
                                         end
                                     end
@@ -1608,7 +1897,7 @@ local function Draw_GUI()
                                                 end
                                             end
                                             -- Paths[currZone][selectedPath][tmpTable[i].step].loc = mq.TLO.Me.LocYXZ()
-                                            SavePaths()
+                                            UpdatePath(currZone, NavSet.SelectedPath)
                                         end
                                         if ImGui.IsItemHovered() then
                                             ImGui.SetTooltip("Update Loc")
@@ -1632,7 +1921,7 @@ local function Draw_GUI()
                                                     Paths[currZone][NavSet.SelectedPath][k] = tmpTable[i - 1]
                                                 end
                                             end
-                                            SavePaths()
+                                            UpdatePath(currZone, NavSet.SelectedPath)
                                         end
                                         ImGui.SameLine(0,0)
                                         if i < #tmpTable and ImGui.Button(Icon.FA_CHEVRON_DOWN .. "##down_" .. i) then
@@ -1652,7 +1941,7 @@ local function Draw_GUI()
                                                     Paths[currZone][NavSet.SelectedPath][k] = tmpTable[i + 1]
                                                 end
                                             end
-                                            SavePaths()
+                                            UpdatePath(currZone, NavSet.SelectedPath)
                                         end
                                     end
                                 end
@@ -1956,120 +2245,8 @@ local function Draw_GUI()
             showHUD = false
         end
         if showHUDWin then
-            ImGui.BeginGroup()
-            -- Set Window Font Scale
-            ImGui.SetWindowFontScale(scale)
-            if ImGui.IsWindowHovered() then
-                mousedOverFlag = true
-                if ImGui.IsMouseDoubleClicked(0) then
-                    showMainGUI = not showMainGUI
-                end
-                ImGui.SetTooltip("Double Click to Toggle Main GUI")
-            else
-                mousedOverFlag = false
-            end
-            if NavSet.PausedActiveGN then
-                if mq.TLO.SpawnCount('gm')() > 0 then
-                ImGui.TextColored(1,0,0,1,"!!%s GM in Zone %s!!", Icon.FA_BELL,Icon.FA_BELL)
-                end
-            end
-            ImGui.Text("Current Zone: ")
-            ImGui.SameLine()
-            ImGui.TextColored(0,1,0,1,"%s", currZone)
-            ImGui.SameLine()
-            ImGui.Text("Selected Path: ")
-            ImGui.SameLine()
-            ImGui.TextColored(0,1,1,1,"%s", NavSet.SelectedPath)
-            ImGui.Text("Current Loc: ")
-            ImGui.SameLine()
-            ImGui.TextColored(1,1,0,1,"%s", mq.TLO.Me.LocYXZ())
-            if NavSet.doNav then
-                local tmpTable = sortPathsTable(currZone, NavSet.SelectedPath) or {}
-                if tmpTable[NavSet.CurrentStepIndex] then
-                    ImGui.Text("Current WP: ")
-                    ImGui.SameLine()
-                    ImGui.TextColored(1,1,0,1,"%s ",tmpTable[NavSet.CurrentStepIndex].step or 0)
-                    ImGui.SameLine()
-                    ImGui.Text("Distance: ")
-                    ImGui.SameLine()
-                    ImGui.TextColored(0,1,1,1,"%.2f", mq.TLO.Math.Distance(tmpLoc)())
-                end
-            end
-
-            ImGui.Text("Nav Type: ")
-            ImGui.SameLine()
-            if not NavSet.doNav then
-                ImGui.TextColored(ImVec4(0, 1, 0, 1), "None")
-            else
-                if NavSet.doPingPong then
-                    ImGui.TextColored(ImVec4(0, 1, 0, 1), "Ping Pong")
-                elseif NavSet.doLoop then
-                    ImGui.TextColored(ImVec4(0, 1, 0, 1), "Loop ")
-                    ImGui.SameLine()
-                    ImGui.TextColored(ImVec4(0, 1, 1, 1), "(%s)", NavSet.LoopCount)
-                elseif NavSet.doSingle then
-                    ImGui.TextColored(ImVec4(0, 1, 0, 1), "Single")
-                else 
-                    ImGui.TextColored(ImVec4(0, 1, 0, 1), "Normal")
-                end
-                ImGui.SameLine()
-                ImGui.Text("Reverse: ")
-                ImGui.SameLine()
-                if NavSet.doReverse then
-                    ImGui.TextColored(ImVec4(0, 1, 0, 1), "Yes")
-                else
-                    ImGui.TextColored(ImVec4(0, 1, 0, 1), "No")
-                end
-            end
-            if status:find("Idle") then
-                ImGui.Text("Status: ")
-                ImGui.SameLine()
-                ImGui.TextColored(ImVec4(0, 1, 1, 1), status)
-            elseif status:find("Paused") then
-                ImGui.Text("Status: ")
-                ImGui.SameLine()
-                if status:find("Mana") then
-                    ImGui.TextColored(ImVec4(0.000, 0.438, 0.825, 1.000), status)
-                elseif status:find("Health") then
-                    ImGui.TextColored(ImVec4(0.928, 0.352, 0.035, 1.000), status)
-                else
-                    ImGui.TextColored(ImVec4(0.9, 0.4, 0.4, 1), status)
-                end
-            elseif status:find("Arrived") then
-                ImGui.Text("Status: ")
-                ImGui.SameLine()
-                ImGui.TextColored(ImVec4(0, 1, 0, 1), status)
-            elseif status:find("Last WP is less than") then
-                ImGui.TextColored(ImVec4(0.9, 0.4, 0.4, 1), status)
-            elseif status:find("Recording") then
-                ImGui.TextColored(ImVec4(0.4, 0.9, 0.4, 1), status)
-            elseif status:find("Nav to WP") then
-                ImGui.Text("Status: ")
-                ImGui.SameLine()
-                ImGui.TextColored(ImVec4(1,1,0,1), status)
-            else
-                ImGui.Text("Status: ")
-                ImGui.SameLine()
-                ImGui.TextColored(ImVec4(1,1,1,1), status)
-            end
-            if PathStartClock ~= nil then
-                ImGui.Text("Start Time: ")
-                ImGui.SameLine()
-                ImGui.TextColored(0,1,1,1,"%s", PathStartClock)
-                ImGui.SameLine()
-                ImGui.Text("Elapsed : ")
-                ImGui.SameLine()
-                local timeDiff = os.time() - PathStartTime
-                local hours = math.floor(timeDiff / 3600)
-                local minutes = math.floor((timeDiff % 3600) / 60)
-                local seconds = timeDiff % 60
-        
-                ImGui.TextColored(0, 1, 0, 1, string.format("%02d:%02d:%02d", hours, minutes, seconds))
-        
-    
-            end
-            ImGui.EndGroup()
-        if ImGui.BeginPopupContextItem("##MyPaths_Context") then
+            DrawStatus()
+            if ImGui.BeginPopupContextItem("##MyPaths_Context") then
 
             local lockLabel = hudLock and 'Unlock' or 'Lock'
             if ImGui.MenuItem(lockLabel.."##MyPathsHud") then
