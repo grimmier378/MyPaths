@@ -537,7 +537,7 @@ local function CheckInterrupts()
         if not interruptInProgress then mq.cmdf("/nav stop") interruptInProgress = true end
         status = 'Paused for Charmed.'
         flag = true
-    elseif mq.TLO.Me.Casting() ~= nil and InterruptSet.stopForCasting then
+    elseif mq.TLO.Me.Casting() ~= nil and mq.TLO.Me.Class.ShortName() ~= 'BRD' and InterruptSet.stopForCasting then
         if not interruptInProgress then mq.cmdf("/nav stop") interruptInProgress = true end
         status = 'Paused for Casting.'
         flag = true
@@ -1713,8 +1713,8 @@ local function Draw_GUI()
             end
             -- ImGui.EndChild()
         end
-            -- Reset Font Scale
-            ImGui.SetWindowFontScale(1)
+        -- Reset Font Scale
+        ImGui.SetWindowFontScale(1)
         -- Unload Theme
         LoadTheme.EndTheme(ColorCount, StyleCount)
         ImGui.End()
@@ -2113,7 +2113,7 @@ local function displayHelp()
     Example: /mypaths go loop "Loop A"
     Example: /mypaths stop
     Commands: /mypaths [combat|xtarg] [on|off] - Toggle Combat or Xtarget.]]
-    printf("\ay[\at%s\ax] \agCommands: \ay/mypaths [go|stop|list|chainadd|chainclear|chainloop|show|quit|help] [loop|rloop|start|reverse|pingpong|closest|rclosest] [path]", script)
+    printf("\ay[\at%s\ax] \agCommands: \ay/mypaths [go|stop|list|chainadd|chainclear|chainloop|show|quit|reload|help] [loop|rloop|start|reverse|pingpong|closest|rclosest] [path]", script)
     printf("\ay[\at%s\ax] \agOptions: \aygo \aw= \atREQUIRES arguments and Path name see below for Arguments.", script)
     printf("\ay[\at%s\ax] \agOptions: \aystop \aw= \atStops the current Navigation.", script)
     printf("\ay[\at%s\ax] \agOptions: \ayshow \aw= \atToggles Main GUI.", script)
@@ -2125,6 +2125,7 @@ local function displayHelp()
     printf("\ay[\at%s\ax] \agOptions: \aylist zone \aw= \atlist all zones that have paths", script)
     printf("\ay[\at%s\ax] \agOptions: \aylist [zone] \aw= \atlist all paths in specified zone", script)
     printf("\ay[\at%s\ax] \agOptions: \ayquit or exit \aw= \atExits the script.", script)
+    printf("\ay[\at%s\ax] \agOptions: \ayreload \aw= \atReload Paths File.", script)
     printf("\ay[\at%s\ax] \agOptions: \ayhelp \aw= \atPrints out this help list.", script)
     printf("\ay[\at%s\ax] \agArguments: \ayloop \aw= \atLoops the path, \ayrloop \aw= \atLoop in reverse.", script)    
     printf("\ay[\at%s\ax] \agArguments: \ayclosest \aw= \atstart at closest wp, \ayrclosest \aw= \atstart at closest wp and go in reverse.", script)    
@@ -2190,6 +2191,8 @@ local function bind(...)
             if #ChainedPaths > 0 then
                 NavSet.ChainLoop = not NavSet.ChainLoop
             end
+        elseif key =='reload' then
+            loadPaths()
         else
             printf("\ay[\at%s\ax] \arInvalid Command!", script)
         end
