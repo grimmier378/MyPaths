@@ -1559,7 +1559,7 @@ local function Draw_GUI()
                                         end
                                     end
                                     if ImGui.IsItemHovered() then
-                                        ImGui.SetTooltip("Command")
+                                        ImGui.SetTooltip(tmpTable[i].cmd)
                                     end
                                     ImGui.TableSetColumnIndex(4)
                                     local changedDoor, changedDoorRev = false, false
