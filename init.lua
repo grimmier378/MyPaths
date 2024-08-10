@@ -1393,7 +1393,7 @@ local function Draw_GUI()
                                     for i = 1, #Paths[currZone][NavSet.SelectedPath] do
                                         table.insert(Paths[currZone][newPath], Paths[currZone][NavSet.SelectedPath][i])
                                     end
-                                    UpdatePath(currZone, NavSet.SelectedPath)
+                                    UpdatePath(currZone, newPath)
                                     NavSet.SelectedPath = newPath
                                     newPath = ''
                                 end
