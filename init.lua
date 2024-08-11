@@ -531,7 +531,6 @@ local function UpdatePath(zone, pathName)
     db:close()
 end
 
-
 local function groupDistance()
     local member = mq.TLO.Group.Member
     local gsize = mq.TLO.Me.GroupSize() or 0
@@ -1425,6 +1424,9 @@ local function Draw_GUI()
                             if ImGui.IsItemHovered() then
                                 ImGui.SetTooltip("Export: "..currZone.." : "..NavSet.SelectedPath)
                             end
+                            if ImGui.SmallButton("Write lua File") then
+                                mq.pickle(pathsFile, Paths)
+                            end
                             ImGui.Spacing()
                             if ImGui.CollapsingHeader("Share Paths##") then
                                 importString   = ImGui.InputTextWithHint("##ImportString","Paste Import String", importString)
@@ -2290,7 +2292,7 @@ local function displayHelp()
     Example: /mypaths go loop "Loop A"
     Example: /mypaths stop
     Commands: /mypaths [combat|xtarg] [on|off] - Toggle Combat or Xtarget.]]
-    printf("\ay[\at%s\ax] \agCommands: \ay/mypaths [go|stop|list|chainadd|chainclear|chainloop|show|quit|reload|help] [loop|rloop|start|reverse|pingpong|closest|rclosest] [path]", script)
+    printf("\ay[\at%s\ax] \agCommands: \ay/mypaths [go|stop|list|chainadd|chainclear|chainloop|show|quit|save|reload|help] [loop|rloop|start|reverse|pingpong|closest|rclosest] [path]", script)
     printf("\ay[\at%s\ax] \agOptions: \aygo \aw= \atREQUIRES arguments and Path name see below for Arguments.", script)
     printf("\ay[\at%s\ax] \agOptions: \aystop \aw= \atStops the current Navigation.", script)
     printf("\ay[\at%s\ax] \agOptions: \ayshow \aw= \atToggles Main GUI.", script)
@@ -2302,6 +2304,7 @@ local function displayHelp()
     printf("\ay[\at%s\ax] \agOptions: \aylist zone \aw= \atlist all zones that have paths", script)
     printf("\ay[\at%s\ax] \agOptions: \aylist [zone] \aw= \atlist all paths in specified zone", script)
     printf("\ay[\at%s\ax] \agOptions: \ayquit or exit \aw= \atExits the script.", script)
+    printf("\ay[\at%s\ax] \agOptions: \aysave \aw= \atSave the current Paths to lua file.", script)
     printf("\ay[\at%s\ax] \agOptions: \ayreload \aw= \atReload Paths File.", script)
     printf("\ay[\at%s\ax] \agOptions: \ayhelp \aw= \atPrints out this help list.", script)
     printf("\ay[\at%s\ax] \agArguments: \ayloop \aw= \atLoops the path, \ayrloop \aw= \atLoop in reverse.", script)    
@@ -2370,6 +2373,8 @@ local function bind(...)
             end
         elseif key =='reload' then
             loadPaths()
+        elseif key == 'save' then
+            mq.pickle(pathsFile, Paths)
         else
             printf("\ay[\at%s\ax] \arInvalid Command!", script)
         end
