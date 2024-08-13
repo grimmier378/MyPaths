@@ -1145,6 +1145,7 @@ local function Draw_GUI()
         -- Check if the window is open
         if not openMain then
             showMainGUI = false
+            showMain = false
         end
         -- Check if the window is showing
         if showMain then
@@ -1698,305 +1699,305 @@ local function Draw_GUI()
                                 NavSet.WpPause = ImGui.InputInt("Global Pause##"..script, NavSet.WpPause, 1,5 )
                             end
                         end
-                        ImGui.EndChild()
                     end
-                ImGui.EndTabItem()
+                    ImGui.EndChild()
+                    ImGui.EndTabItem()
                 end
                 if ImGui.BeginTabItem('Path Data') then
                     if ImGui.BeginChild("Tabs##PathTab", -1, -1,ImGuiChildFlags.AutoResizeX) then
-                    if NavSet.SelectedPath ~= 'None' then
-                        if ImGui.CollapsingHeader("Manage Waypoints##") then
-                            ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
-                            if ImGui.Button(Icon.MD_ADD_LOCATION) then
-                                RecordWaypoint(NavSet.SelectedPath)
-                            end
-                            ImGui.PopStyleColor()
-                            if ImGui.IsItemHovered() then
-                                ImGui.SetTooltip("Add Waypoint")
-                            end
-
-                            ImGui.SameLine()
-                            local label = Icon.MD_FIBER_MANUAL_RECORD
-                            if NavSet.autoRecord then
-                                label = Icon.FA_STOP_CIRCLE
-                                ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1.0, 0.4, 0.4, 0.4))
-                            else
-                                ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1.0, 0.4, 0.4))
-                            end
-                            if ImGui.Button(label) then
-                                NavSet.autoRecord = not NavSet.autoRecord
-                                if NavSet.autoRecord then 
-                                    if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = mq.TLO.Zone.ShortName(), Path = NavSet.SelectedPath, WP = 'Start Recording', Status = 'Start Recording Waypoints!'}) end
-                                else
-                                    if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = mq.TLO.Zone.ShortName(), Path = NavSet.SelectedPath, WP = 'Stop Recording', Status = 'Stop Recording Waypoints!'}) end
-                                end
-                            end
-                            ImGui.PopStyleColor()
-
-                            if ImGui.IsItemHovered() then
-                                ImGui.SetTooltip("Auto Record Waypoints")
-                            end
-                            ImGui.SameLine()
-                            ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1.0, 0.4, 0.4, 0.4))
-                            if ImGui.Button(Icon.MD_DELETE_SWEEP) then
-                                ClearWaypoints(NavSet.SelectedPath)
-                            end
-                            ImGui.PopStyleColor()
-                            if ImGui.IsItemHovered() then
-                                ImGui.SetTooltip("Clear Waypoints")
-                            end
-                            ImGui.SameLine()
-                            ImGui.SetNextItemWidth(80)
-                            NavSet.RecordDelay = ImGui.InputInt("Record Delay##"..script, NavSet.RecordDelay, 1, 10)
-                        end
-                        ImGui.Separator()
-                    end
-                    ImGui.Spacing()
-                    if ImGui.CollapsingHeader("Waypoint Table##Header") then
-                        -- Waypoint Table
                         if NavSet.SelectedPath ~= 'None' then
+                            if ImGui.CollapsingHeader("Manage Waypoints##") then
+                                ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
+                                if ImGui.Button(Icon.MD_ADD_LOCATION) then
+                                    RecordWaypoint(NavSet.SelectedPath)
+                                end
+                                ImGui.PopStyleColor()
+                                if ImGui.IsItemHovered() then
+                                    ImGui.SetTooltip("Add Waypoint")
+                                end
 
-                            if ImGui.BeginTable('PathTable', 6, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), -1, -1) then
-                                ImGui.TableSetupColumn('WP#', ImGuiTableColumnFlags.WidthFixed, -1)
-                                ImGui.TableSetupColumn('Loc', ImGuiTableColumnFlags.WidthFixed, -1)
-                                ImGui.TableSetupColumn('Delay', ImGuiTableColumnFlags.WidthFixed, -1)
-                                ImGui.TableSetupColumn('Actions', ImGuiTableColumnFlags.WidthFixed, -1)
-                                ImGui.TableSetupColumn('Door', ImGuiTableColumnFlags.WidthFixed, -1)
-                                ImGui.TableSetupColumn('Move', ImGuiTableColumnFlags.WidthFixed, -1)
-                                ImGui.TableSetupScrollFreeze(0, 1)
-                                ImGui.TableHeadersRow()
-                    
-                                for i = 1, #tmpTable do
-                                    ImGui.TableNextRow()
-                                    ImGui.TableSetColumnIndex(0)
-                                    if tmpTable[i].step == tmpTable[NavSet.CurrentStepIndex].step then
-                                        ImGui.TextColored(ImVec4(0, 1, 0, 1),"%s", tmpTable[i].step)
-                                        if ImGui.IsItemHovered() then
-                                            ImGui.SetTooltip("Current Waypoint")
-                                        end
+                                ImGui.SameLine()
+                                local label = Icon.MD_FIBER_MANUAL_RECORD
+                                if NavSet.autoRecord then
+                                    label = Icon.FA_STOP_CIRCLE
+                                    ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1.0, 0.4, 0.4, 0.4))
+                                else
+                                    ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1.0, 0.4, 0.4))
+                                end
+                                if ImGui.Button(label) then
+                                    NavSet.autoRecord = not NavSet.autoRecord
+                                    if NavSet.autoRecord then 
+                                        if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = mq.TLO.Zone.ShortName(), Path = NavSet.SelectedPath, WP = 'Start Recording', Status = 'Start Recording Waypoints!'}) end
                                     else
-                                        ImGui.Text("%s", tmpTable[i].step)
-                                    end
-                                    
-                                    if i == closestWaypointIndex then
-                                        ImGui.SameLine()
-                                        ImGui.TextColored(ImVec4(1, 1, 0, 1), Icon.MD_STAR)
-                                        if ImGui.IsItemHovered() then
-                                            ImGui.SetTooltip("Closest Waypoint")
-                                        end
-                                    end
-                                    -- if tmpTable[i].step == tmpTable[currentStepIndex].step then
-                                    --     ImGui.SameLine()
-                                    --     ImGui.TextColored(ImVec4(0, 1, 1, 1), Icon.MD_STAR)
-                                    --     if ImGui.IsItemHovered() then
-                                    --         ImGui.SetTooltip("Current Waypoint")
-                                    --     end
-                                    -- end
-                                    ImGui.TableSetColumnIndex(1)
-                                    ImGui.Text(tmpTable[i].loc)
-                                    if not NavSet.doNav then
-                                        if ImGui.BeginPopupContextItem("WP_" .. tmpTable[i].step) then
-                                            
-                                            if ImGui.MenuItem('Nav to WP ' .. tmpTable[i].step) then
-                                                NavSet.CurrentStepIndex = i
-                                                NavSet.doNav = true
-                                                NavSet.doLoop = false
-                                                NavSet.doSingle = true
-                                                PathStartClock, PathStartTime = os.date("%I:%M:%S %p"), os.time()
-                                            end
-                                            
-                                            if ImGui.MenuItem('Start Path Here: WP ' .. tmpTable[i].step) then
-                                                NavSet.CurrentStepIndex = i
-                                                NavSet.doNav = true
-                                                NavSet.doLoop = false
-                                                NavSet.doSingle = false
-                                                PathStartClock, PathStartTime = os.date("%I:%M:%S %p"), os.time()
-                                            end
-                                            if ImGui.MenuItem('Start Loop Here: WP ' .. tmpTable[i].step) then
-                                                NavSet.CurrentStepIndex = i
-                                                NavSet.doNav = true
-                                                NavSet.doLoop = true
-                                                NavSet.doSingle = false
-                                                PathStartClock, PathStartTime = os.date("%I:%M:%S %p"), os.time()
-                                            end
-                                        
-                                            ImGui.EndPopup()
-                                        end
-                                    end
-                                    ImGui.TableSetColumnIndex(2)
-                                    ImGui.SetNextItemWidth(90)
-                                    local changed, changedCmd = false, false
-                                    tmpTable[i].delay, changed = ImGui.InputInt("##delay_" .. i, tmpTable[i].delay, 1, 1)
-                                    if changed then
-                                        for k, v in pairs(Paths[currZone][NavSet.SelectedPath]) do
-                                            if v.step == tmpTable[i].step then
-                                                Paths[currZone][NavSet.SelectedPath][k].delay = tmpTable[i].delay
-                                                UpdatePath(currZone, NavSet.SelectedPath)
-                                            end
-                                        end
-                                    end
-                                    if ImGui.IsItemHovered() then
-                                        ImGui.SetTooltip("Delay in Seconds")
-                                    end
-                                    ImGui.TableSetColumnIndex(3)
-                                    ImGui.SetNextItemWidth(-1)
-                                    tmpTable[i].cmd, changedCmd = ImGui.InputText("##cmd_" .. i, tmpTable[i].cmd)
-                                    if changedCmd then
-                                        for k, v in pairs(Paths[currZone][NavSet.SelectedPath]) do
-                                            if v.step == tmpTable[i].step then
-                                                Paths[currZone][NavSet.SelectedPath][k].cmd = tmpTable[i].cmd
-                                                UpdatePath(currZone, NavSet.SelectedPath)
-                                            end
-                                        end
-                                    end
-                                    if ImGui.IsItemHovered() then
-                                        ImGui.SetTooltip(tmpTable[i].cmd)
-                                    end
-                                    ImGui.TableSetColumnIndex(4)
-                                    local changedDoor, changedDoorRev = false, false
-                                    tmpTable[i].door, changedDoor = ImGui.Checkbox(Icon.FA_FORWARD.."##door_" .. i, tmpTable[i].door)
-                                    if changedDoor then
-                                        for k, v in pairs(Paths[currZone][NavSet.SelectedPath]) do
-                                            if v.step == tmpTable[i].step then
-                                                Paths[currZone][NavSet.SelectedPath][k].door = tmpTable[i].door
-                                                UpdatePath(currZone, NavSet.SelectedPath)
-                                            end
-                                        end
-                                    end
-                                    if ImGui.IsItemHovered() then
-                                        ImGui.SetTooltip("Door Forward")
-                                    end
-                                    ImGui.SameLine(0,0)
-                                    tmpTable[i].doorRev, changedDoorRev = ImGui.Checkbox(Icon.FA_BACKWARD.."##doorRev_" .. i, tmpTable[i].doorRev)
-                                    if changedDoorRev then
-                                        for k, v in pairs(Paths[currZone][NavSet.SelectedPath]) do
-                                            if v.step == tmpTable[i].step then
-                                                Paths[currZone][NavSet.SelectedPath][k].doorRev = tmpTable[i].doorRev
-                                                UpdatePath(currZone, NavSet.SelectedPath)
-                                            end
-                                        end
-                                    end
-                                    if ImGui.IsItemHovered() then
-                                        ImGui.SetTooltip("Door Reverse")
-                                    end
-                                    ImGui.TableSetColumnIndex(5)
-                                    if not NavSet.doNav then
-                                        if ImGui.Button(Icon.FA_TRASH .. "##_" .. i) then
-                                            deleteWP = true
-                                            deleteWPStep = tmpTable[i].step
-                                        end
-                                        if ImGui.IsItemHovered() then
-                                            ImGui.SetTooltip("Delete WP")
-                                        end
-                                        -- if not doReverse then
-                                        ImGui.SameLine(0,0)
-                                        if ImGui.Button(Icon.MD_UPDATE..'##Update_'..i) then
-                                            tmpTable[i].loc = mq.TLO.Me.LocYXZ()
-                                            -- Update Paths table
-                                            for k, v in pairs(Paths[currZone][NavSet.SelectedPath]) do
-                                                if v.step == tmpTable[i].step then
-                                                    Paths[currZone][NavSet.SelectedPath][k] = tmpTable[i]
-                                                end
-                                            end
-                                            -- Paths[currZone][selectedPath][tmpTable[i].step].loc = mq.TLO.Me.LocYXZ()
-                                            UpdatePath(currZone, NavSet.SelectedPath)
-                                        end
-                                        if ImGui.IsItemHovered() then
-                                            ImGui.SetTooltip("Update Loc")
-                                        end
-                                    -- end
-                                        ImGui.SameLine(0,0)
-                                        if i > 1 and ImGui.Button(Icon.FA_CHEVRON_UP.. "##up_" .. i) then
-                                            -- Swap items in tmpTable
-                                            local tmp = tmpTable[i]
-                                            tmpTable[i] = tmpTable[i - 1]
-                                            tmpTable[i - 1] = tmp
-                                
-                                            -- Update step values
-                                            tmpTable[i].step, tmpTable[i - 1].step = tmpTable[i - 1].step, tmpTable[i].step
-                    
-                                            -- Update Paths table
-                                            for k, v in pairs(Paths[currZone][NavSet.SelectedPath]) do
-                                                if v.step == tmpTable[i].step then
-                                                    Paths[currZone][NavSet.SelectedPath][k] = tmpTable[i]
-                                                elseif v.step == tmpTable[i - 1].step then
-                                                    Paths[currZone][NavSet.SelectedPath][k] = tmpTable[i - 1]
-                                                end
-                                            end
-                                            UpdatePath(currZone, NavSet.SelectedPath)
-                                        end
-                                        ImGui.SameLine(0,0)
-                                        if i < #tmpTable and ImGui.Button(Icon.FA_CHEVRON_DOWN .. "##down_" .. i) then
-                                            -- Swap items in tmpTable
-                                            local tmp = tmpTable[i]
-                                            tmpTable[i] = tmpTable[i + 1]
-                                            tmpTable[i + 1] = tmp
-                                
-                                            -- Update step values
-                                            tmpTable[i].step, tmpTable[i + 1].step = tmpTable[i + 1].step, tmpTable[i].step
-                    
-                                            -- Update Paths table
-                                            for k, v in pairs(Paths[currZone][NavSet.SelectedPath]) do
-                                                if v.step == tmpTable[i].step then
-                                                    Paths[currZone][NavSet.SelectedPath][k] = tmpTable[i]
-                                                elseif v.step == tmpTable[i + 1].step then
-                                                    Paths[currZone][NavSet.SelectedPath][k] = tmpTable[i + 1]
-                                                end
-                                            end
-                                            UpdatePath(currZone, NavSet.SelectedPath)
-                                        end
+                                        if DEBUG then table.insert(debugMessages, {Time = os.date("%H:%M:%S"), Zone = mq.TLO.Zone.ShortName(), Path = NavSet.SelectedPath, WP = 'Stop Recording', Status = 'Stop Recording Waypoints!'}) end
                                     end
                                 end
-                                ImGui.EndTable()
+                                ImGui.PopStyleColor()
+
+                                if ImGui.IsItemHovered() then
+                                    ImGui.SetTooltip("Auto Record Waypoints")
+                                end
+                                ImGui.SameLine()
+                                ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(1.0, 0.4, 0.4, 0.4))
+                                if ImGui.Button(Icon.MD_DELETE_SWEEP) then
+                                    ClearWaypoints(NavSet.SelectedPath)
+                                end
+                                ImGui.PopStyleColor()
+                                if ImGui.IsItemHovered() then
+                                    ImGui.SetTooltip("Clear Waypoints")
+                                end
+                                ImGui.SameLine()
+                                ImGui.SetNextItemWidth(80)
+                                NavSet.RecordDelay = ImGui.InputInt("Record Delay##"..script, NavSet.RecordDelay, 1, 10)
                             end
-                        else
-                            ImGui.Text("No Path Selected")
+                            ImGui.Separator()
+                        end
+                        ImGui.Spacing()
+                        if ImGui.CollapsingHeader("Waypoint Table##Header") then
+                            -- Waypoint Table
+                            if NavSet.SelectedPath ~= 'None' then
+
+                                if ImGui.BeginTable('PathTable', 6, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), -1, -1) then
+                                    ImGui.TableSetupColumn('WP#', ImGuiTableColumnFlags.WidthFixed, -1)
+                                    ImGui.TableSetupColumn('Loc', ImGuiTableColumnFlags.WidthFixed, -1)
+                                    ImGui.TableSetupColumn('Delay', ImGuiTableColumnFlags.WidthFixed, -1)
+                                    ImGui.TableSetupColumn('Actions', ImGuiTableColumnFlags.WidthFixed, -1)
+                                    ImGui.TableSetupColumn('Door', ImGuiTableColumnFlags.WidthFixed, -1)
+                                    ImGui.TableSetupColumn('Move', ImGuiTableColumnFlags.WidthFixed, -1)
+                                    ImGui.TableSetupScrollFreeze(0, 1)
+                                    ImGui.TableHeadersRow()
+                        
+                                    for i = 1, #tmpTable do
+                                        ImGui.TableNextRow()
+                                        ImGui.TableSetColumnIndex(0)
+                                        if tmpTable[i].step == tmpTable[NavSet.CurrentStepIndex].step then
+                                            ImGui.TextColored(ImVec4(0, 1, 0, 1),"%s", tmpTable[i].step)
+                                            if ImGui.IsItemHovered() then
+                                                ImGui.SetTooltip("Current Waypoint")
+                                            end
+                                        else
+                                            ImGui.Text("%s", tmpTable[i].step)
+                                        end
+                                        
+                                        if i == closestWaypointIndex then
+                                            ImGui.SameLine()
+                                            ImGui.TextColored(ImVec4(1, 1, 0, 1), Icon.MD_STAR)
+                                            if ImGui.IsItemHovered() then
+                                                ImGui.SetTooltip("Closest Waypoint")
+                                            end
+                                        end
+                                        -- if tmpTable[i].step == tmpTable[currentStepIndex].step then
+                                        --     ImGui.SameLine()
+                                        --     ImGui.TextColored(ImVec4(0, 1, 1, 1), Icon.MD_STAR)
+                                        --     if ImGui.IsItemHovered() then
+                                        --         ImGui.SetTooltip("Current Waypoint")
+                                        --     end
+                                        -- end
+                                        ImGui.TableSetColumnIndex(1)
+                                        ImGui.Text(tmpTable[i].loc)
+                                        if not NavSet.doNav then
+                                            if ImGui.BeginPopupContextItem("WP_" .. tmpTable[i].step) then
+                                                
+                                                if ImGui.MenuItem('Nav to WP ' .. tmpTable[i].step) then
+                                                    NavSet.CurrentStepIndex = i
+                                                    NavSet.doNav = true
+                                                    NavSet.doLoop = false
+                                                    NavSet.doSingle = true
+                                                    PathStartClock, PathStartTime = os.date("%I:%M:%S %p"), os.time()
+                                                end
+                                                
+                                                if ImGui.MenuItem('Start Path Here: WP ' .. tmpTable[i].step) then
+                                                    NavSet.CurrentStepIndex = i
+                                                    NavSet.doNav = true
+                                                    NavSet.doLoop = false
+                                                    NavSet.doSingle = false
+                                                    PathStartClock, PathStartTime = os.date("%I:%M:%S %p"), os.time()
+                                                end
+                                                if ImGui.MenuItem('Start Loop Here: WP ' .. tmpTable[i].step) then
+                                                    NavSet.CurrentStepIndex = i
+                                                    NavSet.doNav = true
+                                                    NavSet.doLoop = true
+                                                    NavSet.doSingle = false
+                                                    PathStartClock, PathStartTime = os.date("%I:%M:%S %p"), os.time()
+                                                end
+                                            
+                                                ImGui.EndPopup()
+                                            end
+                                        end
+                                        ImGui.TableSetColumnIndex(2)
+                                        ImGui.SetNextItemWidth(90)
+                                        local changed, changedCmd = false, false
+                                        tmpTable[i].delay, changed = ImGui.InputInt("##delay_" .. i, tmpTable[i].delay, 1, 1)
+                                        if changed then
+                                            for k, v in pairs(Paths[currZone][NavSet.SelectedPath]) do
+                                                if v.step == tmpTable[i].step then
+                                                    Paths[currZone][NavSet.SelectedPath][k].delay = tmpTable[i].delay
+                                                    UpdatePath(currZone, NavSet.SelectedPath)
+                                                end
+                                            end
+                                        end
+                                        if ImGui.IsItemHovered() then
+                                            ImGui.SetTooltip("Delay in Seconds")
+                                        end
+                                        ImGui.TableSetColumnIndex(3)
+                                        ImGui.SetNextItemWidth(-1)
+                                        tmpTable[i].cmd, changedCmd = ImGui.InputText("##cmd_" .. i, tmpTable[i].cmd)
+                                        if changedCmd then
+                                            for k, v in pairs(Paths[currZone][NavSet.SelectedPath]) do
+                                                if v.step == tmpTable[i].step then
+                                                    Paths[currZone][NavSet.SelectedPath][k].cmd = tmpTable[i].cmd
+                                                    UpdatePath(currZone, NavSet.SelectedPath)
+                                                end
+                                            end
+                                        end
+                                        if ImGui.IsItemHovered() then
+                                            ImGui.SetTooltip(tmpTable[i].cmd)
+                                        end
+                                        ImGui.TableSetColumnIndex(4)
+                                        local changedDoor, changedDoorRev = false, false
+                                        tmpTable[i].door, changedDoor = ImGui.Checkbox(Icon.FA_FORWARD.."##door_" .. i, tmpTable[i].door)
+                                        if changedDoor then
+                                            for k, v in pairs(Paths[currZone][NavSet.SelectedPath]) do
+                                                if v.step == tmpTable[i].step then
+                                                    Paths[currZone][NavSet.SelectedPath][k].door = tmpTable[i].door
+                                                    UpdatePath(currZone, NavSet.SelectedPath)
+                                                end
+                                            end
+                                        end
+                                        if ImGui.IsItemHovered() then
+                                            ImGui.SetTooltip("Door Forward")
+                                        end
+                                        ImGui.SameLine(0,0)
+                                        tmpTable[i].doorRev, changedDoorRev = ImGui.Checkbox(Icon.FA_BACKWARD.."##doorRev_" .. i, tmpTable[i].doorRev)
+                                        if changedDoorRev then
+                                            for k, v in pairs(Paths[currZone][NavSet.SelectedPath]) do
+                                                if v.step == tmpTable[i].step then
+                                                    Paths[currZone][NavSet.SelectedPath][k].doorRev = tmpTable[i].doorRev
+                                                    UpdatePath(currZone, NavSet.SelectedPath)
+                                                end
+                                            end
+                                        end
+                                        if ImGui.IsItemHovered() then
+                                            ImGui.SetTooltip("Door Reverse")
+                                        end
+                                        ImGui.TableSetColumnIndex(5)
+                                        if not NavSet.doNav then
+                                            if ImGui.Button(Icon.FA_TRASH .. "##_" .. i) then
+                                                deleteWP = true
+                                                deleteWPStep = tmpTable[i].step
+                                            end
+                                            if ImGui.IsItemHovered() then
+                                                ImGui.SetTooltip("Delete WP")
+                                            end
+                                            -- if not doReverse then
+                                            ImGui.SameLine(0,0)
+                                            if ImGui.Button(Icon.MD_UPDATE..'##Update_'..i) then
+                                                tmpTable[i].loc = mq.TLO.Me.LocYXZ()
+                                                -- Update Paths table
+                                                for k, v in pairs(Paths[currZone][NavSet.SelectedPath]) do
+                                                    if v.step == tmpTable[i].step then
+                                                        Paths[currZone][NavSet.SelectedPath][k] = tmpTable[i]
+                                                    end
+                                                end
+                                                -- Paths[currZone][selectedPath][tmpTable[i].step].loc = mq.TLO.Me.LocYXZ()
+                                                UpdatePath(currZone, NavSet.SelectedPath)
+                                            end
+                                            if ImGui.IsItemHovered() then
+                                                ImGui.SetTooltip("Update Loc")
+                                            end
+                                        -- end
+                                            ImGui.SameLine(0,0)
+                                            if i > 1 and ImGui.Button(Icon.FA_CHEVRON_UP.. "##up_" .. i) then
+                                                -- Swap items in tmpTable
+                                                local tmp = tmpTable[i]
+                                                tmpTable[i] = tmpTable[i - 1]
+                                                tmpTable[i - 1] = tmp
+                                    
+                                                -- Update step values
+                                                tmpTable[i].step, tmpTable[i - 1].step = tmpTable[i - 1].step, tmpTable[i].step
+                        
+                                                -- Update Paths table
+                                                for k, v in pairs(Paths[currZone][NavSet.SelectedPath]) do
+                                                    if v.step == tmpTable[i].step then
+                                                        Paths[currZone][NavSet.SelectedPath][k] = tmpTable[i]
+                                                    elseif v.step == tmpTable[i - 1].step then
+                                                        Paths[currZone][NavSet.SelectedPath][k] = tmpTable[i - 1]
+                                                    end
+                                                end
+                                                UpdatePath(currZone, NavSet.SelectedPath)
+                                            end
+                                            ImGui.SameLine(0,0)
+                                            if i < #tmpTable and ImGui.Button(Icon.FA_CHEVRON_DOWN .. "##down_" .. i) then
+                                                -- Swap items in tmpTable
+                                                local tmp = tmpTable[i]
+                                                tmpTable[i] = tmpTable[i + 1]
+                                                tmpTable[i + 1] = tmp
+                                    
+                                                -- Update step values
+                                                tmpTable[i].step, tmpTable[i + 1].step = tmpTable[i + 1].step, tmpTable[i].step
+                        
+                                                -- Update Paths table
+                                                for k, v in pairs(Paths[currZone][NavSet.SelectedPath]) do
+                                                    if v.step == tmpTable[i].step then
+                                                        Paths[currZone][NavSet.SelectedPath][k] = tmpTable[i]
+                                                    elseif v.step == tmpTable[i + 1].step then
+                                                        Paths[currZone][NavSet.SelectedPath][k] = tmpTable[i + 1]
+                                                    end
+                                                end
+                                                UpdatePath(currZone, NavSet.SelectedPath)
+                                            end
+                                        end
+                                    end
+                                    ImGui.EndTable()
+                                end
+                            else
+                                ImGui.Text("No Path Selected")
+                            end
                         end
                     end
                     ImGui.EndChild()
-                end
-                ImGui.EndTabItem()
+                    ImGui.EndTabItem()
                 end
                 if showDebugTab and DEBUG then
                     if ImGui.BeginTabItem('Debug Messages') then
                         if ImGui.BeginChild("Tabs##DebugTab", -1, -1,ImGuiChildFlags.AutoResizeX) then
-                        if ImGui.Button('Clear Debug Messages') then
-                            debugMessages = {}
-                        end
-                        if ImGui.IsItemHovered() then
-                            ImGui.SetTooltip("Clear Debug Messages")
-                        end
-                        ImGui.Separator()
-                        if ImGui.BeginTable('DebugTable', 5, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), ImVec2(0.0, 0.0)) then
-                            ImGui.TableSetupColumn('Time##', ImGuiTableColumnFlags.WidthFixed, 100)
-                            ImGui.TableSetupColumn('Zone##', ImGuiTableColumnFlags.WidthFixed, 100)
-                            ImGui.TableSetupColumn('Path##', ImGuiTableColumnFlags.WidthFixed, 100)
-                            ImGui.TableSetupColumn('Action / Step##', ImGuiTableColumnFlags.WidthFixed, 100)
-                            ImGui.TableSetupColumn('Status##', ImGuiTableColumnFlags.WidthFixed, 100)
-                            ImGui.TableSetupScrollFreeze(0, 1)
-                            ImGui.TableHeadersRow()
-                            local tmpDebug = {}
-                            for i = 1, #debugMessages do
-                                table.insert(tmpDebug, debugMessages[i])
+                            if ImGui.Button('Clear Debug Messages') then
+                                debugMessages = {}
                             end
-                            table.sort(tmpDebug, function(a, b) return a.Time > b.Time end)
-                            for i = 1, #tmpDebug do
-                                ImGui.TableNextRow()
-                                ImGui.TableSetColumnIndex(0)
-                                ImGui.Text(tmpDebug[i].Time)
-                                ImGui.TableSetColumnIndex(1)
-                                ImGui.Text(tmpDebug[i].Zone)
-                                ImGui.TableSetColumnIndex(2)
-                                ImGui.Text(tmpDebug[i].Path)
-                                ImGui.TableSetColumnIndex(3)
-                                ImGui.Text(tmpDebug[i].WP)
-                                ImGui.TableSetColumnIndex(4)
-                                ImGui.TextWrapped(tmpDebug[i].Status)
+                            if ImGui.IsItemHovered() then
+                                ImGui.SetTooltip("Clear Debug Messages")
                             end
-                            ImGui.EndTable()
+                            ImGui.Separator()
+                            if ImGui.BeginTable('DebugTable', 5, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), ImVec2(0.0, 0.0)) then
+                                ImGui.TableSetupColumn('Time##', ImGuiTableColumnFlags.WidthFixed, 100)
+                                ImGui.TableSetupColumn('Zone##', ImGuiTableColumnFlags.WidthFixed, 100)
+                                ImGui.TableSetupColumn('Path##', ImGuiTableColumnFlags.WidthFixed, 100)
+                                ImGui.TableSetupColumn('Action / Step##', ImGuiTableColumnFlags.WidthFixed, 100)
+                                ImGui.TableSetupColumn('Status##', ImGuiTableColumnFlags.WidthFixed, 100)
+                                ImGui.TableSetupScrollFreeze(0, 1)
+                                ImGui.TableHeadersRow()
+                                local tmpDebug = {}
+                                for i = 1, #debugMessages do
+                                    table.insert(tmpDebug, debugMessages[i])
+                                end
+                                table.sort(tmpDebug, function(a, b) return a.Time > b.Time end)
+                                for i = 1, #tmpDebug do
+                                    ImGui.TableNextRow()
+                                    ImGui.TableSetColumnIndex(0)
+                                    ImGui.Text(tmpDebug[i].Time)
+                                    ImGui.TableSetColumnIndex(1)
+                                    ImGui.Text(tmpDebug[i].Zone)
+                                    ImGui.TableSetColumnIndex(2)
+                                    ImGui.Text(tmpDebug[i].Path)
+                                    ImGui.TableSetColumnIndex(3)
+                                    ImGui.Text(tmpDebug[i].WP)
+                                    ImGui.TableSetColumnIndex(4)
+                                    ImGui.TextWrapped(tmpDebug[i].Status)
+                                end
+                                ImGui.EndTable()
+                            end
                         end
                         ImGui.EndChild()
-                    end
                         ImGui.EndTabItem()
                     end
                 end
@@ -2015,10 +2016,11 @@ local function Draw_GUI()
     if showConfigGUI then
         if currZone ~= lastZone then return end
             local winName = string.format('%s Config##Config_%s',script, meName)
-            local ColCntConf, StyCntConf = LoadTheme.StartTheme(theme.Theme[themeID])
+           local ColCntConf, StyCntConf = LoadTheme.StartTheme(theme.Theme[themeID])
             local openConfig, showConfig = ImGui.Begin(winName,true,bit32.bor(ImGuiWindowFlags.NoCollapse, ImGuiWindowFlags.AlwaysAutoResize))
             if not openConfig then
                 showConfigGUI = false
+                showConfig = false
             end
             if showConfig then
                 -- Set Window Font Scale
@@ -2245,6 +2247,7 @@ local function Draw_GUI()
         if not openHUDWin then
             ImGui.PopStyleColor()
             showHUD = false
+            showHUDWin = false
         end
         if showHUDWin then
             DrawStatus()
