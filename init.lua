@@ -136,7 +136,7 @@ local manaClass = {
     'SHM',
     'CLR',
     'BST',
-    'BRD',
+    --'BRD',
     'PAL',
     'RNG',
     'SHD',
@@ -613,6 +613,9 @@ local function groupWatch(type)
                                 end
                             end
                         end
+                    else
+                        status = string.format('Paused for Group Member %s not Present.', member(i).CleanName())
+                        return true
                     end
                     if mq.TLO.Me.PctHPs() < settings[script].WatchHealth then
                         status = string.format('Paused for Health Watch.')
@@ -1008,7 +1011,7 @@ local function DrawStatus()
     ImGui.BeginGroup()
     -- Set Window Font Scale
     ImGui.SetWindowFontScale(scale)
-    if ImGui.IsWindowHovered() then
+    if showHUD and ImGui.IsWindowHovered() then
         mousedOverFlag = true
         if ImGui.IsMouseDoubleClicked(0) then
             showMainGUI = not showMainGUI
@@ -1130,7 +1133,7 @@ local function DrawStatus()
     end
     ImGui.EndGroup()
 end
-
+local sFlag = false
 local function Draw_GUI()
     -- Main Window
     if showMainGUI then
@@ -1218,18 +1221,22 @@ local function Draw_GUI()
             end
             if not showHUD then
                 -- Main Window Content 
-                DrawStatus()
-                if NavSet.doNav then
-                    ImGui.Text("Current Destination Waypoint: ")
-                    ImGui.SameLine()
-                    ImGui.TextColored(0,1,0,1,"%s", curWPTxt)
-                    ImGui.Text("Distance to Waypoint: ")
-                    ImGui.SameLine()
-                    if tmpTable[NavSet.CurrentStepIndex] ~= nil then
-                        ImGui.TextColored(0,1,1,1,"%.2f", mq.TLO.Math.Distance(tmpLoc)())
+                if ImGui.CollapsingHeader("Status") then
+                    sFlag = true
+                    DrawStatus()
+                    if NavSet.doNav then
+                        ImGui.Text("Current Destination Waypoint: ")
+                        ImGui.SameLine()
+                        ImGui.TextColored(0,1,0,1,"%s", curWPTxt)
+                        ImGui.Text("Distance to Waypoint: ")
+                        ImGui.SameLine()
+                        if tmpTable[NavSet.CurrentStepIndex] ~= nil then
+                            ImGui.TextColored(0,1,1,1,"%.2f", mq.TLO.Math.Distance(tmpLoc)())
+                        end
                     end
+                else
+                    sFlag = false
                 end
-                ImGui.Separator()
             end
             if NavSet.SelectedPath ~= 'None' or #ChainedPaths > 0 then
                 if NavSet.doPause and NavSet.doNav then
@@ -1271,8 +1278,7 @@ local function Draw_GUI()
                     if ImGui.IsItemHovered() then
                         ImGui.SetTooltip("Stop Navigation")
                     end
-                    ImGui.SameLine()
-                else
+                   else
                     ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
                     if ImGui.Button(Icon.FA_PLAY) then
                         NavSet.PausedActiveGN = false
@@ -1283,66 +1289,66 @@ local function Draw_GUI()
                     if ImGui.IsItemHovered() then
                         ImGui.SetTooltip("Start Navigation")
                     end
-                    ImGui.SameLine()
                 end
 
             end
-        
-            ImGui.Text("Status: ")
-                
-            ImGui.SameLine()
-            if status:find("Idle") then
-                ImGui.TextColored(ImVec4(0, 1, 1, 1), status)
-            elseif status:find("Paused") then
-                if status:find("Mana") then
-                    ImGui.TextColored(ImVec4(0.000, 0.438, 0.825, 1.000), status)
-                elseif status:find("Health") then
-                    ImGui.TextColored(ImVec4(0.928, 0.352, 0.035, 1.000), status)
-                else
+            if showHUD or not sFlag then
+                ImGui.SameLine()
+                ImGui.Text("Status: ")
+                ImGui.SameLine()
+                if status:find("Idle") then
+                    ImGui.TextColored(ImVec4(0, 1, 1, 1), status)
+                elseif status:find("Paused") then
+                    if status:find("Mana") then
+                        ImGui.TextColored(ImVec4(0.000, 0.438, 0.825, 1.000), status)
+                    elseif status:find("Health") then
+                        ImGui.TextColored(ImVec4(0.928, 0.352, 0.035, 1.000), status)
+                    else
+                        ImGui.TextColored(ImVec4(0.9, 0.4, 0.4, 1), status)
+                    end
+                elseif status:find("Last WP is less than") then
                     ImGui.TextColored(ImVec4(0.9, 0.4, 0.4, 1), status)
+                elseif status:find("Recording") then
+                    ImGui.TextColored(ImVec4(0.4, 0.9, 0.4, 1), status)
+                elseif status:find("Arrived") then
+                    ImGui.TextColored(ImVec4(0, 1, 0, 1), status)
+                elseif status:find("Nav to WP") then
+                    local tmpDist = mq.TLO.Math.Distance(tmpLoc)() or 0
+                    local dist = string.format("%.2f",tmpDist)
+                    local tmpStatus = status
+                    if tmpStatus:find("Distance") then
+                        tmpStatus = tmpStatus:sub(1, tmpStatus:find("Distance:") - 1)
+                        tmpStatus = string.format("%s Distance: %s",tmpStatus,dist)
+                        ImGui.TextColored(ImVec4(1,1,0,1), tmpStatus)
+                    end
                 end
-            elseif status:find("Last WP is less than") then
-                ImGui.TextColored(ImVec4(0.9, 0.4, 0.4, 1), status)
-            elseif status:find("Recording") then
-                ImGui.TextColored(ImVec4(0.4, 0.9, 0.4, 1), status)
-            elseif status:find("Arrived") then
-                ImGui.TextColored(ImVec4(0, 1, 0, 1), status)
-            elseif status:find("Nav to WP") then
-                local tmpDist = mq.TLO.Math.Distance(tmpLoc)() or 0
-                local dist = string.format("%.2f",tmpDist)
-                local tmpStatus = status
-                if tmpStatus:find("Distance") then
-                    tmpStatus = tmpStatus:sub(1, tmpStatus:find("Distance:") - 1)
-                    tmpStatus = string.format("%s Distance: %s",tmpStatus,dist)
-                    ImGui.TextColored(ImVec4(1,1,0,1), tmpStatus)
+                if PathStartClock ~= nil and showHUD then
+                    ImGui.Text("Start Time: ")
+                    ImGui.SameLine()
+                    ImGui.TextColored(0,1,1,1,"%s", PathStartClock)
+                    ImGui.SameLine()
+                    ImGui.Text("Elapsed : ")
+                    ImGui.SameLine()
+                    local timeDiff = os.time() - PathStartTime
+                    local hours = math.floor(timeDiff / 3600)
+                    local minutes = math.floor((timeDiff % 3600) / 60)
+                    local seconds = timeDiff % 60
+        
+                    ImGui.TextColored(0, 1, 0, 1, string.format("%02d:%02d:%02d", hours, minutes, seconds))
                 end
-            end
-            if PathStartClock ~= nil and showHUD then
-                ImGui.Text("Start Time: ")
-                ImGui.SameLine()
-                ImGui.TextColored(0,1,1,1,"%s", PathStartClock)
-                ImGui.SameLine()
-                ImGui.Text("Elapsed : ")
-                ImGui.SameLine()
-                local timeDiff = os.time() - PathStartTime
-                local hours = math.floor(timeDiff / 3600)
-                local minutes = math.floor((timeDiff % 3600) / 60)
-                local seconds = timeDiff % 60
-    
-                ImGui.TextColored(0, 1, 0, 1, string.format("%02d:%02d:%02d", hours, minutes, seconds))
-    
-
             end
             ImGui.Separator()
             -- Tabs
             -- ImGui.BeginChild("Tabs##MainTabs", -1, -1,ImGuiChildFlags.AutoResizeX)
             if ImGui.BeginTabBar('MainTabBar') then
+                ImGui.SetWindowFontScale(scale)
                 if ImGui.BeginTabItem('Controls') then
                     if ImGui.BeginChild("Tabs##Controls", -1, -1,ImGuiChildFlags.AutoResizeX) then
                         ImGui.SeparatorText("Select a Path")
                         if not NavSet.doNav then
                             ImGui.SetNextItemWidth(120)
                             if ImGui.BeginCombo("##SelectPath", NavSet.SelectedPath) then
+                                ImGui.SetWindowFontScale(scale)
                                 if not Paths[currZone] then Paths[currZone] = {} end
                                 for name, data in pairs(Paths[currZone]) do
                                     local isSelected = name == NavSet.SelectedPath
@@ -1364,6 +1370,7 @@ local function Draw_GUI()
                             end
                             ImGui.PopStyleColor()
                             if ImGui.IsItemHovered() then
+                                ImGui.SetWindowFontScale(scale)
                                 ImGui.SetTooltip("Delete Path")
                             end
                         else
@@ -1399,6 +1406,7 @@ local function Draw_GUI()
                                 end
                                 ImGui.PopStyleColor()
                                 if ImGui.IsItemHovered() then
+                                    ImGui.SetWindowFontScale(scale)
                                     ImGui.SetTooltip("Copy Path")
                                 end
                             else
@@ -1423,6 +1431,7 @@ local function Draw_GUI()
                                 ImGui.PopStyleColor()
                             end
                             if ImGui.IsItemHovered() then
+                                ImGui.SetWindowFontScale(scale)
                                 ImGui.SetTooltip("Export: "..currZone.." : "..NavSet.SelectedPath)
                             end
                             if ImGui.SmallButton("Write lua File") then
@@ -1519,6 +1528,7 @@ local function Draw_GUI()
                                 ImGui.PopStyleColor()
                             end
                             if ImGui.IsItemHovered() then
+                                ImGui.SetWindowFontScale(scale)
                                 ImGui.SetTooltip("Add ".. currZone..": "..NavSet.SelectedPath.. " to Chain")
                             end
                             if #ChainedPaths > 0  then
@@ -1532,6 +1542,7 @@ local function Draw_GUI()
                                     ImGui.SetNextItemWidth(120)
 
                             if ImGui.BeginCombo("Zone##SelectChainZone", NavSet.ChainZone) then
+                                ImGui.SetWindowFontScale(scale)
                                 if not Paths[NavSet.ChainZone] then Paths[NavSet.ChainZone] = {} end
                                 for k, name in pairs(tmpCZ) do
                                     local isSelected = name == NavSet.ChainZone
@@ -1545,6 +1556,7 @@ local function Draw_GUI()
                                         ImGui.SetNextItemWidth(120)
 
                                 if ImGui.BeginCombo("Path##SelectChainPath", NavSet.ChainPath) then
+                                    ImGui.SetWindowFontScale(scale)
                                     if not Paths[NavSet.ChainZone] then Paths[NavSet.ChainZone] = {} end
                                     for k, data in pairs(Paths[NavSet.ChainZone]) do
                                         table.insert(tmpCP , k)
@@ -1756,7 +1768,7 @@ local function Draw_GUI()
                         if ImGui.CollapsingHeader("Waypoint Table##Header") then
                             -- Waypoint Table
                             if NavSet.SelectedPath ~= 'None' then
-
+                                ImGui.SetWindowFontScale(scale)
                                 if ImGui.BeginTable('PathTable', 6, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), -1, -1) then
                                     ImGui.TableSetupColumn('WP#', ImGuiTableColumnFlags.WidthFixed, -1)
                                     ImGui.TableSetupColumn('Loc', ImGuiTableColumnFlags.WidthFixed, -1)
@@ -1968,6 +1980,7 @@ local function Draw_GUI()
                                 ImGui.SetTooltip("Clear Debug Messages")
                             end
                             ImGui.Separator()
+                            ImGui.SetWindowFontScale(scale)
                             if ImGui.BeginTable('DebugTable', 5, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), ImVec2(0.0, 0.0)) then
                                 ImGui.TableSetupColumn('Time##', ImGuiTableColumnFlags.WidthFixed, 100)
                                 ImGui.TableSetupColumn('Zone##', ImGuiTableColumnFlags.WidthFixed, 100)
