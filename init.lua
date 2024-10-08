@@ -27,7 +27,6 @@ if not loadedExeternally then
 end
 
 -- Variables
-local script                                                     = 'MyPaths' -- Change this to the name of your script
 local themeName                                                  = 'Default'
 local themeID                                                    = 1
 local theme, defaults, settings, debugMessages                   = {}, {}, {}, {}
@@ -107,12 +106,12 @@ local doMouseOver                                                = true
 
 -- File Paths
 local themeFile                                                  = string.format('%s/MyUI/MyThemeZ.lua', mq.configDir)
-local configFileOld                                              = string.format('%s/MyUI/%s/%s_Configs.lua', mq.configDir, script, script)
-local configFile                                                 = string.format('%s/MyUI/%s/%s_Configs.lua', mq.configDir, script, script)
-local pathsFile                                                  = string.format('%s/MyUI/%s/%s_Paths.lua', mq.configDir, script, script)
+local configFileOld                                              = string.format('%s/MyUI/%s/%s_Configs.lua', mq.configDir, Module.Name, Module.Name)
+local configFile                                                 = string.format('%s/MyUI/%s/%s_Configs.lua', mq.configDir, Module.Name, Module.Name)
+local pathsFile                                                  = string.format('%s/MyUI/%s/%s_Paths.lua', mq.configDir, Module.Name, Module.Name)
 local themezDir                                                  = mq.luaDir .. '/themez/init.lua'
 -- SQL information
-local PathDB                                                     = string.format('%s/MyUI/%s/%s.db', mq.configDir, script, script)
+local PathDB                                                     = string.format('%s/MyUI/%s/%s.db', mq.configDir, Module.Name, Module.Name)
 
 -- Default Settings
 defaults                                                         = {
@@ -163,7 +162,7 @@ local function loadTheme()
         mq.pickle(themeFile, theme)
     end
     -- Load the theme from the settings file
-    themeName = settings[script].LoadTheme or 'Default'
+    themeName = settings[Module.Name].LoadTheme or 'Default'
     -- Find the theme ID
     if theme and theme.Theme then
         for tID, tData in pairs(theme.Theme) do
@@ -311,7 +310,7 @@ local function loadSettings()
             mq.pickle(configFile, settings)
         else
             -- Create the settings file from the defaults
-            settings[script] = defaults
+            settings[Module.Name] = defaults
             mq.pickle(configFile, settings)
             loadSettings()
         end
@@ -319,36 +318,36 @@ local function loadSettings()
         -- Load settings from the Lua config file
         settings = dofile(configFile)
         -- Check if the settings are missing from the file
-        if settings[script] == nil then
-            settings[script] = {}
-            settings[script] = defaults
+        if settings[Module.Name] == nil then
+            settings[Module.Name] = {}
+            settings[Module.Name] = defaults
             newSetting = true
         end
     end
 
     -- Check if the settings are missing and use defaults if they are
-    newSetting = MyUI_Utils.CheckDefaultSettings(defaults, settings[script])
-    newSetting = MyUI_Utils.CheckDefaultSettings(InterruptSet, settings[script].Interrupts) or newSetting
+    newSetting = MyUI_Utils.CheckDefaultSettings(defaults, settings[Module.Name])
+    newSetting = MyUI_Utils.CheckDefaultSettings(InterruptSet, settings[Module.Name].Interrupts) or newSetting
 
     -- Load the theme
     loadTheme()
-    hudLock = settings[script].HudLock
-    InterruptSet = settings[script].Interrupts
+    hudLock = settings[Module.Name].HudLock
+    InterruptSet = settings[Module.Name].Interrupts
     -- Set the settings to the variables
-    NavSet.StopDist = settings[script].StopDistance
-    NavSet.WpPause = settings[script].PauseStops
-    NavSet.RecordMinDist = settings[script].RecordMinDist
-    InterruptSet.stopForGM = settings[script].stopForGM
-    InterruptSet.stopForDist = settings[script].Interrupts.stopForDist
-    InterruptSet.interruptDelay = settings[script].InterruptDelay
-    hudTransparency = settings[script].HeadsUpTransparency
-    mouseOverTransparency = settings[script].MouseOverTransparency
-    aSize = settings[script].AutoSize
-    doMouseOver = settings[script].MouseHUD
-    locked = settings[script].locked
-    scale = settings[script].Scale
-    themeName = settings[script].LoadTheme
-    NavSet.RecordDelay = settings[script].RecordDelay
+    NavSet.StopDist = settings[Module.Name].StopDistance
+    NavSet.WpPause = settings[Module.Name].PauseStops
+    NavSet.RecordMinDist = settings[Module.Name].RecordMinDist
+    InterruptSet.stopForGM = settings[Module.Name].stopForGM
+    InterruptSet.stopForDist = settings[Module.Name].Interrupts.stopForDist
+    InterruptSet.interruptDelay = settings[Module.Name].InterruptDelay
+    hudTransparency = settings[Module.Name].HeadsUpTransparency
+    mouseOverTransparency = settings[Module.Name].MouseOverTransparency
+    aSize = settings[Module.Name].AutoSize
+    doMouseOver = settings[Module.Name].MouseHUD
+    locked = settings[Module.Name].locked
+    scale = settings[Module.Name].Scale
+    themeName = settings[Module.Name].LoadTheme
+    NavSet.RecordDelay = settings[Module.Name].RecordDelay
 
 
     -- Save the settings if new settings were added
@@ -577,12 +576,12 @@ local function groupWatch(type)
     if type == 'None' then return false end
     local myClass = mq.TLO.Me.Class.ShortName()
     if type == "Self" then
-        if mq.TLO.Me.PctHPs() < settings[script].WatchHealth then
+        if mq.TLO.Me.PctHPs() < settings[Module.Name].WatchHealth then
             mq.TLO.Me.Sit()
             return true
         end
         for x = 1, #manaClass do
-            if manaClass[x] == myClass and mq.TLO.Me.PctMana() < settings[script].WatchMana then
+            if manaClass[x] == myClass and mq.TLO.Me.PctMana() < settings[Module.Name].WatchMana then
                 mq.TLO.Me.Sit()
                 status = string.format('Paused for Mana Watch.')
                 return true
@@ -598,11 +597,11 @@ local function groupWatch(type)
                     local class = member(i).Class.ShortName()
 
                     if class == 'CLR' or class == 'DRU' or class == 'SHM' then
-                        if member(i).PctHPs() < settings[script].WatchHealth then
+                        if member(i).PctHPs() < settings[Module.Name].WatchHealth then
                             status = string.format('Paused for Healer Health.')
                             return true
                         end
-                        if member(i).PctMana() < settings[script].WatchMana then
+                        if member(i).PctMana() < settings[Module.Name].WatchMana then
                             status = string.format('Paused for Healer Mana.')
                             return true
                         end
@@ -610,12 +609,12 @@ local function groupWatch(type)
                 end
             end
             if myClass == 'CLR' or myClass == 'DRU' or myClass == 'SHM' then
-                if mq.TLO.Me.PctHPs() < settings[script].WatchHealth then
+                if mq.TLO.Me.PctHPs() < settings[Module.Name].WatchHealth then
                     status = string.format('Paused for Health Watch.')
                     mq.TLO.Me.Sit()
                     return true
                 end
-                if manaClass[myClass] and mq.TLO.Me.PctMana() < settings[script].WatchMana then
+                if manaClass[myClass] and mq.TLO.Me.PctMana() < settings[Module.Name].WatchMana then
                     mq.TLO.Me.Sit()
                     status = string.format('Paused for Mana Watch.')
                     return true
@@ -625,13 +624,13 @@ local function groupWatch(type)
         if type == 'All' then
             for i = 1, gsize - 1 do
                 if member(i).Present() then
-                    if member(i).PctHPs() < settings[script].WatchHealth then
+                    if member(i).PctHPs() < settings[Module.Name].WatchHealth then
                         status = string.format('Paused for Health Watch.')
                         return true
                     end
                     for x = 1, #manaClass do
                         if member(i).Class.ShortName() == manaClass[x] then
-                            if member(i).PctMana() < settings[script].WatchMana then
+                            if member(i).PctMana() < settings[Module.Name].WatchMana then
                                 status = string.format('Paused for Mana Watch.')
                                 return true
                             end
@@ -641,13 +640,13 @@ local function groupWatch(type)
                     status = string.format('Paused for Group Member %s not Present.', member(i).CleanName())
                     return true
                 end
-                if mq.TLO.Me.PctHPs() < settings[script].WatchHealth then
+                if mq.TLO.Me.PctHPs() < settings[Module.Name].WatchHealth then
                     status = string.format('Paused for Health Watch.')
                     mq.TLO.Me.Sit()
                     return true
                 end
                 for x = 1, #manaClass do
-                    if manaClass[x] == myClass and mq.TLO.Me.PctMana() < settings[script].WatchMana then
+                    if manaClass[x] == myClass and mq.TLO.Me.PctMana() < settings[Module.Name].WatchMana then
                         mq.TLO.Me.Sit()
                         status = string.format('Paused for Mana Watch.')
                         return true
@@ -681,7 +680,7 @@ local function CheckInterrupts()
 
         flag = true
 
-        if curHP >= 99 and curMP >= 99 and settings[script].AutoStand then
+        if curHP >= 99 and curMP >= 99 and settings[Module.Name].AutoStand then
             mq.TLO.Me.Stand()
             status = 'Idle'
             flag = false
@@ -779,7 +778,7 @@ local function CheckInterrupts()
         --     status = 'Paused for Zoning.'
         --     lastZone = ''
         --     flag = true
-    elseif settings[script].GroupWatch == true and groupWatch(settings[script].WatchType) then
+    elseif settings[Module.Name].GroupWatch == true and groupWatch(settings[Module.Name].WatchType) then
         flag = true
         if flag and not interruptInProgress then
             mq.cmdf("/nav stop log=off")
@@ -795,7 +794,7 @@ local function CheckInterrupts()
     if flag then
         InterruptSet.PauseStart = os.time()
         intPauseTime = InterruptSet.interruptDelay
-        if invis then intPauseTime = settings[script].InvisDelay end
+        if invis then intPauseTime = settings[Module.Name].InvisDelay end
     else
         interruptInProgress = false
         intPauseTime = 0
@@ -1230,7 +1229,7 @@ function Module.RenderGUI()
         if currZone ~= lastZone then return end
         -- local currZone = mq.TLO.Zone.ShortName()
         -- Set Window Name
-        local winName = string.format('%s##Main_%s', script, MyUI_CharLoaded)
+        local winName = string.format('%s##Main_%s', Module.Name, MyUI_CharLoaded)
         -- Load Theme
         local ColorCount, StyleCount = DrawTheme(themeName)
         -- Create Main Window
@@ -1268,7 +1267,7 @@ function Module.RenderGUI()
                 if ImGui.MenuItem(lIcon) then
                     -- Toggle Config Window
                     locked = not locked
-                    settings[script].locked = locked
+                    settings[Module.Name].locked = locked
                     mq.pickle(configFile, settings)
                 end
                 if ImGui.IsItemHovered() then
@@ -1798,9 +1797,9 @@ function Module.RenderGUI()
                                     ImGui.SetTooltip("Start Navigation at Closest Waypoint")
                                 end
                                 ImGui.SetNextItemWidth(100)
-                                NavSet.StopDist = ImGui.InputInt("Stop Distance##" .. script, NavSet.StopDist, 1, 50)
+                                NavSet.StopDist = ImGui.InputInt("Stop Distance##" .. Module.Name, NavSet.StopDist, 1, 50)
                                 ImGui.SetNextItemWidth(100)
-                                NavSet.WpPause = ImGui.InputInt("Global Pause##" .. script, NavSet.WpPause, 1, 5)
+                                NavSet.WpPause = ImGui.InputInt("Global Pause##" .. Module.Name, NavSet.WpPause, 1, 5)
                             end
                         end
                     end
@@ -1872,7 +1871,7 @@ function Module.RenderGUI()
                                 end
                                 ImGui.SameLine()
                                 ImGui.SetNextItemWidth(80)
-                                NavSet.RecordDelay = ImGui.InputInt("Record Delay##" .. script, NavSet.RecordDelay, 1, 10)
+                                NavSet.RecordDelay = ImGui.InputInt("Record Delay##" .. Module.Name, NavSet.RecordDelay, 1, 10)
                             end
                             ImGui.Separator()
                         end
@@ -2141,7 +2140,7 @@ function Module.RenderGUI()
 
     if showConfigGUI then
         if currZone ~= lastZone then return end
-        local winName = string.format('%s Config##Config_%s', script, MyUI_CharLoaded)
+        local winName = string.format('%s Config##Config_%s', Module.Name, MyUI_CharLoaded)
         local ColCntConf, StyCntConf = DrawTheme(themeName)
 
         local openConfig, showConfig = ImGui.Begin(winName, true, bit32.bor(ImGuiWindowFlags.NoCollapse, ImGuiWindowFlags.AlwaysAutoResize))
@@ -2152,14 +2151,14 @@ function Module.RenderGUI()
         if showConfig then
             -- Set Window Font Scale
             ImGui.SetWindowFontScale(scale)
-            if ImGui.CollapsingHeader('Theme##Settings' .. script) then
+            if ImGui.CollapsingHeader('Theme##Settings' .. Module.Name) then
                 -- Configure ThemeZ --
-                ImGui.SeparatorText("Theme##" .. script)
+                ImGui.SeparatorText("Theme##" .. Module.Name)
                 ImGui.Text("Cur Theme: %s", themeName)
 
                 -- Combo Box Load Theme
                 ImGui.SetNextItemWidth(100)
-                if ImGui.BeginCombo("Load Theme##" .. script, themeName) then
+                if ImGui.BeginCombo("Load Theme##" .. Module.Name, themeName) then
                     for k, data in pairs(theme.Theme) do
                         local isSelected = data.Name == themeName
                         if ImGui.Selectable(data.Name, isSelected) then
@@ -2173,8 +2172,8 @@ function Module.RenderGUI()
 
                 -- Configure Scale --
                 ImGui.SetNextItemWidth(100)
-                scale = ImGui.SliderFloat("Scale##" .. script, scale, 0.5, 2)
-                if scale ~= settings[script].Scale then
+                scale = ImGui.SliderFloat("Scale##" .. Module.Name, scale, 0.5, 2)
+                if scale ~= settings[Module.Name].Scale then
                     if scale < 0.5 then scale = 0.5 end
                     if scale > 2 then scale = 2 end
                 end
@@ -2194,22 +2193,22 @@ function Module.RenderGUI()
             end
             ImGui.Spacing()
 
-            if ImGui.CollapsingHeader("HUD Settings##" .. script) then
+            if ImGui.CollapsingHeader("HUD Settings##" .. Module.Name) then
                 -- HUD Transparency --
                 ImGui.SetNextItemWidth(100)
-                local lblHudTrans = doMouseOver and "HUD Faded Transparency##" .. script or "HUD Transparency##" .. script
+                local lblHudTrans = doMouseOver and "HUD Faded Transparency##" .. Module.Name or "HUD Transparency##" .. Module.Name
                 hudTransparency = ImGui.SliderFloat(lblHudTrans, hudTransparency, 0.0, 1)
                 if doMouseOver then
                     ImGui.SetNextItemWidth(100)
-                    mouseOverTransparency = ImGui.SliderFloat("HUD MouseOver Transparency##" .. script, mouseOverTransparency, 0.0, 1)
+                    mouseOverTransparency = ImGui.SliderFloat("HUD MouseOver Transparency##" .. Module.Name, mouseOverTransparency, 0.0, 1)
                 end
-                doMouseOver = ImGui.Checkbox("On Mouseover##" .. script, doMouseOver)
+                doMouseOver = ImGui.Checkbox("On Mouseover##" .. Module.Name, doMouseOver)
             end
             ImGui.Spacing()
 
-            if ImGui.CollapsingHeader("Interrupt Settings##" .. script) then
+            if ImGui.CollapsingHeader("Interrupt Settings##" .. Module.Name) then
                 -- Set Interrupts we will stop for
-                InterruptSet.interruptsOn = ImGui.Checkbox("Interrupts On##" .. script, InterruptSet.interruptsOn)
+                InterruptSet.interruptsOn = ImGui.Checkbox("Interrupts On##" .. Module.Name, InterruptSet.interruptsOn)
                 if ImGui.Button('Check All') then
                     InterruptSet.stopForDist = true
                     InterruptSet.stopForCharm = true
@@ -2228,81 +2227,81 @@ function Module.RenderGUI()
                 if ImGui.BeginTable("##Interrupts", 2, bit32.bor(ImGuiTableFlags.Borders), -1, 0) then
                     ImGui.TableNextRow()
                     ImGui.TableSetColumnIndex(0)
-                    InterruptSet.stopForCharm = ImGui.Checkbox("Stop for Charmed##" .. script, InterruptSet.stopForCharm)
+                    InterruptSet.stopForCharm = ImGui.Checkbox("Stop for Charmed##" .. Module.Name, InterruptSet.stopForCharm)
                     if not InterruptSet.stopForCharm then InterruptSet.stopForAll = false end
                     ImGui.TableSetColumnIndex(1)
-                    InterruptSet.stopForCombat = ImGui.Checkbox("Stop for Combat##" .. script, InterruptSet.stopForCombat)
+                    InterruptSet.stopForCombat = ImGui.Checkbox("Stop for Combat##" .. Module.Name, InterruptSet.stopForCombat)
                     if not InterruptSet.stopForCombat then InterruptSet.stopForAll = false end
                     ImGui.TableNextRow()
 
                     ImGui.TableSetColumnIndex(0)
-                    InterruptSet.stopForFear = ImGui.Checkbox("Stop for Fear##" .. script, InterruptSet.stopForFear)
+                    InterruptSet.stopForFear = ImGui.Checkbox("Stop for Fear##" .. Module.Name, InterruptSet.stopForFear)
                     if not InterruptSet.stopForFear then InterruptSet.stopForAll = false end
                     ImGui.TableSetColumnIndex(1)
-                    InterruptSet.stopForGM = ImGui.Checkbox("Stop for GM##" .. script, InterruptSet.stopForGM)
+                    InterruptSet.stopForGM = ImGui.Checkbox("Stop for GM##" .. Module.Name, InterruptSet.stopForGM)
                     if not InterruptSet.stopForGM then InterruptSet.stopForAll = false end
                     ImGui.TableNextRow()
 
                     ImGui.TableSetColumnIndex(0)
-                    InterruptSet.stopForLoot = ImGui.Checkbox("Stop for Loot##" .. script, InterruptSet.stopForLoot)
+                    InterruptSet.stopForLoot = ImGui.Checkbox("Stop for Loot##" .. Module.Name, InterruptSet.stopForLoot)
                     if not InterruptSet.stopForLoot then InterruptSet.stopForAll = false end
                     ImGui.TableSetColumnIndex(1)
-                    InterruptSet.stopForMez = ImGui.Checkbox("Stop for Mez##" .. script, InterruptSet.stopForMez)
+                    InterruptSet.stopForMez = ImGui.Checkbox("Stop for Mez##" .. Module.Name, InterruptSet.stopForMez)
                     if not InterruptSet.stopForMez then InterruptSet.stopForAll = false end
                     ImGui.TableNextRow()
 
                     ImGui.TableSetColumnIndex(0)
-                    InterruptSet.stopForRoot = ImGui.Checkbox("Stop for Root##" .. script, InterruptSet.stopForRoot)
+                    InterruptSet.stopForRoot = ImGui.Checkbox("Stop for Root##" .. Module.Name, InterruptSet.stopForRoot)
                     if not InterruptSet.stopForRoot then InterruptSet.stopForAll = false end
                     ImGui.TableSetColumnIndex(1)
-                    InterruptSet.stopForSitting = ImGui.Checkbox("Stop for Sitting##" .. script, InterruptSet.stopForSitting)
+                    InterruptSet.stopForSitting = ImGui.Checkbox("Stop for Sitting##" .. Module.Name, InterruptSet.stopForSitting)
                     if not InterruptSet.stopForSitting then InterruptSet.stopForAll = false end
                     ImGui.TableNextRow()
 
                     ImGui.TableSetColumnIndex(0)
-                    InterruptSet.stopForXtar = ImGui.Checkbox("Stop for Xtarget##" .. script, InterruptSet.stopForXtar)
+                    InterruptSet.stopForXtar = ImGui.Checkbox("Stop for Xtarget##" .. Module.Name, InterruptSet.stopForXtar)
                     if not InterruptSet.stopForXtar then InterruptSet.stopForAll = false end
                     ImGui.TableSetColumnIndex(1)
-                    InterruptSet.stopForDist = ImGui.Checkbox("Stop for Party Dist##" .. script, InterruptSet.stopForDist)
+                    InterruptSet.stopForDist = ImGui.Checkbox("Stop for Party Dist##" .. Module.Name, InterruptSet.stopForDist)
                     if not InterruptSet.stopForDist then InterruptSet.stopForAll = false end
                     ImGui.TableNextRow()
 
                     ImGui.TableSetColumnIndex(0)
-                    InterruptSet.stopForInvis = ImGui.Checkbox("Stop for Invis##" .. script, InterruptSet.stopForInvis)
+                    InterruptSet.stopForInvis = ImGui.Checkbox("Stop for Invis##" .. Module.Name, InterruptSet.stopForInvis)
                     if not InterruptSet.stopForInvis then InterruptSet.stopForAll = false end
                     ImGui.TableSetColumnIndex(1)
-                    InterruptSet.stopForDblInvis = ImGui.Checkbox("Stop for Dbl Invis##" .. script, InterruptSet.stopForDblInvis)
+                    InterruptSet.stopForDblInvis = ImGui.Checkbox("Stop for Dbl Invis##" .. Module.Name, InterruptSet.stopForDblInvis)
                     if not InterruptSet.stopForDblInvis then InterruptSet.stopForAll = false end
                     ImGui.TableNextRow()
                     ImGui.TableSetColumnIndex(0)
-                    settings[script].AutoStand, _ = ImGui.Checkbox("Auto Stand##" .. script, settings[script].AutoStand)
+                    settings[Module.Name].AutoStand, _ = ImGui.Checkbox("Auto Stand##" .. Module.Name, settings[Module.Name].AutoStand)
                     if _ then mq.pickle(configFile, settings) end
                     ImGui.EndTable()
                     if InterruptSet.stopForInvis or InterruptSet.stopForDblInvis then
-                        settings[script].InvisAction = ImGui.InputText("Invis Action##" .. script, settings[script].InvisAction)
-                        settings[script].InvisDelay = ImGui.InputInt("Invis Delay##" .. script, settings[script].InvisDelay, 1, 5)
+                        settings[Module.Name].InvisAction = ImGui.InputText("Invis Action##" .. Module.Name, settings[Module.Name].InvisAction)
+                        settings[Module.Name].InvisDelay = ImGui.InputInt("Invis Delay##" .. Module.Name, settings[Module.Name].InvisDelay, 1, 5)
                     end
                     if InterruptSet.stopForDist then
                         ImGui.SetNextItemWidth(100)
                         InterruptSet.stopForGoupDist = ImGui.InputInt("Party Distance##GroupDist", InterruptSet.stopForGoupDist, 1, 50)
                     end
                 end
-                settings[script].GroupWatch = ImGui.Checkbox("Group Watch##" .. script, settings[script].GroupWatch)
-                if settings[script].GroupWatch then
-                    if ImGui.CollapsingHeader("Group Watch Settings##" .. script) then
-                        settings[script].WatchHealth = ImGui.InputInt("Watch Health##" .. script, settings[script].WatchHealth, 1, 5)
-                        if settings[script].WatchHealth > 100 then settings[script].WatchHealth = 100 end
-                        if settings[script].WatchHealth < 1 then settings[script].WatchHealth = 1 end
-                        settings[script].WatchMana = ImGui.InputInt("Watch Mana##" .. script, settings[script].WatchMana, 1, 5)
-                        if settings[script].WatchMana > 100 then settings[script].WatchMana = 100 end
-                        if settings[script].WatchMana < 1 then settings[script].WatchMana = 1 end
+                settings[Module.Name].GroupWatch = ImGui.Checkbox("Group Watch##" .. Module.Name, settings[Module.Name].GroupWatch)
+                if settings[Module.Name].GroupWatch then
+                    if ImGui.CollapsingHeader("Group Watch Settings##" .. Module.Name) then
+                        settings[Module.Name].WatchHealth = ImGui.InputInt("Watch Health##" .. Module.Name, settings[Module.Name].WatchHealth, 1, 5)
+                        if settings[Module.Name].WatchHealth > 100 then settings[Module.Name].WatchHealth = 100 end
+                        if settings[Module.Name].WatchHealth < 1 then settings[Module.Name].WatchHealth = 1 end
+                        settings[Module.Name].WatchMana = ImGui.InputInt("Watch Mana##" .. Module.Name, settings[Module.Name].WatchMana, 1, 5)
+                        if settings[Module.Name].WatchMana > 100 then settings[Module.Name].WatchMana = 100 end
+                        if settings[Module.Name].WatchMana < 1 then settings[Module.Name].WatchMana = 1 end
 
-                        if ImGui.BeginCombo("Watch Type##" .. script, settings[script].WatchType) then
+                        if ImGui.BeginCombo("Watch Type##" .. Module.Name, settings[Module.Name].WatchType) then
                             local types = { "All", "Healer", "Self", "None", }
                             for i = 1, #types do
-                                local isSelected = types[i] == settings[script].WatchType
+                                local isSelected = types[i] == settings[Module.Name].WatchType
                                 if ImGui.Selectable(types[i], isSelected) then
-                                    settings[script].WatchType = types[i]
+                                    settings[Module.Name].WatchType = types[i]
                                 end
                             end
                             ImGui.EndCombo()
@@ -2312,45 +2311,45 @@ function Module.RenderGUI()
             end
             ImGui.Spacing()
 
-            if ImGui.CollapsingHeader("Recording Settings##" .. script) then
+            if ImGui.CollapsingHeader("Recording Settings##" .. Module.Name) then
                 -- Set RecordDley
                 ImGui.SetNextItemWidth(100)
-                NavSet.RecordDelay = ImGui.InputInt("Record Delay##" .. script, NavSet.RecordDelay, 1, 5)
+                NavSet.RecordDelay = ImGui.InputInt("Record Delay##" .. Module.Name, NavSet.RecordDelay, 1, 5)
                 -- Minimum Distance Between Waypoints
                 ImGui.SetNextItemWidth(100)
-                NavSet.RecordMinDist = ImGui.InputInt("Min Dist. Between WP##" .. script, NavSet.RecordMinDist, 1, 50)
+                NavSet.RecordMinDist = ImGui.InputInt("Min Dist. Between WP##" .. Module.Name, NavSet.RecordMinDist, 1, 50)
             end
             ImGui.Spacing()
 
-            if ImGui.CollapsingHeader("Navigation Settings##" .. script) then
+            if ImGui.CollapsingHeader("Navigation Settings##" .. Module.Name) then
                 -- Set Stop Distance
                 ImGui.SetNextItemWidth(100)
-                NavSet.StopDist = ImGui.InputInt("Stop Distance##" .. script, NavSet.StopDist, 1, 50)
+                NavSet.StopDist = ImGui.InputInt("Stop Distance##" .. Module.Name, NavSet.StopDist, 1, 50)
                 -- Set Waypoint Pause time
                 ImGui.SetNextItemWidth(100)
-                NavSet.WpPause = ImGui.InputInt("Waypoint Pause##" .. script, NavSet.WpPause, 1, 5)
+                NavSet.WpPause = ImGui.InputInt("Waypoint Pause##" .. Module.Name, NavSet.WpPause, 1, 5)
                 -- Set Interrupt Delay
                 ImGui.SetNextItemWidth(100)
-                InterruptSet.interruptDelay = ImGui.InputInt("Interrupt Delay##" .. script, InterruptSet.interruptDelay, 1, 5)
+                InterruptSet.interruptDelay = ImGui.InputInt("Interrupt Delay##" .. Module.Name, InterruptSet.interruptDelay, 1, 5)
             end
             ImGui.Spacing()
 
             -- Save & Close Button --
             if ImGui.Button("Save & Close") then
-                settings[script].HeadsUpTransparency = hudTransparency
-                settings[script].MouseOverTransparency = mouseOverTransparency
-                settings[script].Scale = scale
-                settings[script].LoadTheme = themeName
-                settings[script].locked = locked
-                settings[script].AutoSize = aSize
-                settings[script].MouseHUD = doMouseOver
-                settings[script].RecordDelay = NavSet.RecordDelay
-                settings[script].StopForGM = InterruptSet.stopForGM
-                settings[script].StopDistance = NavSet.StopDist
-                settings[script].RecordMinDist = NavSet.RecordMinDist
-                settings[script].PauseStops = NavSet.WpPause
-                settings[script].InterruptDelay = InterruptSet.interruptDelay
-                settings[script].Interrupts = InterruptSet
+                settings[Module.Name].HeadsUpTransparency = hudTransparency
+                settings[Module.Name].MouseOverTransparency = mouseOverTransparency
+                settings[Module.Name].Scale = scale
+                settings[Module.Name].LoadTheme = themeName
+                settings[Module.Name].locked = locked
+                settings[Module.Name].AutoSize = aSize
+                settings[Module.Name].MouseHUD = doMouseOver
+                settings[Module.Name].RecordDelay = NavSet.RecordDelay
+                settings[Module.Name].StopForGM = InterruptSet.stopForGM
+                settings[Module.Name].StopDistance = NavSet.StopDist
+                settings[Module.Name].RecordMinDist = NavSet.RecordMinDist
+                settings[Module.Name].PauseStops = NavSet.WpPause
+                settings[Module.Name].InterruptDelay = InterruptSet.interruptDelay
+                settings[Module.Name].Interrupts = InterruptSet
                 mq.pickle(configFile, settings)
                 showConfigGUI = false
             end
@@ -2386,7 +2385,7 @@ function Module.RenderGUI()
                 if ImGui.MenuItem(lockLabel .. "##MyPathsHud") then
                     hudLock = not hudLock
 
-                    settings[script].HudLock = hudLock
+                    settings[Module.Name].HudLock = hudLock
                     mq.pickle(configFile, settings)
                 end
 
@@ -2425,29 +2424,30 @@ local function displayHelp()
     Commands: /mypaths [combat|xtarg] [on|off] - Toggle Combat or Xtarget.]]
     MyUI_Utils.PrintOutput('MyUI', nil,
         "\ay[\at%s\ax] \agCommands: \ay/mypaths [go|stop|list|chainadd|chainclear|chainloop|show|quit|save|reload|help] [loop|rloop|start|reverse|pingpong|closest|rclosest] [path]",
-        script)
-    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agOptions: \aygo \aw= \atREQUIRES arguments and Path name see below for Arguments.", script)
-    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agOptions: \aystop \aw= \atStops the current Navigation.", script)
-    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agOptions: \ayshow \aw= \atToggles Main GUI.", script)
-    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agOptions: \aychainclear \aw= \atClears the Current Chain.", script)
-    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agOptions: \aychainloop \aw= \atToggle Loop the Current Chain.", script)
-    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agOptions: \aychainadd [normal|reverse|loop|pingpong] [path] \aw= \atadds path to chain in current zone", script)
-    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agOptions: \aychainadd [normal|reverse|loop|pingpong] [zone] [path] \aw= \atadds zone/path to chain", script)
-    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agOptions: \aylist \aw= \atLists all Paths in the current Zone.", script)
-    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agOptions: \aylist zone \aw= \atlist all zones that have paths", script)
-    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agOptions: \aylist [zone] \aw= \atlist all paths in specified zone", script)
-    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agOptions: \ayquit or exit \aw= \atExits the script.", script)
-    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agOptions: \aysave \aw= \atSave the current Paths to lua file.", script)
-    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agOptions: \ayreload \aw= \atReload Paths File.", script)
-    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agOptions: \ayhelp \aw= \atPrints out this help list.", script)
-    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agArguments: \ayloop \aw= \atLoops the path, \ayrloop \aw= \atLoop in reverse.", script)
-    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agArguments: \ayclosest \aw= \atstart at closest wp, \ayrclosest \aw= \atstart at closest wp and go in reverse.", script)
-    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agArguments: \aystart \aw= \atstarts the path normally, \ayreverse \aw= \atrun the path backwards.", script)
-    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agArguments: \aypingpong \aw= \atstart in ping pong mode.", script)
-    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agExample: \ay/mypaths \aogo \ayloop \am\"Loop A\"", script)
-    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agExample: \ay/mypaths \aostop", script)
-    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agCommands: \ay/mypaths [\atcombat\ax|\atxtarg\ax] [\aton\ax|\atoff\ax] \ay- \atToggle Combat or Xtarget.", script)
-    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agCommands: \ay/mypaths [\atdointerrupts\ax] [\aton\ax|\atoff\ax] \ay- \atToggle Interrupts.", script)
+        Module.Name)
+    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agOptions: \aygo \aw= \atREQUIRES arguments and Path name see below for Arguments.", Module.Name)
+    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agOptions: \aystop \aw= \atStops the current Navigation.", Module.Name)
+    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agOptions: \ayshow \aw= \atToggles Main GUI.", Module.Name)
+    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agOptions: \aychainclear \aw= \atClears the Current Chain.", Module.Name)
+    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agOptions: \aychainloop \aw= \atToggle Loop the Current Chain.", Module.Name)
+    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agOptions: \aychainadd [normal|reverse|loop|pingpong] [path] \aw= \atadds path to chain in current zone", Module.Name)
+    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agOptions: \aychainadd [normal|reverse|loop|pingpong] [zone] [path] \aw= \atadds zone/path to chain", Module.Name)
+    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agOptions: \aylist \aw= \atLists all Paths in the current Zone.", Module.Name)
+    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agOptions: \aylist zone \aw= \atlist all zones that have paths", Module.Name)
+    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agOptions: \aylist [zone] \aw= \atlist all paths in specified zone", Module.Name)
+    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agOptions: \ayquit or exit \aw= \atExits the script.", Module.Name)
+    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agOptions: \aysave \aw= \atSave the current Paths to lua file.", Module.Name)
+    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agOptions: \ayreload \aw= \atReload Paths File.", Module.Name)
+    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agOptions: \ayhelp \aw= \atPrints out this help list.", Module.Name)
+    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agArguments: \ayloop \aw= \atLoops the path, \ayrloop \aw= \atLoop in reverse.", Module.Name)
+    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agArguments: \ayclosest \aw= \atstart at closest wp, \ayrclosest \aw= \atstart at closest wp and go in reverse.", Module
+        .Name)
+    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agArguments: \aystart \aw= \atstarts the path normally, \ayreverse \aw= \atrun the path backwards.", Module.Name)
+    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agArguments: \aypingpong \aw= \atstart in ping pong mode.", Module.Name)
+    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agExample: \ay/mypaths \aogo \ayloop \am\"Loop A\"", Module.Name)
+    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agExample: \ay/mypaths \aostop", Module.Name)
+    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agCommands: \ay/mypaths [\atcombat\ax|\atxtarg\ax] [\aton\ax|\atoff\ax] \ay- \atToggle Combat or Xtarget.", Module.Name)
+    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agCommands: \ay/mypaths [\atdointerrupts\ax] [\aton\ax|\atoff\ax] \ay- \atToggle Interrupts.", Module.Name)
 end
 
 local function bind(...)
@@ -2494,9 +2494,9 @@ local function bind(...)
             NavSet.doNav = false
             Module.IsRunning = false
         elseif key == 'list' then
-            MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agZones: ", script)
+            MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agZones: ", Module.Name)
             for name, data in pairs(Paths) do
-                MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \ay%s", script, name)
+                MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \ay%s", Module.Name, name)
             end
         elseif key == 'chainclear' then
             ChainedPaths = {}
@@ -2509,7 +2509,7 @@ local function bind(...)
         elseif key == 'save' then
             mq.pickle(pathsFile, Paths)
         else
-            MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \arInvalid Command!", script)
+            MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \arInvalid Command!", Module.Name)
         end
     elseif #args == 2 then
         if key == 'resume' then
@@ -2537,35 +2537,35 @@ local function bind(...)
         elseif key == 'dointerrupts' then
             if action == 'on' then
                 InterruptSet.interruptsOn = true
-                MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agPausing for Interrupts: \atON", script)
+                MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agPausing for Interrupts: \atON", Module.Name)
             elseif action == 'off' then
                 InterruptSet.interruptsOn = false
-                MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agPausing for Interrupts: \arOFF", script)
+                MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agPausing for Interrupts: \arOFF", Module.Name)
             end
         elseif key == 'list' then
             if action == 'zones' then
-                MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agZone: \atZones With Paths: ", script)
+                MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agZone: \atZones With Paths: ", Module.Name)
                 for name, data in pairs(Paths) do
-                    if name ~= nil and name ~= '' then MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \ay%s", script, name) end
+                    if name ~= nil and name ~= '' then MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \ay%s", Module.Name, name) end
                 end
             else
                 if Paths[action] == nil then
-                    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \arNo Paths Found!", script)
+                    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \arNo Paths Found!", Module.Name)
                     return
                 end
-                MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agZone: \at%s \agPaths: ", script, action)
+                MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agZone: \at%s \agPaths: ", Module.Name, action)
                 for name, data in pairs(Paths[action]) do
-                    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \ay%s", script, name)
+                    MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \ay%s", Module.Name, name)
                 end
             end
         elseif key == "gpause" and tonumber(action) ~= nil then
-            settings[script].PauseStops = tonumber(action)
+            settings[Module.Name].PauseStops = tonumber(action)
             mq.pickle(configFile, settings)
-            NavSet.WpPause = settings[script].PauseStops
+            NavSet.WpPause = settings[Module.Name].PauseStops
         end
     elseif #args == 3 then
         if Paths[zone]["'" .. path .. "'"] ~= nil then
-            MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \arInvalid Path!", script)
+            MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \arInvalid Path!", Module.Name)
             return
         end
         if key == 'go' then
@@ -2658,7 +2658,7 @@ local function bind(...)
             end
         end
     else
-        MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \arInvalid Arguments!", script)
+        MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \arInvalid Arguments!", Module.Name)
     end
 end
 
@@ -2692,7 +2692,7 @@ end
 local function Init()
     processArgs()
     -- Get Character Name
-    configFile = string.format('%s/MyUI/%s/%s/%s_Configs.lua', mq.configDir, script, MyUI_Server, MyUI_CharLoaded)
+    configFile = string.format('%s/MyUI/%s/%s/%s_Configs.lua', mq.configDir, Module.Name, MyUI_Server, MyUI_CharLoaded)
     -- Load Settings
     loadSettings()
     loadPaths()
@@ -2707,7 +2707,7 @@ local function Init()
     displayHelp()
     Module.IsRunning = true
     if not loadedExeternally then
-        mq.imgui.init(script, Module.RenderGUI)
+        mq.imgui.init(Module.Name, Module.RenderGUI)
         Module.LocalLoop()
     end
 end
@@ -2730,7 +2730,7 @@ function Module.MainLoop()
     end
 
     if currZone ~= lastZone then
-        MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agZone Changed Last: \at%s Current: \ay%s", script, lastZone, currZone)
+        MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agZone Changed Last: \at%s Current: \ay%s", Module.Name, lastZone, currZone)
         lastZone = currZone
         NavSet.SelectedPath = 'None'
         NavSet.doNav = false
@@ -2774,7 +2774,7 @@ function Module.MainLoop()
                     NavSet.doNav = true
                     PathStartClock, PathStartTime = os.date("%I:%M:%S %p"), os.time()
                     status = 'Navigating'
-                    MyUI_Utils.PrintOutput('MyUI', nil, '\ay[\at%s\ax] \agStarting navigation for path: \ay%s \agin zone: \ay%s', script, NavSet.SelectedPath, currZone)
+                    MyUI_Utils.PrintOutput('MyUI', nil, '\ay[\at%s\ax] \agStarting navigation for path: \ay%s \agin zone: \ay%s', Module.Name, NavSet.SelectedPath, currZone)
                 end
             else
                 ChainedPaths = {}
@@ -2869,7 +2869,7 @@ function Module.MainLoop()
         InterruptSet.interruptFound = CheckInterrupts()
         InterruptSet.interruptCheck = os.time()
         if mq.TLO.SpawnCount('gm')() > 0 and InterruptSet.stopForGM and not NavSet.PausedActiveGN then
-            MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \arGM Detected, \ayPausing Navigation...", script)
+            MyUI_Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \arGM Detected, \ayPausing Navigation...", Module.Name)
             NavSet.doNav = false
             mq.cmdf("/nav stop log=off")
             NavSet.ChainStart = false
@@ -2879,8 +2879,8 @@ function Module.MainLoop()
             NavSet.PausedActiveGN = true
         end
         if status == 'Paused for Invis.' or status == 'Paused for Double Invis.' then
-            if settings[script].InvisAction ~= '' then
-                mq.cmd(settings[script].InvisAction)
+            if settings[Module.Name].InvisAction ~= '' then
+                mq.cmd(settings[Module.Name].InvisAction)
                 -- local iDelay = settings[script].InvisDelay * 1000
                 -- mq.delay(iDelay)
             end
@@ -3069,7 +3069,7 @@ function Module.LocalLoop()
 end
 
 if mq.TLO.EverQuest.GameState() ~= "INGAME" then
-    printf("\aw[\at%s\ax] \arNot in game, \ayTry again later...", script)
+    printf("\aw[\at%s\ax] \arNot in game, \ayTry again later...", Module.Name)
     mq.exit()
 end
 
