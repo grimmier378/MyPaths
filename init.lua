@@ -14,18 +14,20 @@ Module.Name             = 'MyPaths'
 Module.IsRunning        = false
 ---@diagnostic disable-next-line:undefined-global
 local loadedExeternally = MyUI_ScriptName ~= nil and true or false
+local MySelf            = mq.TLO.Me
 
 if not loadedExeternally then
     Module.Utils       = require('lib.common')
     Module.ThemeLoader = require('lib.theme_loader')
     Module.Icons       = require('mq.ICONS')
-    Module.CharLoaded  = mq.TLO.Me.DisplayName()
+    Module.CharLoaded  = MySelf.DisplayName()
     Module.Server      = mq.TLO.MacroQuest.Server()
     Module.Base64      = require('lib.base64')
     Module.PackageMan  = require('mq.PackageMan')
     Module.SQLite3     = Module.PackageMan.Require('lsqlite3')
     Module.ThemeFile   = string.format('%s/MyUI/ThemeZ.lua', mq.configDir)
     Module.Theme       = {}
+    Module.MyClass     = MySelf.Class.ShortName()
 else
     Module.Utils       = MyUI_Utils
     Module.ThemeLoader = MyUI_ThemeLoader
@@ -37,7 +39,11 @@ else
     Module.SQLite3     = MyUI_SQLite3
     Module.ThemeFile   = MyUI_ThemeFile
     Module.Theme       = MyUI_Theme
+    Module.MyClass     = MyUI_CharClass
 end
+
+Module.TempSettings = {}
+
 
 -- Variables
 local themeName                                                  = 'Default'
@@ -54,6 +60,9 @@ local currZone, lastZone                                         = '', ''
 local lastHP, lastMP, intPauseTime, curWpPauseTime               = 0, 0, 0, 0
 local lastRecordedWP                                             = ''
 local PathStartClock, PathStartTime                              = nil, nil
+local oneshot                                                    = false
+local rwStatus, gwStatus                                         = '', ''
+local interruptInProgress                                        = false
 
 local NavSet                                                     = {
     ChainPath        = 'Select Path...',
@@ -84,28 +93,32 @@ local NavSet                                                     = {
 }
 
 local InterruptSet                                               = {
-    interruptsOn    = true,
-    interruptFound  = false,
-    reported        = false,
-    interruptDelay  = 2,
-    PauseStart      = 0,
-    openDoor        = false,
-    stopForAll      = true,
-    stopForGM       = true,
-    stopForSitting  = true,
-    stopForCombat   = true,
-    stopForGoupDist = 100,
-    stopForDist     = false,
-    stopForXtar     = true,
-    stopForFear     = true,
-    stopForCharm    = true,
-    stopForMez      = true,
-    stopForRoot     = true,
-    stopForLoot     = true,
-    stopForInvis    = false,
-    stopForDblInvis = false,
-    stopForCasting  = true,
-    interruptCheck  = 0,
+    interruptsOn       = true,
+    interruptFound     = false,
+    reported           = false,
+    interruptDelay     = 2,
+    PauseStart         = 0,
+    openDoor           = false,
+    stopForAll         = true,
+    stopForGM          = true,
+    stopForSitting     = true,
+    stopForCombat      = true,
+    stopForGoupDist    = 100,
+    stopForDist        = false,
+    stopForRaidDist    = 100,
+    stopForRaid        = false,
+    stopForXtar        = true,
+    stopForFear        = true,
+    stopForCharm       = true,
+    stopForMez         = true,
+    stopForRoot        = true,
+    stopForLoot        = true,
+    stopForInvis       = false,
+    stopForDblInvis    = false,
+    stopForCasting     = true,
+    interruptCheck     = 0,
+    stopForPartyCorpse = true,
+    stopForRaidCorpse  = true,
 }
 
 -- GUI Settings
@@ -143,6 +156,8 @@ defaults                                                         = {
     InvisDelay            = 3,
     WatchHealth           = 90,
     GroupWatch            = false,
+    RaidWatch             = false,
+    RaidWatchHealth       = 90,
     HeadsUpTransparency   = 0.5,
     MouseOverTransparency = 1.0,
     StopDistance          = 30,
@@ -150,6 +165,8 @@ defaults                                                         = {
     InterruptDelay        = 1,
     RecordMinDist         = 25,
     AutoStand             = false,
+    StopForPartyCorpse    = true,
+    StopForRaidCorpse     = true,
 }
 
 local manaClass                                                  = {
@@ -350,7 +367,8 @@ local function loadSettings()
     scale = settings[Module.Name].Scale
     themeName = settings[Module.Name].LoadTheme
     NavSet.RecordDelay = settings[Module.Name].RecordDelay
-
+    InterruptSet.stopForPartyCorpse = settings[Module.Name].StopForPartyCorpse
+    InterruptSet.stopForRaidCorpse = settings[Module.Name].StopForRaidCorpse
 
     -- Save the settings if new settings were added
     if newSetting then mq.pickle(configFile, settings) end
@@ -361,7 +379,7 @@ local function RecordWaypoint(name)
     if not Paths[zone] then Paths[zone] = {} end
     if not Paths[zone][name] then Paths[zone][name] = {} end
     local tmp = Paths[zone][name]
-    local loc = mq.TLO.Me.LocYXZ()
+    local loc = MySelf.LocYXZ()
     local index = #tmp or 1
     local distToLast = 0
     if lastRecordedWP ~= loc and lastRecordedWP ~= '' then
@@ -559,110 +577,252 @@ end
 
 local function groupDistance()
     local member = mq.TLO.Group.Member
-    local gsize = mq.TLO.Me.GroupSize() or 0
+    local gsize = MySelf.GroupSize() or 0
     if gsize == 0 then return false end
     for i = 1, gsize - 1 do
         if member(i).Present() then
-            if member(i).Distance() > InterruptSet.stopForGoupDist then
-                status = string.format('Paused for Group Distance. %s is %.2f units away.', member(i).Name(), member(i).Distance())
+            local dist = member(i).Distance() or 0
+            if dist > InterruptSet.stopForGoupDist then
+                gwStatus = string.format('Paused for Group Distance. %s is %.2f units away.', member(i).CleanName(), dist)
                 return true
             end
         else
-            status = string.format('Paused for Group Distance. %s is not in Zone!', member(i).Name())
+            gwStatus = string.format('Paused for Group Distance. %s is not in Zone!', member(i).CleanName())
             return true
         end
     end
     return false
 end
 
-local function groupWatch(type)
-    if type == 'None' then return false end
-    local myClass = mq.TLO.Me.Class.ShortName()
-    if type == "Self" then
-        if mq.TLO.Me.PctHPs() < settings[Module.Name].WatchHealth then
-            mq.TLO.Me.Sit()
+local function raidDistance()
+    local member = mq.TLO.Raid.Member
+    local rSize = mq.TLO.Raid.Members() or 0
+    if rSize == 0 then return false end
+    for i = 1, rSize do
+        if mq.TLO.SpawnCount(string.format("PC =%s", member(i).Name()))() > 0 then
+            local dist = member(i).Distance() or 9999
+            if dist > InterruptSet.stopForRaidDist then
+                rwStatus = string.format('Paused for Raid Distance. %s is %.2f units away.', member(i).Name(), dist)
+                return true
+            end
+        else
+            rwStatus = string.format('Paused for Raid Member Distance. %s is not in Zone!', member(i).Name())
+            return true
+        end
+    end
+    return false
+end
+
+local function checkCorpses(which)
+    local deadCount = mq.TLO.SpawnCount(string.format('pccorpse radius %s zradius 50', 100))() or 0
+    if deadCount == 0 then return false end
+    local corpseList = {}
+    local member     = which == 'Party' and mq.TLO.Group.Member or mq.TLO.Raid.Member
+    if deadCount > 0 then
+        for i = 1, deadCount do
+            local corpse = mq.TLO.NearestSpawn(string.format('%d, pcorpse radius %d zradius 50', i, 100))
+            if corpse() then
+                corpseList[corpse.CleanName():gsub("'s corpse", "")] = true
+            end
+        end
+    end
+    if corpseList ~= nil then
+        if which == 'Party' then
+            for i = 0, MySelf.GroupSize() - 1 do
+                if member(i).Name() then
+                    if corpseList[member(i).Name()] then
+                        return true
+                    end
+                end
+            end
+        elseif which == 'Raid' then
+            for i = 1, mq.TLO.Raid.Members() do
+                if member(i).Name() then
+                    if corpseList[member(i).Name()] then
+                        return true
+                    end
+                end
+            end
+        end
+    end
+    return false
+end
+
+local function groupWatch(watchType)
+    if watchType == 'None' then return false end
+    local myClass = MySelf.Class.ShortName()
+    local gsize = MySelf.GroupSize() or 0
+
+    if watchType == "Self" then
+        if MySelf.PctHPs() < settings[Module.Name].WatchHealth then
+            MySelf.Sit()
+            gwStatus = string.format('Paused for SELF Health Watch. [%s] %s%%', MySelf.Name(), MySelf.PctHPs())
             return true
         end
         for x = 1, #manaClass do
-            if manaClass[x] == myClass and mq.TLO.Me.PctMana() < settings[Module.Name].WatchMana then
-                mq.TLO.Me.Sit()
-                status = string.format('Paused for Mana Watch.')
+            if manaClass[x] == myClass and MySelf.PctMana() < settings[Module.Name].WatchMana then
+                MySelf.Sit()
+                gwStatus = string.format('Paused for SELF Mana Watch. [%s] %s%%', MySelf.Name(), MySelf.PctMana())
                 return true
             end
         end
-    elseif mq.TLO.Me.GroupSize() > 0 then
-        local member = mq.TLO.Group.Member
-        local gsize = mq.TLO.Me.GroupSize() or 0
+    end
+    if gsize == 0 then
+        return false
+    else
+        for i = 1, gsize - 1 do
+            local member = mq.TLO.Group.Member(i)
+            if not member or not member() then return false end
+            local memberName = member.CleanName() or 'link_dead'
+            local memberClass = member.Class.ShortName() or 'unknown'
+            local memberHP = member.PctHPs() or 101
 
-        if type == 'Healer' then
-            for i = 1, gsize - 1 do
-                if member(i).Present() then
-                    local class = member(i).Class.ShortName()
+            -- Check if the member is present in the zone
+            if not mq.TLO.Spawn(string.format("=%s", memberName))() then
+                -- if (mq.TLO.SpawnCount(string.format("PC \"=%s\"", memberName))() or 0) <= 0 then
+                gwStatus = string.format('Paused for Group Member %s not Present.', memberName)
+                return true
+            end
 
-                    if class == 'CLR' or class == 'DRU' or class == 'SHM' then
-                        if member(i).PctHPs() < settings[Module.Name].WatchHealth then
-                            status = string.format('Paused for Healer Health.')
-                            return true
-                        end
-                        if member(i).PctMana() < settings[Module.Name].WatchMana then
-                            status = string.format('Paused for Healer Mana.')
-                            return true
-                        end
+            if watchType == 'Healer' then
+                if memberClass == 'CLR' or memberClass == 'DRU' or memberClass == 'SHM' then
+                    if memberHP < settings[Module.Name].WatchHealth then
+                        gwStatus = string.format('Paused for GROUP Healer Health. [%s] %s%%', memberName, memberHP)
+                        return true
+                    end
+                    if member.PctMana() < settings[Module.Name].WatchMana then
+                        gwStatus = string.format('Paused for GROUP Healer Mana. [%s] %s%%', memberName, member.PctMana())
+                        return true
+                    end
+                end
+                if myClass == 'CLR' or myClass == 'DRU' or myClass == 'SHM' then
+                    if MySelf.PctHPs() < settings[Module.Name].WatchHealth then
+                        gwStatus = string.format('Paused for GROUP Health Watch. [%s] %s%%', MySelf.Name(), MySelf.PctHPs())
+                        MySelf.Sit()
+                        return true
+                    end
+                    if manaClass[myClass] and MySelf.PctMana() < settings[Module.Name].WatchMana then
+                        MySelf.Sit()
+                        gwStatus = string.format('Paused for GROUP Mana Watch. [%s] %s%%', MySelf.Name(), MySelf.PctMana())
+                        return true
                     end
                 end
             end
-            if myClass == 'CLR' or myClass == 'DRU' or myClass == 'SHM' then
-                if mq.TLO.Me.PctHPs() < settings[Module.Name].WatchHealth then
-                    status = string.format('Paused for Health Watch.')
-                    mq.TLO.Me.Sit()
-                    return true
-                end
-                if manaClass[myClass] and mq.TLO.Me.PctMana() < settings[Module.Name].WatchMana then
-                    mq.TLO.Me.Sit()
-                    status = string.format('Paused for Mana Watch.')
-                    return true
-                end
-            end
-        end
-        if type == 'All' then
-            for i = 1, gsize - 1 do
-                if member(i).Present() then
-                    if member(i).PctHPs() < settings[Module.Name].WatchHealth then
-                        status = string.format('Paused for Health Watch.')
+            if watchType == 'All' then
+                if mq.TLO.Spawn(string.format("=%s", member.Name() or "unknown_member"))() then
+                    if memberHP < settings[Module.Name].WatchHealth then
+                        gwStatus = string.format('Paused for GROUP Health Watch.')
                         return true
                     end
                     for x = 1, #manaClass do
-                        if member(i).Class.ShortName() == manaClass[x] then
-                            if member(i).PctMana() < settings[Module.Name].WatchMana then
-                                status = string.format('Paused for Mana Watch.')
+                        if member.Class.ShortName() == manaClass[x] then
+                            if member.PctMana() < settings[Module.Name].WatchMana then
+                                status = string.format('Paused for GROUP Mana Watch.')
                                 return true
                             end
                         end
                     end
                 else
-                    status = string.format('Paused for Group Member %s not Present.', member(i).CleanName())
+                    gwStatus = string.format('Paused for Group Member %s not Present.', member.Name() or "link_dead")
                     return true
                 end
-                if mq.TLO.Me.PctHPs() < settings[Module.Name].WatchHealth then
-                    status = string.format('Paused for Health Watch.')
-                    mq.TLO.Me.Sit()
+                if MySelf.PctHPs() < settings[Module.Name].WatchHealth then
+                    gwStatus = string.format('Paused for GROUP Health Watch.')
+                    MySelf.Sit()
                     return true
                 end
                 for x = 1, #manaClass do
-                    if manaClass[x] == myClass and mq.TLO.Me.PctMana() < settings[Module.Name].WatchMana then
-                        mq.TLO.Me.Sit()
-                        status = string.format('Paused for Mana Watch.')
+                    if manaClass[x] == myClass and MySelf.PctMana() < settings[Module.Name].WatchMana then
+                        MySelf.Sit()
+                        gwStatus = string.format('Paused for GROUP Mana Watch.')
                         return true
                     end
                 end
             end
+            -- mq.delay(1)
         end
-        -- mq.delay(1)
     end
     return false
 end
 
-local interruptInProgress = false
+local function raidWatch(watchType)
+    if watchType == 'None' then return false end
+    local myClass = MySelf.Class.ShortName()
+    local rsize = mq.TLO.Raid.Members() or 0
+
+    if watchType == "Self" then
+        if MySelf.PctHPs() < settings[Module.Name].RaidWatchHealth then
+            MySelf.Sit()
+            return true
+        end
+        for x = 1, #manaClass do
+            if manaClass[x] == myClass and MySelf.PctMana() < settings[Module.Name].WatchMana then
+                MySelf.Sit()
+                rwStatus = string.format('Paused for SELF Mana Watch.')
+                return true
+            end
+        end
+    end
+    if rsize == 0 then
+        return false
+    else
+        for i = 1, rsize do
+            local member = mq.TLO.Raid.Member(i)
+            if not member and not member() then return false end
+            local memberName = member.Name() or 'link_dead'
+            local memberClass = member.Class.ShortName() or 'unknown'
+            local memberHP = member.PctHPs() or 101
+
+            if not mq.TLO.Spawn(string.format("=%s", memberName))() then
+                -- if (mq.TLO.SpawnCount(string.format("PC \"=%s\"", memberName))() or 0) > 0 then
+                rwStatus = string.format('Paused for Raid Member %s not Present.', memberName)
+                return true
+            end
+
+            if watchType == 'Healer' then
+                if memberClass == 'CLR' or memberClass == 'DRU' or memberClass == 'SHM' then
+                    if memberHP < settings[Module.Name].RaidWatchHealth then
+                        rwStatus = string.format('Paused for RAID HEALER Health. [%s] %s%%', memberName, memberHP)
+                        mq.cmdf("/target %s", memberName)
+                        mq.delay(1)
+                        if mq.TLO.Target() and mq.TLO.Target.CleanName() == memberName and mq.TLO.Target.PctHPs() >= settings[Module.Name].RaidWatchHealth then
+                            goto next
+                        end
+                        return true
+                    end
+                end
+                if myClass == 'CLR' or myClass == 'DRU' or myClass == 'SHM' then
+                    if MySelf.PctHPs() < settings[Module.Name].RaidWatchHealth then
+                        rwStatus = string.format('Paused for RAID  Health Watch. [%s] %s%%', MySelf.Name(), MySelf.PctHPs())
+                        MySelf.Sit()
+                        return true
+                    end
+                end
+            elseif watchType == 'All' then
+                if memberHP < settings[Module.Name].RaidWatchHealth then
+                    rwStatus = string.format('Paused for RAID Health Watch. [%s] %s%%', memberName, memberHP)
+                    mq.cmdf("/target %s", memberName)
+                    mq.delay(1)
+                    if mq.TLO.Target() and mq.TLO.Target.CleanName() == memberName and mq.TLO.Target.PctHPs() >= settings[Module.Name].RaidWatchHealth then
+                        goto next
+                    end
+                    return true
+                end
+                if MySelf.PctHPs() < settings[Module.Name].RaidWatchHealth then
+                    rwStatus = string.format('Paused for RAID Health Watch. [%s] %s%%', MySelf.Name(), MySelf.PctHPs())
+                    MySelf.Sit()
+                    return true
+                end
+            else
+                return false
+            end
+            ::next::
+        end
+    end
+
+    return false
+end
+
 
 local function CheckInterrupts()
     if not InterruptSet.interruptsOn then return false end
@@ -670,27 +830,8 @@ local function CheckInterrupts()
     local xCount = mq.TLO.Me.XTarget() or 0
     local flag = false
     local invis = false
-    if mq.TLO.Me.Sitting() and InterruptSet.stopForSitting then
-        local curHP, curMP = mq.TLO.Me.PctHPs(), mq.TLO.Me.PctMana() or 0
-        -- mq.delay(10)
-        if not interruptInProgress then
-            mq.cmdf("/nav stop log=off")
-            interruptInProgress = true
-            status = string.format('Paused for Sitting. HP %s MP %s', curHP, curMP)
-        end
-        if curHP - lastHP > 5 or curMP - lastMP > 5 then
-            status = string.format('Paused for Sitting. HP %s MP %s', curHP, curMP)
-            lastHP, lastMP = curHP, curMP
-        end
 
-        flag = true
-
-        if curHP >= 99 and curMP >= 99 and settings[Module.Name].AutoStand then
-            mq.TLO.Me.Stand()
-            status = 'Idle'
-            flag = false
-        end
-    elseif mq.TLO.Window('LootWnd').Open() and InterruptSet.stopForLoot then
+    if mq.TLO.Corpse() ~= 'FALSE' and InterruptSet.stopForLoot then
         if not interruptInProgress then
             mq.cmdf("/nav stop log=off")
             interruptInProgress = true
@@ -714,7 +855,13 @@ local function CheckInterrupts()
     elseif xCount > 0 and InterruptSet.stopForXtar then
         for i = 1, mq.TLO.Me.XTargetSlots() do
             if mq.TLO.Me.XTarget(i) ~= nil then
-                if (mq.TLO.Me.XTarget(i).ID() ~= 0 and mq.TLO.Me.XTarget(i).Type() ~= 'PC' and mq.TLO.Me.XTarget(i).Master.Type() ~= "PC") then
+                local xType = mq.TLO.Me.XTarget(i).Type() or 'none'
+                local xMaster = 'none'
+                local xID = mq.TLO.Me.XTarget(i).ID() or 0
+                if mq.TLO.Me.XTarget(i).Master then
+                    xMaster = mq.TLO.Me.XTarget(i).Master.Type() or 'none'
+                end
+                if (xID > 0 and xType ~= 'PC' and xMaster ~= "PC") then
                     if not interruptInProgress then
                         mq.cmdf("/nav stop log=off")
                         interruptInProgress = true
@@ -778,22 +925,73 @@ local function CheckInterrupts()
 
         flag = true
         invis = true
-        -- elseif currZone ~= lastZone then
-        --     if not interruptInProgress then mq.cmdf("/nav stop log=off") interruptInProgress = true end
-        --     status = 'Paused for Zoning.'
-        --     lastZone = ''
-        --     flag = true
-    elseif settings[Module.Name].GroupWatch == true and groupWatch(settings[Module.Name].WatchType) then
-        flag = true
-        if flag and not interruptInProgress then
+    elseif settings[Module.Name].GroupWatch and groupWatch(settings[Module.Name].WatchType) then
+        if not interruptInProgress then
             mq.cmdf("/nav stop log=off")
             interruptInProgress = true
         end
-    elseif InterruptSet.stopForDist == true and groupDistance() then
+        status = gwStatus
+        gwStatus = ''
         flag = true
-        if flag and not interruptInProgress then
+    elseif settings[Module.Name].RaidWatch and raidWatch(settings[Module.Name].RaidWatchType) then
+        if not interruptInProgress then
             mq.cmdf("/nav stop log=off")
             interruptInProgress = true
+        end
+        status = rwStatus
+        rwStatus = ''
+        flag = true
+    elseif InterruptSet.stopForDist and groupDistance() then
+        if not interruptInProgress then
+            mq.cmdf("/nav stop log=off")
+            interruptInProgress = true
+        end
+        status = gwStatus
+        gwStatus = ''
+        flag = true
+    elseif InterruptSet.stopForRaid and raidDistance() then
+        if not interruptInProgress then
+            mq.cmdf("/nav stop log=off")
+            interruptInProgress = true
+        end
+        status = rwStatus
+        rwStatus = ''
+        flag = true
+    elseif InterruptSet.stopForPartyCorpse and checkCorpses('Party') then
+        if not interruptInProgress then
+            mq.cmdf("/nav stop log=off")
+            interruptInProgress = true
+        end
+        status = 'Paused for Party Corpse.'
+        flag = true
+    elseif InterruptSet.stopForRaidCorpse and checkCorpses('Raid') then
+        if not interruptInProgress then
+            mq.cmdf("/nav stop log=off")
+            interruptInProgress = true
+        end
+        status = 'Paused for Raid Corpse.'
+        flag = true
+    elseif mq.TLO.Me.Sitting() and InterruptSet.stopForSitting then
+        local curHP, curMP, curEndur = mq.TLO.Me.PctHPs(), mq.TLO.Me.PctMana(), mq.TLO.Me.PctEndurance or 0
+        -- mq.delay(10)
+        if not interruptInProgress then
+            mq.cmdf("/nav stop log=off")
+            interruptInProgress = true
+            status = string.format('Paused for Sitting. HP %s MP %s', curHP, curMP)
+        end
+        if curHP - lastHP > 5 or curMP - lastMP > 5 then
+            status = string.format('Paused for Sitting. HP %s MP %s', curHP, curMP)
+            lastHP, lastMP = curHP, curMP
+        end
+
+        flag = true
+
+        if settings[Module.Name].AutoStand then
+            if curHP >= 99 and (manaClass[Module.myClass] and curMP >= 99) and curEndur > 50 then
+                mq.TLO.Me.Stand()
+                status = 'Idle'
+                flag = false
+            end
         end
     end
     if flag then
@@ -802,11 +1000,11 @@ local function CheckInterrupts()
         if invis then intPauseTime = settings[Module.Name].InvisDelay end
     else
         interruptInProgress = false
-        intPauseTime = 0
     end
 
     return flag
 end
+
 
 --------- Navigation Functions --------
 local doorTime = 0
@@ -897,7 +1095,7 @@ local function NavigatePath(name)
             mq.cmdf("/nav locyxz %s dist=%s log=off", tmp[i].loc, NavSet.StopDist)
             status = "Nav to WP #: " .. tmp[i].step .. " Distance: " .. string.format("%.2f", tmpDist)
             mq.delay(1)
-            -- mq.delay(3000, function () return mq.TLO.Me.Speed() > 0 end)
+            -- mq.delay(3000, function () return MySelf.Speed() > 0 end)
             -- coroutine.yield()  -- Yield here to allow updates
             while mq.TLO.Math.Distance(tmpDestLoc)() > NavSet.StopDist do
                 if not NavSet.doNav then
@@ -914,9 +1112,9 @@ local function NavigatePath(name)
                 if interruptInProgress then
                     coroutine.yield()
                     if not NavSet.doNav then goto EndNav end
-                elseif mq.TLO.Me.Speed() == 0 then
+                elseif MySelf.Speed() == 0 then
                     mq.delay(1)
-                    if not mq.TLO.Me.Sitting() then
+                    if not MySelf.Sitting() then
                         tmpDestLoc = tmp[i].loc
                         yx = tmpDestLoc:match("^(.-,.-),") -- Match the y,x part of the string
                         tmpDestLoc = tmpDestLoc:sub(1, #yx - 1)
@@ -1137,7 +1335,7 @@ local function DrawStatus()
     ImGui.TextColored(0, 1, 1, 1, "%s", NavSet.SelectedPath)
     ImGui.Text("Current Loc: ")
     ImGui.SameLine()
-    ImGui.TextColored(1, 1, 0, 1, "%s", mq.TLO.Me.LocYXZ())
+    ImGui.TextColored(1, 1, 0, 1, "%s", MySelf.LocYXZ())
     --[[
     if NavSet.doNav then
         local tmpTable = sortPathsTable(currZone, NavSet.SelectedPath) or {}
@@ -1189,6 +1387,7 @@ local function DrawStatus()
     if tmpStatus:find("Distance:") then
         tmpStatus = tmpStatus:sub(1, tmpStatus:find("Distance:") - 1)
     end
+    ImGui.PushTextWrapPos(350)
     if status:find("Idle") then
         ImGui.Text("Status: ")
         ImGui.SameLine()
@@ -1220,6 +1419,7 @@ local function DrawStatus()
         ImGui.SameLine()
         ImGui.TextColored(ImVec4(1, 1, 1, 1), status)
     end
+    ImGui.PopTextWrapPos()
     if PathStartClock ~= nil then
         ImGui.Text("Start Time: ")
         ImGui.SameLine()
@@ -1236,6 +1436,56 @@ local function DrawStatus()
     end
     ImGui.EndGroup()
 end
+
+local function RenderDebugMessages(scale)
+    ImGui.SetWindowFontScale(scale)
+    if ImGui.BeginChild("Tabs##DebugTab", -1, -1, ImGuiChildFlags.AutoResizeX) then
+        if ImGui.Button(Module.Icons.MD_OPEN_IN_NEW) then
+            Module.TempSettings.PopDebug = true
+        end
+        ImGui.SameLine()
+        if ImGui.Button('Clear Debug Messages') then
+            debugMessages = {}
+        end
+        if ImGui.IsItemHovered() then
+            ImGui.SetTooltip("Clear Debug Messages")
+        end
+
+        ImGui.Separator()
+        ImGui.SetWindowFontScale(scale)
+        if ImGui.BeginTable('DebugTable', 5, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), ImVec2(0.0, 0.0)) then
+            ImGui.TableSetupColumn('Time##', ImGuiTableColumnFlags.WidthFixed, 100)
+            ImGui.TableSetupColumn('Zone##', ImGuiTableColumnFlags.WidthFixed, 100)
+            ImGui.TableSetupColumn('Path##', ImGuiTableColumnFlags.WidthFixed, 100)
+            ImGui.TableSetupColumn('Action / Step##', ImGuiTableColumnFlags.WidthFixed, 100)
+            ImGui.TableSetupColumn('Status##', ImGuiTableColumnFlags.WidthFixed, 100)
+            ImGui.TableSetupScrollFreeze(0, 1)
+            ImGui.TableHeadersRow()
+            local tmpDebug = {}
+            for i = 1, #debugMessages do
+                table.insert(tmpDebug, debugMessages[i])
+            end
+            table.sort(tmpDebug, function(a, b) return a.Time > b.Time end)
+            for i = 1, #tmpDebug do
+                ImGui.TableNextRow()
+                ImGui.TableSetColumnIndex(0)
+                ImGui.Text(tmpDebug[i].Time)
+                ImGui.TableSetColumnIndex(1)
+                ImGui.Text(tmpDebug[i].Zone)
+                ImGui.TableSetColumnIndex(2)
+                ImGui.Text(tmpDebug[i].Path)
+                ImGui.TableSetColumnIndex(3)
+                ImGui.Text(tmpDebug[i].WP)
+                ImGui.TableSetColumnIndex(4)
+                ImGui.TextWrapped(tmpDebug[i].Status)
+            end
+            ImGui.EndTable()
+        end
+    end
+    ImGui.EndChild()
+    ImGui.SetWindowFontScale(1)
+end
+
 function Module.RenderGUI()
     -- Main Window
     if showMainGUI then
@@ -1288,8 +1538,8 @@ function Module.RenderGUI()
                 end
 
                 if ImGui.MenuItem(Module.Icons.FA_BUG) then
-                    if not DEBUG then DEBUG = true end
-                    showDebugTab = not showDebugTab
+                    DEBUG = not DEBUG
+                    showDebugTab = DEBUG
                 end
                 if ImGui.IsItemHovered() then
                     ImGui.SetTooltip("Debug")
@@ -1629,12 +1879,14 @@ function Module.RenderGUI()
                         ImGui.Separator()
                         if ImGui.CollapsingHeader("Chain Paths##") then
                             if NavSet.SelectedPath ~= 'None' then
+                                ImGui.PushID(NavSet.SelectedPath)
                                 ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
                                 if ImGui.Button(Module.Icons.MD_PLAYLIST_ADD .. " [" .. NavSet.SelectedPath .. "]##") then
                                     if not ChainedPaths then ChainedPaths = {} end
                                     table.insert(ChainedPaths, { Zone = currZone, Path = NavSet.SelectedPath, Type = 'Normal', })
                                 end
                                 ImGui.PopStyleColor()
+                                ImGui.PopID()
                             else
                                 ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.500, 0.500, 0.500, 1.000))
                                 ImGui.Button(Module.Icons.MD_PLAYLIST_ADD .. "##Dummy")
@@ -1648,6 +1900,8 @@ function Module.RenderGUI()
                             if #ChainedPaths > 0 then
                                 NavSet.ChainLoop = ImGui.Checkbox('Loop Chain', NavSet.ChainLoop)
                                 ImGui.SameLine()
+
+                                ImGui.SetNextItemWidth(100)
                                 saveChainName = ImGui.InputTextWithHint("##ChainName", "Chain Name", saveChainName)
                                 ImGui.SameLine()
                                 ImGui.PushStyleColor(ImGuiCol.Button, ImVec4(0.4, 1, 0.4, 0.4))
@@ -1928,8 +2182,8 @@ function Module.RenderGUI()
                                     ImGui.SetTooltip("Clear Waypoints")
                                 end
                                 ImGui.SameLine()
-                                ImGui.SetNextItemWidth(80)
-                                NavSet.RecordDelay = ImGui.InputInt("Record Delay##" .. Module.Name, NavSet.RecordDelay, 1, 10)
+                                ImGui.SetNextItemWidth(100)
+                                NavSet.RecordDelay = ImGui.InputInt("Rec Delay##" .. Module.Name, NavSet.RecordDelay, 1, 10)
                             end
                             ImGui.Separator()
                         end
@@ -1938,17 +2192,18 @@ function Module.RenderGUI()
                             -- Waypoint Table
                             if NavSet.SelectedPath ~= 'None' then
                                 ImGui.SetWindowFontScale(scale)
-                                if ImGui.BeginTable('PathTable', 6, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), -1, -1) then
-                                    ImGui.TableSetupColumn('WP#', ImGuiTableColumnFlags.WidthFixed, -1)
-                                    ImGui.TableSetupColumn('Loc', ImGuiTableColumnFlags.WidthFixed, -1)
-                                    ImGui.TableSetupColumn('Delay', ImGuiTableColumnFlags.WidthFixed, -1)
-                                    ImGui.TableSetupColumn('Actions', ImGuiTableColumnFlags.WidthFixed, -1)
-                                    ImGui.TableSetupColumn('Door', ImGuiTableColumnFlags.WidthFixed, -1)
-                                    ImGui.TableSetupColumn('Move', ImGuiTableColumnFlags.WidthFixed, -1)
+                                if ImGui.BeginTable('PathTable##WpList', 6, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.ScrollX, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), -1, -1) then
+                                    ImGui.TableSetupColumn('WP#', ImGuiTableColumnFlags.WidthFixed, 40)
+                                    ImGui.TableSetupColumn('Loc', ImGuiTableColumnFlags.WidthFixed, 120)
+                                    ImGui.TableSetupColumn('Delay', ImGuiTableColumnFlags.WidthFixed, 90)
+                                    ImGui.TableSetupColumn('Actions', ImGuiTableColumnFlags.WidthFixed, 100)
+                                    ImGui.TableSetupColumn('Door', ImGuiTableColumnFlags.WidthFixed, 90)
+                                    ImGui.TableSetupColumn('Move', ImGuiTableColumnFlags.WidthFixed, 120)
                                     ImGui.TableSetupScrollFreeze(0, 1)
                                     ImGui.TableHeadersRow()
 
                                     for i = 1, #tmpTable do
+                                        ImGui.PushID(i)
                                         ImGui.TableNextRow()
                                         ImGui.TableSetColumnIndex(0)
                                         if tmpTable[i].step == tmpTable[NavSet.CurrentStepIndex].step then
@@ -2072,14 +2327,14 @@ function Module.RenderGUI()
                                             -- if not doReverse then
                                             ImGui.SameLine(0, 0)
                                             if ImGui.Button(Module.Icons.MD_UPDATE .. '##Update_' .. i) then
-                                                tmpTable[i].loc = mq.TLO.Me.LocYXZ()
+                                                tmpTable[i].loc = MySelf.LocYXZ()
                                                 -- Update Paths table
                                                 for k, v in pairs(Paths[currZone][NavSet.SelectedPath]) do
                                                     if v.step == tmpTable[i].step then
                                                         Paths[currZone][NavSet.SelectedPath][k] = tmpTable[i]
                                                     end
                                                 end
-                                                -- Paths[currZone][selectedPath][tmpTable[i].step].loc = mq.TLO.Me.LocYXZ()
+                                                -- Paths[currZone][selectedPath][tmpTable[i].step].loc = MySelf.LocYXZ()
                                                 UpdatePath(currZone, NavSet.SelectedPath)
                                             end
                                             if ImGui.IsItemHovered() then
@@ -2127,6 +2382,7 @@ function Module.RenderGUI()
                                                 UpdatePath(currZone, NavSet.SelectedPath)
                                             end
                                         end
+                                        ImGui.PopID()
                                     end
                                     ImGui.EndTable()
                                 end
@@ -2139,50 +2395,26 @@ function Module.RenderGUI()
                     ImGui.EndTabItem()
                 end
                 if showDebugTab and DEBUG then
-                    if ImGui.BeginTabItem('Debug Messages') then
-                        if ImGui.BeginChild("Tabs##DebugTab", -1, -1, ImGuiChildFlags.AutoResizeX) then
-                            if ImGui.Button('Clear Debug Messages') then
-                                debugMessages = {}
-                            end
-                            if ImGui.IsItemHovered() then
-                                ImGui.SetTooltip("Clear Debug Messages")
-                            end
-                            ImGui.Separator()
-                            ImGui.SetWindowFontScale(scale)
-                            if ImGui.BeginTable('DebugTable', 5, bit32.bor(ImGuiTableFlags.Borders, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable, ImGuiTableFlags.Hideable), ImVec2(0.0, 0.0)) then
-                                ImGui.TableSetupColumn('Time##', ImGuiTableColumnFlags.WidthFixed, 100)
-                                ImGui.TableSetupColumn('Zone##', ImGuiTableColumnFlags.WidthFixed, 100)
-                                ImGui.TableSetupColumn('Path##', ImGuiTableColumnFlags.WidthFixed, 100)
-                                ImGui.TableSetupColumn('Action / Step##', ImGuiTableColumnFlags.WidthFixed, 100)
-                                ImGui.TableSetupColumn('Status##', ImGuiTableColumnFlags.WidthFixed, 100)
-                                ImGui.TableSetupScrollFreeze(0, 1)
-                                ImGui.TableHeadersRow()
-                                local tmpDebug = {}
-                                for i = 1, #debugMessages do
-                                    table.insert(tmpDebug, debugMessages[i])
-                                end
-                                table.sort(tmpDebug, function(a, b) return a.Time > b.Time end)
-                                for i = 1, #tmpDebug do
-                                    ImGui.TableNextRow()
-                                    ImGui.TableSetColumnIndex(0)
-                                    ImGui.Text(tmpDebug[i].Time)
-                                    ImGui.TableSetColumnIndex(1)
-                                    ImGui.Text(tmpDebug[i].Zone)
-                                    ImGui.TableSetColumnIndex(2)
-                                    ImGui.Text(tmpDebug[i].Path)
-                                    ImGui.TableSetColumnIndex(3)
-                                    ImGui.Text(tmpDebug[i].WP)
-                                    ImGui.TableSetColumnIndex(4)
-                                    ImGui.TextWrapped(tmpDebug[i].Status)
-                                end
-                                ImGui.EndTable()
-                            end
+                    if not Module.TempSettings.PopDebug then
+                        if ImGui.BeginTabItem('Debug Messages') then
+                            RenderDebugMessages(scale)
+                            ImGui.EndTabItem()
                         end
-                        ImGui.EndChild()
-                        ImGui.EndTabItem()
                     end
                 end
+
                 ImGui.EndTabBar()
+            end
+            if Module.TempSettings.PopDebug then
+                ImGui.SetNextWindowSize(ImVec2(400, 300), ImGuiCond.FirstUseEver)
+                local openDebug, showDebug = ImGui.Begin('MyPaths Debug Popout##' .. Module.Name, true, bit32.bor(ImGuiWindowFlags.None))
+                if not openDebug then
+                    Module.TempSettings.PopDebug = false
+                end
+                if showDebug then
+                    RenderDebugMessages(scale)
+                end
+                ImGui.End()
             end
             -- ImGui.EndChild()
         end
@@ -2241,18 +2473,18 @@ function Module.RenderGUI()
                         if not loadedExeternally then
                             mq.cmd("/lua run themez")
                         else
-                            if MyUI_Modules.ThemeZ ~= nil then
-                                if MyUI_Modules.ThemeZ.IsRunning then
-                                    MyUI_Modules.ThemeZ.ShowGui = true
+                            if Module.ThemeZ ~= nil then
+                                if Module.ThemeZ.IsRunning then
+                                    Module.ThemeZ.ShowGui = true
                                 else
-                                    MyUI_TempSettings.ModuleChanged = true
-                                    MyUI_TempSettings.ModuleName = 'ThemeZ'
-                                    MyUI_TempSettings.ModuleEnabled = true
+                                    Module.TempSettings.ModuleChanged = true
+                                    Module.TempSettings.ModuleName = 'ThemeZ'
+                                    Module.TempSettings.ModuleEnabled = true
                                 end
                             else
-                                MyUI_TempSettings.ModuleChanged = true
-                                MyUI_TempSettings.ModuleName = 'ThemeZ'
-                                MyUI_TempSettings.ModuleEnabled = true
+                                Module.TempSettings.ModuleChanged = true
+                                Module.TempSettings.ModuleName = 'ThemeZ'
+                                Module.TempSettings.ModuleEnabled = true
                             end
                         end
                     end
@@ -2299,55 +2531,58 @@ function Module.RenderGUI()
 
                 if ImGui.BeginTable("##Interrupts", 2, bit32.bor(ImGuiTableFlags.Borders), -1, 0) then
                     ImGui.TableNextRow()
-                    ImGui.TableSetColumnIndex(0)
+                    ImGui.TableNextColumn()
                     InterruptSet.stopForCharm = ImGui.Checkbox("Stop for Charmed##" .. Module.Name, InterruptSet.stopForCharm)
                     if not InterruptSet.stopForCharm then InterruptSet.stopForAll = false end
-                    ImGui.TableSetColumnIndex(1)
+                    ImGui.TableNextColumn()
                     InterruptSet.stopForCombat = ImGui.Checkbox("Stop for Combat##" .. Module.Name, InterruptSet.stopForCombat)
                     if not InterruptSet.stopForCombat then InterruptSet.stopForAll = false end
-                    ImGui.TableNextRow()
+                    ImGui.TableNextColumn()
 
-                    ImGui.TableSetColumnIndex(0)
                     InterruptSet.stopForFear = ImGui.Checkbox("Stop for Fear##" .. Module.Name, InterruptSet.stopForFear)
                     if not InterruptSet.stopForFear then InterruptSet.stopForAll = false end
-                    ImGui.TableSetColumnIndex(1)
+                    ImGui.TableNextColumn()
                     InterruptSet.stopForGM = ImGui.Checkbox("Stop for GM##" .. Module.Name, InterruptSet.stopForGM)
                     if not InterruptSet.stopForGM then InterruptSet.stopForAll = false end
-                    ImGui.TableNextRow()
+                    ImGui.TableNextColumn()
 
-                    ImGui.TableSetColumnIndex(0)
                     InterruptSet.stopForLoot = ImGui.Checkbox("Stop for Loot##" .. Module.Name, InterruptSet.stopForLoot)
                     if not InterruptSet.stopForLoot then InterruptSet.stopForAll = false end
-                    ImGui.TableSetColumnIndex(1)
+                    ImGui.TableNextColumn()
                     InterruptSet.stopForMez = ImGui.Checkbox("Stop for Mez##" .. Module.Name, InterruptSet.stopForMez)
                     if not InterruptSet.stopForMez then InterruptSet.stopForAll = false end
-                    ImGui.TableNextRow()
+                    ImGui.TableNextColumn()
 
-                    ImGui.TableSetColumnIndex(0)
                     InterruptSet.stopForRoot = ImGui.Checkbox("Stop for Root##" .. Module.Name, InterruptSet.stopForRoot)
                     if not InterruptSet.stopForRoot then InterruptSet.stopForAll = false end
-                    ImGui.TableSetColumnIndex(1)
+                    ImGui.TableNextColumn()
                     InterruptSet.stopForSitting = ImGui.Checkbox("Stop for Sitting##" .. Module.Name, InterruptSet.stopForSitting)
                     if not InterruptSet.stopForSitting then InterruptSet.stopForAll = false end
-                    ImGui.TableNextRow()
+                    ImGui.TableNextColumn()
 
-                    ImGui.TableSetColumnIndex(0)
                     InterruptSet.stopForXtar = ImGui.Checkbox("Stop for Xtarget##" .. Module.Name, InterruptSet.stopForXtar)
                     if not InterruptSet.stopForXtar then InterruptSet.stopForAll = false end
-                    ImGui.TableSetColumnIndex(1)
+                    ImGui.TableNextColumn()
                     InterruptSet.stopForDist = ImGui.Checkbox("Stop for Party Dist##" .. Module.Name, InterruptSet.stopForDist)
                     if not InterruptSet.stopForDist then InterruptSet.stopForAll = false end
-                    ImGui.TableNextRow()
+                    ImGui.TableNextColumn()
+                    InterruptSet.stopForRaid = ImGui.Checkbox("Stop for Raid Dist##" .. Module.Name, InterruptSet.stopForRaid)
+                    if not InterruptSet.stopForRaid then InterruptSet.stopForAll = false end
+                    ImGui.TableNextColumn()
 
-                    ImGui.TableSetColumnIndex(0)
                     InterruptSet.stopForInvis = ImGui.Checkbox("Stop for Invis##" .. Module.Name, InterruptSet.stopForInvis)
                     if not InterruptSet.stopForInvis then InterruptSet.stopForAll = false end
-                    ImGui.TableSetColumnIndex(1)
+                    ImGui.TableNextColumn()
                     InterruptSet.stopForDblInvis = ImGui.Checkbox("Stop for Dbl Invis##" .. Module.Name, InterruptSet.stopForDblInvis)
                     if not InterruptSet.stopForDblInvis then InterruptSet.stopForAll = false end
-                    ImGui.TableNextRow()
-                    ImGui.TableSetColumnIndex(0)
+                    ImGui.TableNextColumn()
                     settings[Module.Name].AutoStand, _ = ImGui.Checkbox("Auto Stand##" .. Module.Name, settings[Module.Name].AutoStand)
+                    ImGui.TableNextColumn()
+                    InterruptSet.stopForPartyCorpse = ImGui.Checkbox("Stop for Party Corpse##" .. Module.Name, InterruptSet.stopForPartyCorpse)
+                    if not InterruptSet.stopForPartyCorpse then InterruptSet.stopForAll = false end
+                    ImGui.TableNextColumn()
+                    InterruptSet.stopForRaidCorpse = ImGui.Checkbox("Stop for Raid Corpse##" .. Module.Name, InterruptSet.stopForRaidCorpse)
+                    if not InterruptSet.stopForRaidCorpse then InterruptSet.stopForAll = false end
                     if _ then mq.pickle(configFile, settings) end
                     ImGui.EndTable()
                     if InterruptSet.stopForInvis or InterruptSet.stopForDblInvis then
@@ -2357,6 +2592,10 @@ function Module.RenderGUI()
                     if InterruptSet.stopForDist then
                         ImGui.SetNextItemWidth(100)
                         InterruptSet.stopForGoupDist = ImGui.InputInt("Party Distance##GroupDist", InterruptSet.stopForGoupDist, 1, 50)
+                    end
+                    if InterruptSet.stopForRaid then
+                        ImGui.SetNextItemWidth(100)
+                        InterruptSet.stopForRaidDist = ImGui.InputInt("Raid Distance##RaidDist", InterruptSet.stopForRaidDist, 1, 50)
                     end
                 end
                 settings[Module.Name].GroupWatch = ImGui.Checkbox("Group Watch##" .. Module.Name, settings[Module.Name].GroupWatch)
@@ -2375,6 +2614,28 @@ function Module.RenderGUI()
                                 local isSelected = types[i] == settings[Module.Name].WatchType
                                 if ImGui.Selectable(types[i], isSelected) then
                                     settings[Module.Name].WatchType = types[i]
+                                end
+                            end
+                            ImGui.EndCombo()
+                        end
+                    end
+                end
+                settings[Module.Name].RaidWatch = ImGui.Checkbox("Raid Watch##" .. Module.Name, settings[Module.Name].RaidWatch)
+                if settings[Module.Name].RaidWatch then
+                    if ImGui.CollapsingHeader("Raid Watch Settings##" .. Module.Name) then
+                        settings[Module.Name].RaidWatchHealth = ImGui.InputInt("Watch Health##RaidWatch" .. Module.Name, settings[Module.Name].RaidWatchHealth, 1, 5)
+                        if settings[Module.Name].RaidWatchHealth > 100 then settings[Module.Name].RaidWatchHealth = 100 end
+                        if settings[Module.Name].RaidWatchHealth < 1 then settings[Module.Name].RaidWatchHealth = 1 end
+                        -- settings[Module.Name].RaidWatchMana = ImGui.InputInt("Watch Mana##RaidWatch" .. Module.Name, settings[Module.Name].RaidWatchMana, 1, 5)
+                        -- if settings[Module.Name].RaidWatchMana > 100 then settings[Module.Name].RaidWatchMana = 100 end
+                        -- if settings[Module.Name].RaidWatchMana < 1 then settings[Module.Name].RaidWatchMana = 1 end
+
+                        if ImGui.BeginCombo("Watch Type##RaidWatch" .. Module.Name, settings[Module.Name].RaidWatchType) then
+                            local types = { "All", "Healer", "Self", "None", }
+                            for i = 1, #types do
+                                local isSelected = types[i] == settings[Module.Name].RaidWatchType
+                                if ImGui.Selectable(types[i], isSelected) then
+                                    settings[Module.Name].RaidWatchType = types[i]
                                 end
                             end
                             ImGui.EndCombo()
@@ -2523,8 +2784,7 @@ local function displayHelp()
     Module.Utils.PrintOutput('MyUI', nil, "\ay[\at%s\ax] \agCommands: \ay/mypaths [\atdointerrupts\ax] [\aton\ax|\atoff\ax] \ay- \atToggle Interrupts.", Module.Name)
 end
 
-local function bind(...)
-    local args = { ..., }
+local function handleArguments()
     local key = args[1]
     local action = args[2]
     local path = args[3]
@@ -2562,7 +2822,7 @@ local function bind(...)
         elseif key == 'quit' or key == 'exit' then
             -- mq.exit()
             mq.cmd("/nav stop log=off")
-            mq.TLO.Me.Stand()
+            MySelf.Stand()
             mq.delay(1)
             NavSet.doNav = false
             Module.IsRunning = false
@@ -2741,6 +3001,11 @@ local function bind(...)
     end
 end
 
+local function bind(...)
+    args = { ..., }
+    handleArguments()
+end
+
 local function processArgs()
     if #args == 0 then
         displayHelp()
@@ -2761,6 +3026,12 @@ local function processArgs()
         showHUD = not showHUD
         return
     end
+    for i = 1, #args do
+        if args[i] == 'go' then
+            oneshot = true
+        end
+    end
+    handleArguments()
 end
 
 function Module.Unload()
@@ -2768,7 +3039,6 @@ function Module.Unload()
 end
 
 local function Init()
-    processArgs()
     -- Get Character Name
     configFile = string.format('%s/MyUI/%s/%s/%s_Configs.lua', mq.configDir, Module.Name, Module.Server, Module.CharLoaded)
     -- Load Settings
@@ -2777,12 +3047,15 @@ local function Init()
     mq.bind('/mypaths', bind)
 
     -- Check if ThemeZ exists
+
     if Module.Utils.File.Exists(themezDir) then
         hasThemeZ = true
     end
     currZone = mq.TLO.Zone.ShortName()
     lastZone = currZone
     displayHelp()
+    processArgs()
+
     Module.IsRunning = true
     if not loadedExeternally then
         mq.imgui.init(Module.Name, Module.RenderGUI)
@@ -2801,7 +3074,8 @@ function Module.MainLoop()
     currZone = mq.TLO.Zone.ShortName()
 
     if (InterruptSet.stopForDist and InterruptSet.stopForCharm and InterruptSet.stopForCombat and InterruptSet.stopForFear and InterruptSet.stopForGM and
-            InterruptSet.stopForLoot and InterruptSet.stopForMez and InterruptSet.stopForRoot and InterruptSet.stopForSitting and InterruptSet.stopForXtar and InterruptSet.stopForInvis and InterruptSet.stopForDblInvis) then
+            InterruptSet.stopForLoot and InterruptSet.stopForMez and InterruptSet.stopForRoot and InterruptSet.stopForSitting and InterruptSet.stopForXtar and
+            InterruptSet.stopForInvis and InterruptSet.stopForDblInvis and InterruptSet.stopForRaid) then
         InterruptSet.stopForAll = true
     else
         InterruptSet.stopForAll = false
@@ -2912,7 +3186,7 @@ function Module.MainLoop()
         -- mq.delay(500)
     end
 
-    if not mq.TLO.Me.Sitting() then
+    if not MySelf.Sitting() then
         lastHP, lastMP = 0, 0
     end
 
@@ -3139,6 +3413,11 @@ function Module.MainLoop()
     -- Process ImGui Window Flag Changes
     winFlags = locked and bit32.bor(ImGuiWindowFlags.NoMove, ImGuiWindowFlags.MenuBar) or bit32.bor(ImGuiWindowFlags.None, ImGuiWindowFlags.MenuBar)
     winFlags = aSize and bit32.bor(winFlags, ImGuiWindowFlags.AlwaysAutoResize, ImGuiWindowFlags.MenuBar) or winFlags
+
+    if oneshot and not NavSet.doNav then
+        oneshot = false
+        Module.IsRunning = false
+    end
 end
 
 function Module.LocalLoop()
